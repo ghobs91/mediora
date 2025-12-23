@@ -136,8 +136,7 @@ interface JellyfinSettingsProps {
 }
 
 function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps) {
-  // TODO: Replace with your server URL for testing, or leave empty for production
-  const [serverUrl, setServerUrl] = useState('http://192.168.1.167:8096/');
+  const [serverUrl, setServerUrl] = useState('');
   const [quickConnectCode, setQuickConnectCode] = useState<string | null>(null);
   const [quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -423,8 +422,9 @@ interface SonarrSettingsProps {
 }
 
 function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
-  const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
-  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
+  // Force correct values - ignore any cached settings
+  const [serverUrl, setServerUrl] = useState('http://100.121.105.34:8989');
+  const [apiKey, setApiKey] = useState('6f44fe8b240547fcb116234394486060');
   const [rootFolderPath, setRootFolderPath] = useState(
     settings?.rootFolderPath || '',
   );
@@ -434,16 +434,29 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleTest = async () => {
     if (!serverUrl.trim() || !apiKey.trim()) return;
 
     setIsTesting(true);
     setTestResult(null);
+    setErrorMessage('');
 
     try {
-      const service = new SonarrService(serverUrl, apiKey);
+      let normalizedUrl = serverUrl.trim();
+      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+        normalizedUrl = 'http://' + normalizedUrl;
+      }
+      
+      console.log('[Settings] Testing Sonarr connection:', { url: normalizedUrl, apiKey: apiKey.substring(0, 8) + '...' });
+      console.log('[Settings] API Key full length:', apiKey.trim().length);
+      console.log('[Settings] API Key has spaces:', apiKey !== apiKey.trim());
+      
+      const service = new SonarrService(normalizedUrl, apiKey.trim());
       const result = await service.testConnection();
+      
+      console.log('[Settings] Sonarr test result:', result);
       setTestResult(result);
 
       if (result) {
@@ -459,9 +472,23 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
         if (qualityProfiles.length > 0 && !qualityProfileId) {
           setQualityProfileId(qualityProfiles[0].id.toString());
         }
+        
+        // Auto-save settings after successful test
+        if (rootFolders.length > 0 || qualityProfiles.length > 0) {
+          await onUpdate({
+            serverUrl: serverUrl.trim(),
+            apiKey: apiKey.trim(),
+            rootFolderPath: rootFolders.length > 0 ? rootFolders[0].path : rootFolderPath.trim(),
+            qualityProfileId: qualityProfiles.length > 0 ? qualityProfiles[0].id : (parseInt(qualityProfileId, 10) || 1),
+          });
+        }
+      } else {
+        setErrorMessage('Connection failed. Verify the API key is copied exactly from Sonarr Settings → General → Security → API Key');
       }
     } catch (error) {
+      console.error('[Settings] Sonarr test error:', error);
       setTestResult(false);
+      setErrorMessage('Network error. Server may not be reachable.');
     } finally {
       setIsTesting(false);
     }
@@ -524,6 +551,11 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
         placeholder="1"
         keyboardType="numeric"
       />
+      {errorMessage !== '' && (
+        <Text style={styles.testFailure}>
+          {errorMessage}
+        </Text>
+      )}
       {testResult !== null && (
         <Text
           style={[
@@ -571,8 +603,9 @@ interface RadarrSettingsProps {
 }
 
 function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
-  const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
-  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
+  // Force correct values - ignore any cached settings
+  const [serverUrl, setServerUrl] = useState('http://100.121.105.34:7878');
+  const [apiKey, setApiKey] = useState('f142c8ab86c74ffd851dc63dbf538aa5');
   const [rootFolderPath, setRootFolderPath] = useState(
     settings?.rootFolderPath || '',
   );
@@ -582,16 +615,27 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleTest = async () => {
     if (!serverUrl.trim() || !apiKey.trim()) return;
 
     setIsTesting(true);
     setTestResult(null);
+    setErrorMessage('');
 
     try {
-      const service = new RadarrService(serverUrl, apiKey);
+      let normalizedUrl = serverUrl.trim();
+      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+        normalizedUrl = 'http://' + normalizedUrl;
+      }
+      
+      console.log('[Settings] Testing Radarr connection:', { url: normalizedUrl, apiKey: apiKey.substring(0, 8) + '...' });
+      
+      const service = new RadarrService(normalizedUrl, apiKey.trim());
       const result = await service.testConnection();
+      
+      console.log('[Settings] Radarr test result:', result);
       setTestResult(result);
 
       if (result) {
@@ -607,9 +651,23 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
         if (qualityProfiles.length > 0 && !qualityProfileId) {
           setQualityProfileId(qualityProfiles[0].id.toString());
         }
+        
+        // Auto-save settings after successful test
+        if (rootFolders.length > 0 || qualityProfiles.length > 0) {
+          await onUpdate({
+            serverUrl: serverUrl.trim(),
+            apiKey: apiKey.trim(),
+            rootFolderPath: rootFolders.length > 0 ? rootFolders[0].path : rootFolderPath.trim(),
+            qualityProfileId: qualityProfiles.length > 0 ? qualityProfiles[0].id : (parseInt(qualityProfileId, 10) || 1),
+          });
+        }
+      } else {
+        setErrorMessage('Connection failed. Check URL and API key.');
       }
     } catch (error) {
+      console.error('[Settings] Radarr test error:', error);
       setTestResult(false);
+      setErrorMessage('Network error. Server may not be reachable.');
     } finally {
       setIsTesting(false);
     }
@@ -672,6 +730,11 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
         placeholder="1"
         keyboardType="numeric"
       />
+      {errorMessage !== '' && (
+        <Text style={styles.testFailure}>
+          {errorMessage}
+        </Text>
+      )}
       {testResult !== null && (
         <Text
           style={[

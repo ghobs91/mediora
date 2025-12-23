@@ -4,6 +4,7 @@ import {
   TMDBTVShow,
   TMDBMovieDetails,
   TMDBTVDetails,
+  TMDBSeasonDetails,
 } from '../types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -128,6 +129,18 @@ export class TMDBService {
     return response.json();
   }
 
+  async getSeasonDetails(tvId: number, seasonNumber: number): Promise<TMDBSeasonDetails> {
+    const params = this.addApiKey(new URLSearchParams());
+
+    const response = await fetch(`${BASE_URL}/tv/${tvId}/season/${seasonNumber}?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get season details: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   // Trending
   async getTrending(
     mediaType: 'movie' | 'tv' | 'all' = 'all',
@@ -207,5 +220,21 @@ export class TMDBService {
   ): string | null {
     if (!backdropPath) return null;
     return `${IMAGE_BASE_URL}/${size}${backdropPath}`;
+  }
+
+  static getProfileUrl(
+    profilePath: string | null,
+    size: 'w45' | 'w185' | 'h632' | 'original' = 'w185',
+  ): string | null {
+    if (!profilePath) return null;
+    return `${IMAGE_BASE_URL}/${size}${profilePath}`;
+  }
+
+  static getStillUrl(
+    stillPath: string | null,
+    size: 'w92' | 'w185' | 'w300' | 'original' = 'w300',
+  ): string | null {
+    if (!stillPath) return null;
+    return `${IMAGE_BASE_URL}/${size}${stillPath}`;
   }
 }

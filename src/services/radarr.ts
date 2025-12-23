@@ -23,11 +23,32 @@ export class RadarrService {
   // System
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.serverUrl}/api/v3/system/status`, {
+      console.log('[Radarr] Testing connection to:', this.serverUrl);
+      const url = `${this.serverUrl}/api/v3/system/status`;
+      console.log('[Radarr] Fetching:', url);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(url, {
         headers: this.getHeaders(),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
+      console.log('[Radarr] Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[Radarr] Connected to Radarr version:', data.version);
+      }
+      
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.error('[Radarr] Connection test failed:', error);
+      if (error instanceof Error && error.message.includes('Network request failed')) {
+        console.error('[Radarr] Network error - server may not be reachable from simulator');
+      }
       return false;
     }
   }
