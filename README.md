@@ -1,8 +1,30 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Mediora
 
-# Getting Started
+A cross-platform TV application built with [**React Native tvOS**](https://github.com/react-native-tvos/react-native-tvos) for **Apple TV** and **Android TV**.
+
+## Features
+
+- 🍎 **Apple TV (tvOS)** - Full support for tvOS 15.1+
+- 🤖 **Android TV** - Full support for Android TV API level 24+
+- ⚡ **Hermes JS Engine** - Enabled by default for optimal performance
+- 🏗️ **New Architecture (Fabric)** - React Native's new rendering system
+- 📺 **TV Remote Support** - Native focus-based navigation
+- 🎨 **TypeScript** - Full TypeScript support included
+
+## Prerequisites
 
 > **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+
+### For Apple TV Development (macOS only)
+- Xcode 15+ with tvOS SDK
+- Apple TV Simulator or physical Apple TV device
+- CocoaPods (`sudo gem install cocoapods`)
+
+### For Android TV Development
+- Android Studio with Android TV emulator
+- Android TV emulator (API level 24+) or physical Android TV device
+
+## Getting Started
 
 ## Step 1: Start Metro
 
@@ -22,19 +44,19 @@ yarn start
 
 With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
 
-### Android
+### Android TV
 
 ```sh
-# Using npm
+# Using npm - run on Android TV emulator
 npm run android
 
-# OR using Yarn
-yarn android
+# Or specify a specific Android TV device/emulator
+npx react-native run-android --device tv_api_31
 ```
 
-### iOS
+### Apple TV (tvOS)
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+For tvOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
 
 The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
 
@@ -48,14 +70,14 @@ Then, and every time you update your native dependencies, run:
 bundle exec pod install
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+To run on Apple TV Simulator:
 
 ```sh
 # Using npm
 npm run ios
 
-# OR using Yarn
-yarn ios
+# Or specify Apple TV simulator explicitly
+npx react-native run-ios --simulator "Apple TV"
 ```
 
 If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
@@ -88,10 +110,47 @@ If you're having issues getting the above steps to work, see the [Troubleshootin
 
 # Learn More
 
-To learn more about React Native, take a look at the following resources:
+To learn more about React Native TV development, take a look at the following resources:
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- [React Native tvOS GitHub](https://github.com/react-native-tvos/react-native-tvos) - The official react-native-tvos repository
+- [React Native tvOS Wiki](https://github.com/react-native-tvos/react-native-tvos/wiki) - Detailed TV development guides
+- [React Native Website](https://reactnative.dev) - Learn more about React Native
+- [Getting Started](https://reactnative.dev/docs/environment-setup) - Environment setup guide
+
+## TV-Specific APIs
+
+### Platform Detection
+
+```javascript
+import { Platform } from 'react-native';
+
+// Check if running on any TV
+const isTV = Platform.isTV;
+
+// Check specifically for Apple TV
+const isAppleTV = Platform.isTVOS;
+```
+
+### TV Remote Event Handling
+
+```javascript
+import { useTVEventHandler } from 'react-native';
+
+function MyComponent() {
+  useTVEventHandler((evt) => {
+    console.log('TV Event:', evt.eventType);
+    // Events: 'up', 'down', 'left', 'right', 'select', 'playPause', etc.
+  });
+  
+  return <View>...</View>;
+}
+```
+
+### Focus-based Navigation
+
+The `Pressable`, `TouchableHighlight`, and `TouchableOpacity` components work automatically with TV remote navigation:
+
+- `onFocus()` - When the view receives focus
+- `onBlur()` - When the view loses focus
+- `onPress()` - When the select button is pressed
+- `onLongPress()` - When the select button is held

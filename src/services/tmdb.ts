@@ -1,0 +1,229 @@
+import {
+  TMDBSearchResult,
+  TMDBMovie,
+  TMDBTVShow,
+  TMDBMovieDetails,
+  TMDBTVDetails,
+} from '../types';
+
+const BASE_URL = 'https://api.themoviedb.org/3';
+const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
+
+export class TMDBService {
+  private apiKey: string;
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  private getHeaders(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  // Search
+  async searchMovies(
+    query: string,
+    page: number = 1,
+  ): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      include_adult: 'false',
+    });
+
+    const response = await fetch(`${BASE_URL}/search/movie?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to search movies: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBMovie) => ({
+        ...item,
+        media_type: 'movie' as const,
+      })),
+    };
+  }
+
+  async searchTV(query: string, page: number = 1): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      include_adult: 'false',
+    });
+
+    const response = await fetch(`${BASE_URL}/search/tv?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to search TV shows: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBTVShow) => ({
+        ...item,
+        media_type: 'tv' as const,
+      })),
+    };
+  }
+
+  async searchMulti(
+    query: string,
+    page: number = 1,
+  ): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      query,
+      page: String(page),
+      include_adult: 'false',
+    });
+
+    const response = await fetch(`${BASE_URL}/search/multi?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to search: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // Filter out people results
+    return {
+      ...data,
+      results: data.results.filter(
+        (item: { media_type: string }) =>
+          item.media_type === 'movie' || item.media_type === 'tv',
+      ),
+    };
+  }
+
+  // Details
+  async getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
+    const params = new URLSearchParams({
+      append_to_response: 'external_ids,credits,recommendations',
+    });
+
+    const response = await fetch(`${BASE_URL}/movie/${movieId}?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get movie details: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getTVDetails(tvId: number): Promise<TMDBTVDetails> {
+    const params = new URLSearchParams({
+      append_to_response: 'external_ids,credits,recommendations',
+    });
+
+    const response = await fetch(`${BASE_URL}/tv/${tvId}?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get TV details: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // Trending
+  async getTrending(
+    mediaType: 'movie' | 'tv' | 'all' = 'all',
+    timeWindow: 'day' | 'week' = 'week',
+    page: number = 1,
+  ): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      page: String(page),
+    });
+
+    const response = await fetch(
+      `${BASE_URL}/trending/${mediaType}/${timeWindow}?${params}`,
+      {
+        headers: this.getHeaders(),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get trending: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // Popular
+  async getPopularMovies(page: number = 1): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      page: String(page),
+    });
+
+    const response = await fetch(`${BASE_URL}/movie/popular?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get popular movies: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBMovie) => ({
+        ...item,
+        media_type: 'movie' as const,
+      })),
+    };
+  }
+
+  async getPopularTV(page: number = 1): Promise<TMDBSearchResult> {
+    const params = new URLSearchParams({
+      page: String(page),
+    });
+
+    const response = await fetch(`${BASE_URL}/tv/popular?${params}`, {
+      headers: this.getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get popular TV: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBTVShow) => ({
+        ...item,
+        media_type: 'tv' as const,
+      })),
+    };
+  }
+
+  // Image URLs
+  static getPosterUrl(
+    posterPath: string | null,
+    size: 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'w780' | 'original' = 'w500',
+  ): string | null {
+    if (!posterPath) return null;
+    return `${IMAGE_BASE_URL}/${size}${posterPath}`;
+  }
+
+  static getBackdropUrl(
+    backdropPath: string | null,
+    size: 'w300' | 'w780' | 'w1280' | 'original' = 'w1280',
+  ): string | null {
+    if (!backdropPath) return null;
+    return `${IMAGE_BASE_URL}/${size}${backdropPath}`;
+  }
+}
