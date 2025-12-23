@@ -13,7 +13,7 @@ import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService } from '../services';
 
-type SettingsSection = 'jellyfin' | 'tmdb' | 'sonarr' | 'radarr';
+type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr';
 
 export function SettingsScreen() {
   const navigation = useNavigation();
@@ -53,12 +53,6 @@ export function SettingsScreen() {
           onPress={() => setActiveSection('jellyfin')}
         />
         <SettingsTab
-          title="TMDB"
-          isSelected={activeSection === 'tmdb'}
-          isConnected={!!settings.tmdb?.apiKey}
-          onPress={() => setActiveSection('tmdb')}
-        />
-        <SettingsTab
           title="Sonarr"
           isSelected={activeSection === 'sonarr'}
           isConnected={isSonarrConnected}
@@ -79,12 +73,6 @@ export function SettingsScreen() {
             settings={settings.jellyfin}
             onUpdate={updateJellyfinSettings}
             onClear={clearJellyfinSettings}
-          />
-        )}
-        {activeSection === 'tmdb' && (
-          <TMDBSettings
-            settings={settings.tmdb}
-            onUpdate={updateTMDBSettings}
           />
         )}
         {activeSection === 'sonarr' && (
@@ -412,51 +400,6 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
           size="medium"
         />
       </View>
-    </View>
-  );
-}
-
-// TMDB Settings Section
-interface TMDBSettingsProps {
-  settings: { apiKey: string } | null;
-  onUpdate: (settings: { apiKey: string } | null) => Promise<void>;
-}
-
-function TMDBSettings({ settings, onUpdate }: TMDBSettingsProps) {
-  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onUpdate(apiKey.trim() ? { apiKey: apiKey.trim() } : null);
-    } catch (error) {
-      console.error('Failed to save TMDB settings:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <View style={styles.sectionForm}>
-      <Text style={styles.sectionDescription}>
-        Get your TMDB API key from themoviedb.org to enable search and discovery
-      </Text>
-      <FocusableInput
-        label="API Key (Read Access Token)"
-        value={apiKey}
-        onChangeText={setApiKey}
-        placeholder="Enter your TMDB API key"
-        autoCapitalize="none"
-        autoCorrect={false}
-        secureTextEntry
-      />
-      <FocusableButton
-        title="Save"
-        onPress={handleSave}
-        loading={isSaving}
-        size="large"
-      />
     </View>
   );
 }

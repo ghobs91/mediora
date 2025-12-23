@@ -44,9 +44,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   }, [settings.jellyfin]);
 
   const tmdb = useMemo(() => {
-    if (!settings.tmdb?.apiKey) return null;
-    return new TMDBService(settings.tmdb.apiKey);
-  }, [settings.tmdb]);
+    // TMDB is always available with hardcoded API key
+    return new TMDBService();
+  }, []);
 
   const sonarr = useMemo(() => {
     if (!settings.sonarr) return null;

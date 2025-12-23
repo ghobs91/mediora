@@ -8,19 +8,18 @@ import {
 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
+const TMDB_API_KEY = 'dd47805cca8c2c3c59955bfa74b2b368';
 
 export class TMDBService {
   private apiKey: string;
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
+  constructor(apiKey?: string) {
+    this.apiKey = apiKey || TMDB_API_KEY;
   }
 
-  private getHeaders(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.apiKey}`,
-      'Content-Type': 'application/json',
-    };
+  private addApiKey(params: URLSearchParams): URLSearchParams {
+    params.append('api_key', this.apiKey);
+    return params;
   }
 
   // Search
@@ -28,15 +27,13 @@ export class TMDBService {
     query: string,
     page: number = 1,
   ): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       query,
       page: String(page),
       include_adult: 'false',
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/search/movie?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/search/movie?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search movies: ${response.status}`);
@@ -53,15 +50,13 @@ export class TMDBService {
   }
 
   async searchTV(query: string, page: number = 1): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       query,
       page: String(page),
       include_adult: 'false',
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/search/tv?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/search/tv?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search TV shows: ${response.status}`);
@@ -81,15 +76,13 @@ export class TMDBService {
     query: string,
     page: number = 1,
   ): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       query,
       page: String(page),
       include_adult: 'false',
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/search/multi?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/search/multi?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search: ${response.status}`);
@@ -108,13 +101,11 @@ export class TMDBService {
 
   // Details
   async getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       append_to_response: 'external_ids,credits,recommendations',
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/movie/${movieId}?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/movie/${movieId}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get movie details: ${response.status}`);
@@ -124,13 +115,11 @@ export class TMDBService {
   }
 
   async getTVDetails(tvId: number): Promise<TMDBTVDetails> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       append_to_response: 'external_ids,credits,recommendations',
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/tv/${tvId}?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/tv/${tvId}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get TV details: ${response.status}`);
@@ -145,15 +134,12 @@ export class TMDBService {
     timeWindow: 'day' | 'week' = 'week',
     page: number = 1,
   ): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       page: String(page),
-    });
+    }));
 
     const response = await fetch(
       `${BASE_URL}/trending/${mediaType}/${timeWindow}?${params}`,
-      {
-        headers: this.getHeaders(),
-      },
     );
 
     if (!response.ok) {
@@ -165,13 +151,11 @@ export class TMDBService {
 
   // Popular
   async getPopularMovies(page: number = 1): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       page: String(page),
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/movie/popular?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/movie/popular?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get popular movies: ${response.status}`);
@@ -188,13 +172,11 @@ export class TMDBService {
   }
 
   async getPopularTV(page: number = 1): Promise<TMDBSearchResult> {
-    const params = new URLSearchParams({
+    const params = this.addApiKey(new URLSearchParams({
       page: String(page),
-    });
+    }));
 
-    const response = await fetch(`${BASE_URL}/tv/popular?${params}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await fetch(`${BASE_URL}/tv/popular?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get popular TV: ${response.status}`);
