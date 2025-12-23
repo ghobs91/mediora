@@ -157,6 +157,10 @@ export interface TMDBMovieDetails extends TMDBMovie {
     imdb_id: string;
     tvdb_id?: number;
   };
+  credits?: {
+    cast: TMDBCast[];
+    crew: TMDBCrew[];
+  };
 }
 
 export interface TMDBTVDetails extends TMDBTVShow {
@@ -166,10 +170,78 @@ export interface TMDBTVDetails extends TMDBTVShow {
   tagline: string;
   genres: { id: number; name: string }[];
   networks: { id: number; name: string; logo_path: string | null }[];
+  seasons: TMDBSeasonSummary[];
   external_ids?: {
     imdb_id: string;
     tvdb_id: number;
   };
+  credits?: {
+    cast: TMDBCast[];
+    crew: TMDBCrew[];
+  };
+}
+
+export interface TMDBSeasonSummary {
+  air_date: string | null;
+  episode_count: number;
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  season_number: number;
+}
+
+export interface TMDBSeasonDetails {
+  _id: string;
+  air_date: string | null;
+  episodes: TMDBEpisode[];
+  name: string;
+  overview: string;
+  id: number;
+  poster_path: string | null;
+  season_number: number;
+}
+
+export interface TMDBEpisode {
+  air_date: string | null;
+  episode_number: number;
+  id: number;
+  name: string;
+  overview: string;
+  production_code: string;
+  runtime: number | null;
+  season_number: number;
+  still_path: string | null;
+  vote_average: number;
+  vote_count: number;
+}
+
+export interface TMDBCast {
+  adult: boolean;
+  gender: number | null;
+  id: number;
+  known_for_department: string;
+  name: string;
+  original_name: string;
+  popularity: number;
+  profile_path: string | null;
+  character: string;
+  credit_id: string;
+  order: number;
+}
+
+export interface TMDBCrew {
+  adult: boolean;
+  gender: number | null;
+  id: number;
+  known_for_department: string;
+  name: string;
+  original_name: string;
+  popularity: number;
+  profile_path: string | null;
+  credit_id: string;
+  department: string;
+  job: string;
 }
 
 // Sonarr Types
