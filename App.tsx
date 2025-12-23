@@ -1,44 +1,57 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
+ * Mediora - Apple tvOS Media App
+ * A media center app for browsing Jellyfin, searching TMDB,
+ * and requesting content via Sonarr/Radarr
  */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React from 'react';
+import { StatusBar, StyleSheet, View, LogBox } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { enableScreens } from 'react-native-screens';
+import { SettingsProvider, ServicesProvider, useSettings } from './src/context';
+import { AppNavigator } from './src/navigation';
+import { LoadingScreen } from './src/components';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+// Enable native screens for better performance
+enableScreens();
 
-  return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
-  );
-}
+// Ignore specific warnings that are common in tvOS development
+LogBox.ignoreLogs([
+  'Sending `onAnimatedValueUpdate` with no listeners registered',
+  'Non-serializable values were found in the navigation state',
+]);
 
 function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
+  const { isLoading } = useSettings();
+
+  if (isLoading) {
+    return <LoadingScreen message="Loading Mediora..." />;
+  }
 
   return (
     <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
+      <StatusBar hidden />
+      <AppNavigator />
     </View>
+  );
+}
+
+function App() {
+  return (
+    <SafeAreaProvider>
+      <SettingsProvider>
+        <ServicesProvider>
+          <AppContent />
+        </ServicesProvider>
+      </SettingsProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000',
   },
 });
 
