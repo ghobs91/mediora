@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   Text,
-  Alert,
   ActivityIndicator,
-  TouchableOpacity,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService } from '../services';
@@ -16,11 +13,9 @@ import { JellyfinService, SonarrService, RadarrService } from '../services';
 type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr';
 
 export function SettingsScreen() {
-  const navigation = useNavigation();
   const {
     settings,
     updateJellyfinSettings,
-    updateTMDBSettings,
     updateSonarrSettings,
     updateRadarrSettings,
     clearJellyfinSettings,
@@ -32,18 +27,6 @@ export function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // @ts-ignore
-            navigation.navigate('MainMenu');
-          }}>
-          <Text style={styles.backButtonText}>← Menu</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
-
       {/* Section Tabs */}
       <View style={styles.tabsContainer}>
         <SettingsTab
@@ -107,7 +90,7 @@ function SettingsTab({
 }: SettingsTabProps) {
   return (
     <FocusableButton
-      title={`${title} ${isConnected ? '✓' : ''}`}
+      title={title + (isConnected ? ' ✓' : '')}
       onPress={onPress}
       variant={isSelected ? 'primary' : 'secondary'}
       size="medium"
@@ -138,7 +121,7 @@ interface JellyfinSettingsProps {
 function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps) {
   const [serverUrl, setServerUrl] = useState('');
   const [quickConnectCode, setQuickConnectCode] = useState<string | null>(null);
-  const [quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
+  const [_quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -378,7 +361,7 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
         error={error || undefined}
       />
       {testResult && (
-        <Text style={[styles.testResult, testResult.startsWith('✓') && styles.testSuccess]}>
+        <Text style={[styles.testResult, testResult.startsWith('✓') ? styles.testSuccess : null]}>
           {testResult}
         </Text>
       )}
@@ -768,34 +751,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  header: {
-    padding: 48,
-    paddingBottom: 24,
-  },
-  backButton: {
-    marginBottom: 20,
-    padding: 12,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 48,
-    fontWeight: 'bold',
-  },
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 48,
-    marginBottom: 32,
+    paddingTop: 28,
+    marginBottom: 36,
   },
   tab: {
-    marginRight: 16,
+    marginRight: 18,
   },
   sectionContent: {
     paddingHorizontal: 48,
@@ -805,96 +768,96 @@ const styles = StyleSheet.create({
     maxWidth: 600,
   },
   sectionDescription: {
-    color: '#888',
-    fontSize: 16,
-    marginBottom: 24,
-    lineHeight: 24,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 18,
+    marginBottom: 28,
+    lineHeight: 26,
+    fontWeight: '500',
   },
   helperText: {
-    color: '#666',
-    fontSize: 14,
-    marginBottom: 16,
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 15,
+    marginBottom: 18,
     fontStyle: 'italic',
+    fontWeight: '500',
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    gap: 18,
+    marginTop: 20,
   },
   testResult: {
-    color: '#ff9800',
-    fontSize: 14,
-    marginTop: 8,
-    marginBottom: 8,
-    padding: 12,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 6,
+    fontSize: 17,
+    marginBottom: 18,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   testSuccess: {
-    color: '#4caf50',
+    color: 'rgba(48, 209, 88, 0.95)',
+  },
+  testFailure: {
+    color: 'rgba(255, 69, 58, 0.95)',
   },
   connectedInfo: {
-    marginBottom: 24,
-    padding: 20,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
+    marginBottom: 28,
+    padding: 24,
+    backgroundColor: 'rgba(26, 26, 26, 0.6)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(48, 209, 88, 0.3)',
+    shadowColor: 'rgba(48, 209, 88, 0.5)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
   },
   connectedLabel: {
-    color: '#4caf50',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
+    color: 'rgba(48, 209, 88, 0.95)',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   connectedValue: {
-    color: '#fff',
-    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 17,
+    fontWeight: '500',
   },
   quickConnectTitle: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 28,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    letterSpacing: 0.5,
   },
   quickConnectCode: {
     color: '#fff',
-    fontSize: 64,
+    fontSize: 72,
     fontWeight: 'bold',
     textAlign: 'center',
-    letterSpacing: 16,
-    marginBottom: 24,
+    letterSpacing: 20,
+    marginBottom: 28,
     fontFamily: 'monospace',
+    textShadowColor: 'rgba(10, 132, 255, 0.5)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
   },
   quickConnectInstructions: {
-    color: '#888',
-    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 17,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+    lineHeight: 26,
+    marginBottom: 36,
+    fontWeight: '500',
   },
   spinner: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   waitingText: {
-    color: '#888',
-    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 17,
     textAlign: 'center',
-    marginBottom: 24,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 16,
-  },
-  testResult: {
-    fontSize: 16,
-    marginBottom: 16,
-    fontWeight: '600',
-  },
-  testSuccess: {
-    color: '#4caf50',
-  },
-  testFailure: {
-    color: '#f44336',
+    marginBottom: 28,
+    fontWeight: '500',
   },
 });

@@ -13,7 +13,11 @@ import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
 import { JellyfinLibrary, JellyfinItem } from '../types';
 
-export function LibraryScreen() {
+interface LibraryScreenProps {
+  filterType?: 'movies' | 'tvshows';
+}
+
+export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const navigation = useNavigation();
   const { jellyfin, isJellyfinConnected } = useServices();
   const [libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
@@ -27,16 +31,20 @@ export function LibraryScreen() {
 
     try {
       const libs = await jellyfin.getLibraries();
-      setLibraries(libs);
-      if (libs.length > 0 && !selectedLibrary) {
-        setSelectedLibrary(libs[0]);
+      // Filter libraries based on filterType if provided
+      const filteredLibs = filterType 
+        ? libs.filter(lib => lib.CollectionType === filterType)
+        : libs;
+      setLibraries(filteredLibs);
+      if (filteredLibs.length > 0 && !selectedLibrary) {
+        setSelectedLibrary(filteredLibs[0]);
       }
     } catch (error) {
       console.error('Failed to load libraries:', error);
     } finally {
       setIsLoadingLibraries(false);
     }
-  }, [jellyfin, selectedLibrary]);
+  }, [jellyfin, selectedLibrary, filterType]);
 
   const loadLibraryItems = useCallback(async () => {
     if (!jellyfin || !selectedLibrary) return;
@@ -85,17 +93,10 @@ export function LibraryScreen() {
   };
 
   if (!isJellyfinConnected) {
+    const title = filterType === 'movies' ? 'Movies' : filterType === 'tvshows' ? 'TV Shows' : 'Library';
     return (
       <View style={styles.emptyContainer}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // @ts-ignore
-            navigation.navigate('MainMenu');
-          }}>
-          <Text style={styles.backButtonText}>← Menu</Text>
-        </TouchableOpacity>
-        <Text style={styles.emptyTitle}>Library</Text>
+        <Text style={styles.emptyTitle}>{title}</Text>
         <Text style={styles.emptyText}>
           Connect to your Jellyfin server in Settings to browse your library
         </Text>
@@ -109,15 +110,6 @@ export function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => {
-          // @ts-ignore
-          navigation.navigate('MainMenu');
-        }}>
-        <Text style={styles.backButtonText}>← Menu</Text>
-      </TouchableOpacity>
-      
       {/* Library Tabs */}
       <ScrollView
         horizontal
@@ -220,22 +212,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  backButton: {
-    margin: 20,
-    marginTop: 40,
-    padding: 12,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
   tabContainer: {
     maxHeight: 80,
     paddingVertical: 16,
+    marginTop: 24,
   },
   tabContent: {
     paddingHorizontal: 48,

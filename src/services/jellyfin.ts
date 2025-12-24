@@ -325,6 +325,114 @@ export class JellyfinService {
     return data.Items;
   }
 
+  async searchByTmdbId(tmdbId: string, itemType: 'Movie' | 'Series' = 'Movie'): Promise<JellyfinItem[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const queryString = buildQueryString({
+      userId: this.userId,
+      recursive: 'true',
+      fields: 'Overview,MediaSources,UserData,ProviderIds',
+      includeItemTypes: itemType,
+      anyProviderIdEquals: `tmdb.${tmdbId}`,
+    });
+
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/Items?${queryString}`,
+      {
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to search by TMDB ID: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.Items || [];
+  }
+
+  async searchByTvdbId(tvdbId: string): Promise<JellyfinItem[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const queryString = buildQueryString({
+      userId: this.userId,
+      recursive: 'true',
+      fields: 'Overview,MediaSources,UserData,ProviderIds',
+      includeItemTypes: 'Series',
+      anyProviderIdEquals: `tvdb.${tvdbId}`,
+    });
+
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/Items?${queryString}`,
+      {
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to search by TVDB ID: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.Items || [];
+  }
+
+  // TV Series - Seasons and Episodes
+  async getSeasons(seriesId: string): Promise<JellyfinItem[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const queryString = buildQueryString({
+      userId: this.userId,
+      fields: 'Overview,UserData',
+    });
+
+    const response = await fetch(
+      `${this.serverUrl}/Shows/${seriesId}/Seasons?${queryString}`,
+      {
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get seasons: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.Items || [];
+  }
+
+  async getEpisodes(seriesId: string, seasonId?: string): Promise<JellyfinItem[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const queryString = buildQueryString({
+      userId: this.userId,
+      seasonId: seasonId,
+      fields: 'Overview,MediaSources,UserData',
+    });
+
+    const response = await fetch(
+      `${this.serverUrl}/Shows/${seriesId}/Episodes?${queryString}`,
+      {
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get episodes: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.Items || [];
+  }
+
   // Playback
   async getPlaybackInfo(itemId: string): Promise<JellyfinPlaybackInfo> {
     if (!this.userId || !this.accessToken) {

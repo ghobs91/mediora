@@ -30,6 +30,7 @@ export function PlayerScreen() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [useDirectStream, setUseDirectStream] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -39,7 +40,12 @@ export function PlayerScreen() {
     if (!jellyfin) return;
 
     try {
+      console.log('[PlayerScreen] Loading playback info for item:', itemId);
       const info = await jellyfin.getPlaybackInfo(itemId);
+      console.log('[PlayerScreen] Playback info received:', {
+        mediaSourcesCount: info.MediaSources?.length,
+        firstMediaSource: info.MediaSources?.[0]?.Id,
+      });
       setPlaybackInfo(info);
 
       if (info.MediaSources.length > 0) {
@@ -50,6 +56,7 @@ export function PlayerScreen() {
         );
       }
     } catch (err) {
+      console.error('[PlayerScreen] Failed to load playback info:', err);
       setError(err instanceof Error ? err.message : 'Failed to load playback info');
     } finally {
       setIsLoading(false);
@@ -171,6 +178,17 @@ export function PlayerScreen() {
     playbackInfo.MediaSources[0].Id,
   );
 
+  // Fallback to direct stream if HLS is problematic
+  const directStreamUrl = jellyfin.getStreamUrl(
+    itemId,
+    playbackInfo.MediaSources[0].Id,
+  );
+
+  const videoUrl = useDirectStream ? directStreamUrl : streamUrl;
+
+  console.log('[PlayerScreen] Stream URL:', videoUrl);
+  console.log('[PlayerScreen] Using direct stream:', useDirectStream);
+
   return (
     <TouchableOpacity
       style={styles.container}
@@ -178,13 +196,24 @@ export function PlayerScreen() {
       onPress={showControlsWithTimeout}>
       <Video
         ref={videoRef}
-        source={{ uri: streamUrl }}
+        source={{ uri: videoUrl }}
         style={styles.video}
         resizeMode="contain"
         paused={!isPlaying}
         onProgress={handleProgress}
         onLoad={handleLoad}
-        onError={(err) => setError(err.error?.errorString || 'Playback error')}
+        onError={(err) => {
+          console.error('[PlayerScreen] Video error:', err);
+          console.error('[PlayerScreen] Error details:', JSON.stringify(err, null, 2));
+          
+          // Try direct stream as fallback
+          if (!useDirectStream) {
+            console.log('[PlayerScreen] HLS failed, trying direct stream...');
+            setUseDirectStream(true);
+          } else {
+            setError(err.error?.errorString || err.error?.localizedDescription || 'Playback error. Please check your network connection and Jellyfin server.');
+          }
+        }}
       />
 
       {showControls && (
@@ -225,7 +254,7 @@ export function PlayerScreen() {
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` },
+                  { width: (duration > 0 ? (currentTime / duration) * 100 : 0) + '%' },
                 ]}
               />
             </View>

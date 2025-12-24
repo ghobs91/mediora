@@ -21,7 +21,7 @@ type TMDBDetailsRouteProp = RouteProp<RootStackParamList, 'TMDBDetails'>;
 export function TMDBDetailsScreen() {
   const route = useRoute<TMDBDetailsRouteProp>();
   const navigation = useNavigation();
-  const { tmdb, sonarr, radarr, isSonarrConnected, isRadarrConnected } = useServices();
+  const { tmdb, sonarr, radarr, jellyfin, isSonarrConnected, isRadarrConnected, isJellyfinConnected } = useServices();
   const { settings } = useSettings();
   const { item, mediaType } = route.params;
 
@@ -29,6 +29,8 @@ export function TMDBDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRequesting, setIsRequesting] = useState(false);
   const [alreadyExists, setAlreadyExists] = useState(false);
+  const [jellyfinItem, setJellyfinItem] = useState<any>(null);
+  const [checkingJellyfin, setCheckingJellyfin] = useState(false);
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(1);
   const [seasonDetails, setSeasonDetails] = useState<TMDBSeasonDetails | null>(null);
   const [loadingSeasons, setLoadingSeasons] = useState(false);
@@ -37,6 +39,12 @@ export function TMDBDetailsScreen() {
     loadDetails();
     checkIfExists();
   }, []);
+
+  useEffect(() => {
+    if (details) {
+      checkJellyfinAvailability();
+    }
+  }, [details]);
 
   useEffect(() => {
     if (details && mediaType === 'tv') {
@@ -91,6 +99,39 @@ export function TMDBDetailsScreen() {
     } catch (error) {
       console.error('Failed to check if exists:', error);
     }
+  };
+
+  const checkJellyfinAvailability = async () => {
+    if (!jellyfin || !isJellyfinConnected || !details) return;
+
+    setCheckingJellyfin(true);
+    try {
+      if (mediaType === 'movie') {
+        const movieDetails = details as TMDBMovieDetails;
+        const results = await jellyfin.searchByTmdbId(item.id.toString(), 'Movie');
+        if (results.length > 0) {
+          setJellyfinItem(results[0]);
+        }
+      } else {
+        const tvDetails = details as TMDBTVDetails;
+        if (tvDetails.external_ids?.tvdb_id) {
+          const results = await jellyfin.searchByTvdbId(tvDetails.external_ids.tvdb_id.toString());
+          if (results.length > 0) {
+            setJellyfinItem(results[0]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check Jellyfin availability:', error);
+    } finally {
+      setCheckingJellyfin(false);
+    }
+  };
+
+  const handlePlayFromJellyfin = () => {
+    if (!jellyfinItem) return;
+    // @ts-ignore - navigation typing
+    navigation.navigate('ItemDetails', { item: jellyfinItem });
   };
 
   const handleRequestMovie = async () => {
@@ -308,6 +349,14 @@ export function TMDBDetailsScreen() {
 
             {/* Actions */}
             <View style={styles.actions}>
+              {jellyfinItem && (
+                <FocusableButton
+                  title={mediaType === 'movie' ? 'Play Movie' : 'View Series'}
+                  onPress={handlePlayFromJellyfin}
+                  size="large"
+                  variant="primary"
+                />
+              )}
               {canRequest && (
                 <FocusableButton
                   title={
@@ -325,14 +374,16 @@ export function TMDBDetailsScreen() {
                   disabled={alreadyExists || isRequesting}
                   loading={isRequesting}
                   size="large"
-                  variant={alreadyExists ? 'secondary' : 'primary'}
+                  variant={jellyfinItem ? 'secondary' : (alreadyExists ? 'secondary' : 'primary')}
                 />
               )}
-              {!canRequest && (
-                <Text style={styles.configureText}>
-                  Configure {mediaType === 'movie' ? 'Radarr' : 'Sonarr'} in
-                  Settings to request this {mediaType === 'movie' ? 'movie' : 'show'}
-                </Text>
+              {!canRequest && !jellyfinItem && (
+                <View>
+                  <Text style={styles.configureText}>
+                    Configure {mediaType === 'movie' ? 'Radarr' : 'Sonarr'} in
+                    Settings to request this {mediaType === 'movie' ? 'movie' : 'show'}
+                  </Text>
+                </View>
               )}
             </View>
           </View>

@@ -83,14 +83,6 @@ export function SearchScreen() {
   if (!isTMDBConnected) {
     return (
       <View style={styles.emptyContainer}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // @ts-ignore
-            navigation.navigate('MainMenu');
-          }}>
-          <Text style={styles.backButtonText}>← Menu</Text>
-        </TouchableOpacity>
         <Text style={styles.emptyTitle}>Search</Text>
         <Text style={styles.emptyText}>
           Configure your TMDB API key in Settings to search for movies and TV
@@ -102,18 +94,6 @@ export function SearchScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // @ts-ignore
-            navigation.navigate('MainMenu');
-          }}>
-          <Text style={styles.backButtonText}>← Menu</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Search</Text>
-      </View>
-
       {/* Search Input */}
       <View style={styles.searchContainer}>
         <TextInput
@@ -246,29 +226,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  header: {
-    padding: 48,
-    paddingBottom: 24,
-  },
-  backButton: {
-    marginBottom: 20,
-    padding: 12,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 48,
-    fontWeight: 'bold',
-  },
   searchContainer: {
     paddingHorizontal: 48,
+    paddingTop: 24,
     marginBottom: 16,
   },
   searchInput: {

@@ -35,9 +35,10 @@ export function MediaCard({
   const handleFocus = () => {
     setIsFocused(true);
     Animated.spring(scaleValue, {
-      toValue: 1.1,
+      toValue: 1.12,
       useNativeDriver: true,
-      friction: 8,
+      friction: 7,
+      tension: 100,
     }).start();
   };
 
@@ -46,7 +47,8 @@ export function MediaCard({
     Animated.spring(scaleValue, {
       toValue: 1,
       useNativeDriver: true,
-      friction: 8,
+      friction: 7,
+      tension: 100,
     }).start();
   };
 
@@ -65,7 +67,7 @@ export function MediaCard({
   if (item) {
     displayTitle = item.SeriesName || item.Name;
     displaySubtitle = item.SeriesName
-      ? `${item.SeasonName} - E${item.IndexNumber}`
+      ? item.SeasonName + ' - E' + item.IndexNumber
       : item.ProductionYear?.toString();
   } else if (tmdbItem) {
     displayTitle =
@@ -104,19 +106,21 @@ export function MediaCard({
             </Text>
           </View>
         )}
-        {item?.UserData?.PlaybackPositionTicks &&
-          item?.RunTimeTicks && (
+        {item?.UserData?.PlaybackPositionTicks != null &&
+          item?.RunTimeTicks != null &&
+          item.RunTimeTicks > 0 ? (
             <View style={styles.progressContainer}>
               <View
                 style={[
                   styles.progressBar,
                   {
-                    width: `${(item.UserData.PlaybackPositionTicks / item.RunTimeTicks) * 100}%`,
+                    flex: item.UserData.PlaybackPositionTicks / item.RunTimeTicks,
                   },
                 ]}
               />
+              <View style={{ flex: 1 - (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) }} />
             </View>
-          )}
+          ) : null}
       </Animated.View>
       <View style={[styles.textContainer, { width }]}>
         <Text style={styles.title} numberOfLines={1}>
@@ -137,55 +141,60 @@ const styles = StyleSheet.create({
     margin: 8,
   },
   cardContainer: {
-    borderRadius: 8,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#2a2a2a',
+    backgroundColor: 'rgba(42, 42, 42, 0.6)',
   },
   focused: {
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    borderWidth: 3,
-    borderColor: '#fff',
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.8,
+    shadowRadius: 24,
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
+    elevation: 16,
   },
   image: {
-    borderRadius: 8,
+    borderRadius: 16,
   },
   placeholder: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#3a3a3a',
+    backgroundColor: 'rgba(58, 58, 58, 0.4)',
   },
   placeholderText: {
     fontSize: 48,
-    color: '#666',
+    color: 'rgba(102, 102, 102, 0.6)',
     fontWeight: 'bold',
   },
   textContainer: {
-    marginTop: 8,
+    marginTop: 12,
     paddingHorizontal: 4,
   },
   title: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   subtitle: {
-    color: '#888',
-    fontSize: 12,
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
+    marginTop: 4,
+    fontWeight: '500',
   },
   progressContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 4,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    height: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    flexDirection: 'row',
   },
   progressBar: {
-    height: '100%',
-    backgroundColor: '#e50914',
+    height: 5,
+    backgroundColor: 'rgba(10, 132, 255, 0.9)',
+    borderRadius: 5,
   },
 });

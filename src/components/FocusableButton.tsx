@@ -16,6 +16,7 @@ interface FocusableButtonProps {
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
+  hasTVPreferredFocus?: boolean;
 }
 
 export function FocusableButton({
@@ -26,6 +27,7 @@ export function FocusableButton({
   disabled = false,
   loading = false,
   style,
+  hasTVPreferredFocus = false,
 }: FocusableButtonProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -33,9 +35,10 @@ export function FocusableButton({
   const handleFocus = () => {
     setIsFocused(true);
     Animated.spring(scaleValue, {
-      toValue: 1.05,
+      toValue: 1.08,
       useNativeDriver: true,
-      friction: 8,
+      friction: 7,
+      tension: 100,
     }).start();
   };
 
@@ -44,7 +47,8 @@ export function FocusableButton({
     Animated.spring(scaleValue, {
       toValue: 1,
       useNativeDriver: true,
-      friction: 8,
+      friction: 7,
+      tension: 100,
     }).start();
   };
 
@@ -63,23 +67,23 @@ export function FocusableButton({
   const getVariantStyles = () => {
     if (disabled) {
       return {
-        backgroundColor: '#444',
-        borderColor: '#444',
+        backgroundColor: 'rgba(68, 68, 68, 0.3)',
+        borderColor: 'rgba(68, 68, 68, 0.5)',
       };
     }
 
     const variants = {
       primary: {
-        backgroundColor: isFocused ? '#fff' : '#0066cc',
-        borderColor: isFocused ? '#fff' : '#0066cc',
+        backgroundColor: isFocused ? 'rgba(255, 255, 255, 0.95)' : 'rgba(0, 122, 255, 0.85)',
+        borderColor: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(0, 122, 255, 0.9)',
       },
       secondary: {
-        backgroundColor: isFocused ? '#fff' : 'transparent',
-        borderColor: '#fff',
+        backgroundColor: isFocused ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+        borderColor: isFocused ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)',
       },
       danger: {
-        backgroundColor: isFocused ? '#fff' : '#cc0000',
-        borderColor: isFocused ? '#fff' : '#cc0000',
+        backgroundColor: isFocused ? 'rgba(255, 69, 58, 0.95)' : 'rgba(255, 69, 58, 0.85)',
+        borderColor: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 69, 58, 0.9)',
       },
     };
 
@@ -95,17 +99,25 @@ export function FocusableButton({
 
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.9}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onPress={onPress}
-      disabled={disabled || loading}>
+      disabled={disabled || loading}
+      hasTVPreferredFocus={hasTVPreferredFocus}>
       <Animated.View
         style={[
           styles.button,
           sizeStyles[size],
           getVariantStyles(),
-          { transform: [{ scale: scaleValue }] },
+          {
+            transform: [{ scale: scaleValue }],
+            shadowColor: isFocused ? '#ffffff' : '#000000',
+            shadowOffset: { width: 0, height: isFocused ? 8 : 4 },
+            shadowOpacity: isFocused ? 0.6 : 0.3,
+            shadowRadius: isFocused ? 20 : 8,
+            elevation: isFocused ? 12 : 4,
+          },
           style,
         ]}>
         {loading ? (
@@ -126,13 +138,15 @@ export function FocusableButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 8,
-    borderWidth: 2,
+    borderRadius: 12,
+    borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 100,
+    overflow: 'hidden',
   },
   text: {
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });
