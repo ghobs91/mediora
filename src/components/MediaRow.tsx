@@ -84,14 +84,15 @@ export function MediaRow(props: MediaRowProps) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   title: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 18,
     marginLeft: 48,
+    letterSpacing: 0.4,
   },
   listContent: {
     paddingHorizontal: 40,

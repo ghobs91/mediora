@@ -387,7 +387,8 @@ export interface AppSettings {
 export type RootStackParamList = {
   MainMenu: undefined;
   Home: undefined;
-  Library: undefined;
+  TVShows: undefined;
+  Movies: undefined;
   Search: undefined;
   Settings: undefined;
   Player: { itemId: string };
