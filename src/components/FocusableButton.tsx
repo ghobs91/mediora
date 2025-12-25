@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 interface FocusableButtonProps {
-  title: string;
+  title: string | React.ReactNode;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   size?: 'small' | 'medium' | 'large';
@@ -122,7 +122,7 @@ export function FocusableButton({
         ]}>
         {loading ? (
           <ActivityIndicator color={getTextColor()} />
-        ) : (
+        ) : typeof title === 'string' ? (
           <Text
             style={[
               styles.text,
@@ -130,6 +130,8 @@ export function FocusableButton({
             ]}>
             {title}
           </Text>
+        ) : (
+          title
         )}
       </Animated.View>
     </TouchableOpacity>

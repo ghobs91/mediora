@@ -30,7 +30,8 @@ export function PlayerScreen() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [useDirectStream, setUseDirectStream] = useState(false);
+  const [streamAttempt, setStreamAttempt] = useState<'hls' | 'transcoded'>('hls');
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,23 +42,42 @@ export function PlayerScreen() {
 
     try {
       console.log('[PlayerScreen] Loading playback info for item:', itemId);
+      // Start a new play session before loading playback info
+      jellyfin.newPlaySession();
+      console.log('[PlayerScreen] New play session:', jellyfin.getPlaySessionId());
+      
       const info = await jellyfin.getPlaybackInfo(itemId);
       console.log('[PlayerScreen] Playback info received:', {
         mediaSourcesCount: info.MediaSources?.length,
         firstMediaSource: info.MediaSources?.[0]?.Id,
+        container: info.MediaSources?.[0]?.Container,
+        supportsTranscoding: info.MediaSources?.[0]?.SupportsTranscoding,
+        supportsDirectPlay: info.MediaSources?.[0]?.SupportsDirectPlay,
+        supportsDirectStream: info.MediaSources?.[0]?.SupportsDirectStream,
       });
       setPlaybackInfo(info);
 
       if (info.MediaSources.length > 0) {
+        // Report as Transcode since we're using HLS
         await jellyfin.reportPlaybackStart(
           itemId,
           info.MediaSources[0].Id,
           0,
+          'Transcode',
         );
       }
     } catch (err) {
       console.error('[PlayerScreen] Failed to load playback info:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load playback info');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load playback info';
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('timed out') || errorMessage.toLowerCase().includes('timeout')) {
+        setError('Connection timed out. The Jellyfin server may be slow or unreachable. Please check your network connection and try again.');
+      } else if (errorMessage.includes('Network request failed')) {
+        setError('Network error. Please check your connection to the Jellyfin server.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -67,16 +87,45 @@ export function PlayerScreen() {
     loadPlaybackInfo();
 
     return () => {
-      // Report playback stopped when leaving
+      // Report playback stopped and stop encoding when leaving
       if (jellyfin && playbackInfo?.MediaSources[0]) {
         jellyfin.reportPlaybackStopped(
           itemId,
           playbackInfo.MediaSources[0].Id,
           Math.floor(currentTime * 10000000), // Convert to ticks
         );
+        // Stop the encoding session to free up server resources
+        jellyfin.stopEncodingSession();
       }
     };
   }, []);
+
+  // Log stream attempt changes
+  useEffect(() => {
+    if (jellyfin && playbackInfo?.MediaSources[0]) {
+      const mediaSourceId = playbackInfo.MediaSources[0].Id;
+      const streamType = streamAttempt === 'hls' ? 'HLS (main.m3u8)' : 'Transcoded (720p)';
+      const url = streamAttempt === 'hls'
+        ? jellyfin.getHlsStreamUrl(itemId, mediaSourceId)
+        : jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+      
+      console.log('[PlayerScreen] Stream type:', streamType);
+      console.log('[PlayerScreen] Stream URL:', url);
+      console.log('[PlayerScreen] Media source:', {
+        id: mediaSourceId,
+        container: playbackInfo.MediaSources[0].Container,
+      });
+    }
+  }, [streamAttempt, playbackInfo, jellyfin, itemId]);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    setError(null);
+    setIsLoading(true);
+    setStreamAttempt('hls');
+    await loadPlaybackInfo();
+    setIsRetrying(false);
+  };
 
   const showControlsWithTimeout = useCallback(() => {
     setShowControls(true);
@@ -111,6 +160,7 @@ export function PlayerScreen() {
         playbackInfo.MediaSources[0].Id,
         Math.floor(data.currentTime * 10000000),
         !isPlaying,
+        'Transcode', // We're using HLS which is transcoded
       );
     }
   };
@@ -120,6 +170,7 @@ export function PlayerScreen() {
   };
 
   const handlePlayPause = () => {
+    console.log('[PlayerScreen] Play/Pause toggled, was playing:', isPlaying, 'now:', !isPlaying);
     setIsPlaying(!isPlaying);
     showControlsWithTimeout();
   };
@@ -155,9 +206,14 @@ export function PlayerScreen() {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={handleBack} style={styles.errorButton}>
-          <Text style={styles.errorButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <View style={styles.errorButtons}>
+          <TouchableOpacity onPress={handleRetry} style={styles.errorButton} disabled={isRetrying}>
+            <Text style={styles.errorButtonText}>{isRetrying ? 'Retrying...' : 'Retry'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBack} style={styles.errorButtonSecondary}>
+            <Text style={styles.errorButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -173,46 +229,99 @@ export function PlayerScreen() {
     );
   }
 
-  const streamUrl = jellyfin.getHlsStreamUrl(
-    itemId,
-    playbackInfo.MediaSources[0].Id,
-  );
-
-  // Fallback to direct stream if HLS is problematic
-  const directStreamUrl = jellyfin.getStreamUrl(
-    itemId,
-    playbackInfo.MediaSources[0].Id,
-  );
-
-  const videoUrl = useDirectStream ? directStreamUrl : streamUrl;
-
-  console.log('[PlayerScreen] Stream URL:', videoUrl);
-  console.log('[PlayerScreen] Using direct stream:', useDirectStream);
+  // Generate stream URLs
+  const mediaSourceId = playbackInfo.MediaSources[0].Id;
+  
+  const videoUrl = streamAttempt === 'hls'
+    ? jellyfin.getHlsStreamUrl(itemId, mediaSourceId)
+    : jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+  
+  const streamType = streamAttempt === 'hls' ? 'HLS (main.m3u8)' : 'Transcoded (720p)';
 
   return (
     <TouchableOpacity
       style={styles.container}
       activeOpacity={1}
-      onPress={showControlsWithTimeout}>
+      onPress={showControlsWithTimeout}
+      // Don't capture focus on tvOS - let buttons handle it
+      accessible={false}>
       <Video
         ref={videoRef}
-        source={{ uri: videoUrl }}
+        source={{ 
+          uri: videoUrl,
+          // Add headers for better compatibility
+          headers: {
+            'Accept': '*/*',
+          },
+        }}
         style={styles.video}
         resizeMode="contain"
         paused={!isPlaying}
         onProgress={handleProgress}
-        onLoad={handleLoad}
+        onLoad={(data) => {
+          console.log('[PlayerScreen] Video loaded, duration:', data.duration);
+          handleLoad(data);
+          // Start auto-hide timer for controls
+          showControlsWithTimeout();
+        }}
+        onReadyForDisplay={() => {
+          console.log('[PlayerScreen] Video ready for display');
+          // Ensure controls auto-hide after video is ready
+          showControlsWithTimeout();
+        }}
+        onBuffer={(data) => {
+          console.log('[PlayerScreen] Buffering:', data.isBuffering);
+        }}
+        onEnd={() => {
+          console.log('[PlayerScreen] Video ended');
+          setIsPlaying(false);
+        }}
+        onPlaybackRateChange={(data) => {
+          console.log('[PlayerScreen] Playback rate:', data.playbackRate);
+        }}
+        repeat={false}
+        playInBackground={false}
+        playWhenInactive={false}
+        bufferConfig={{
+          minBufferMs: 15000,
+          maxBufferMs: 50000,
+          bufferForPlaybackMs: 2500,
+          bufferForPlaybackAfterRebufferMs: 5000,
+        }}
         onError={(err) => {
           console.error('[PlayerScreen] Video error:', err);
           console.error('[PlayerScreen] Error details:', JSON.stringify(err, null, 2));
           
-          // Try direct stream as fallback
-          if (!useDirectStream) {
-            console.log('[PlayerScreen] HLS failed, trying direct stream...');
-            setUseDirectStream(true);
-          } else {
-            setError(err.error?.errorString || err.error?.localizedDescription || 'Playback error. Please check your network connection and Jellyfin server.');
+          // Handle specific CoreMedia errors
+          const errorCode = err.error?.code;
+          const errorDomain = err.error?.domain;
+          
+          console.log('[PlayerScreen] Error domain:', errorDomain, 'Code:', errorCode);
+          console.log('[PlayerScreen] Current stream attempt:', streamAttempt);
+          
+          // Try fallback: hls -> transcoded
+          if (streamAttempt === 'hls') {
+            console.log('[PlayerScreen] HLS failed, trying forced transcoding...');
+            setStreamAttempt('transcoded');
+            return;
           }
+          
+          // All methods failed, show error
+          let errorMessage = 'Playback error occurred.';
+          
+          if (errorCode === -11822) {
+            errorMessage = 'Authentication failed or server not configured correctly. Please check your Jellyfin server settings and try again.';
+          } else if (errorCode === -12889 || errorCode === -12847) {
+            errorMessage = 'Video format not supported on all streaming methods. Your Jellyfin server may need transcoding enabled or configured.';
+          } else if (errorCode === -12660) {
+            errorMessage = 'Cannot decode video. The codec may not be supported on this device.';
+          } else {
+            errorMessage = err.error?.errorString || 
+                          err.error?.localizedDescription || 
+                          'Playback failed on all stream types. Please check your network and server configuration.';
+          }
+          
+          setError(errorMessage);
         }}
       />
 
@@ -222,7 +331,7 @@ export function PlayerScreen() {
           {/* Top Bar */}
           <View style={styles.topBar}>
             <ControlButton
-              icon="←"
+              icon="arrow-back"
               onPress={handleBack}
               size="medium"
             />
@@ -231,17 +340,18 @@ export function PlayerScreen() {
           {/* Center Controls */}
           <View style={styles.centerControls}>
             <ControlButton
-              icon="⏪"
+              icon="play-back"
               onPress={() => handleSeek(false)}
               size="large"
             />
             <ControlButton
-              icon={isPlaying ? '⏸' : '▶'}
+              icon={isPlaying ? 'pause' : 'play'}
               onPress={handlePlayPause}
               size="xlarge"
+              hasTVPreferredFocus={true}
             />
             <ControlButton
-              icon="⏩"
+              icon="play-forward"
               onPress={() => handleSeek(true)}
               size="large"
             />
@@ -270,13 +380,15 @@ interface ControlButtonProps {
   icon: string;
   onPress: () => void;
   size?: 'medium' | 'large' | 'xlarge';
+  hasTVPreferredFocus?: boolean;
 }
 
-function ControlButton({ icon, onPress, size = 'medium' }: ControlButtonProps) {
+function ControlButton({ icon, onPress, size = 'medium', hasTVPreferredFocus = false }: ControlButtonProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const handleFocus = () => {
+    console.log('[ControlButton] Focused:', icon);
     setIsFocused(true);
     Animated.spring(scaleValue, {
       toValue: 1.2,
@@ -286,6 +398,7 @@ function ControlButton({ icon, onPress, size = 'medium' }: ControlButtonProps) {
   };
 
   const handleBlur = () => {
+    console.log('[ControlButton] Blurred:', icon);
     setIsFocused(false);
     Animated.spring(scaleValue, {
       toValue: 1,
@@ -294,23 +407,33 @@ function ControlButton({ icon, onPress, size = 'medium' }: ControlButtonProps) {
     }).start();
   };
 
+  const handlePress = () => {
+    console.log('[ControlButton] Pressed:', icon);
+    onPress();
+  };
+
   const sizes = {
     medium: 50,
     large: 70,
     xlarge: 100,
   };
 
-  const fontSize = {
-    medium: 24,
-    large: 32,
-    xlarge: 48,
+  const iconSize = {
+    medium: 28,
+    large: 40,
+    xlarge: 56,
   };
 
   return (
     <TouchableOpacity
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onPress={onPress}>
+      onPress={handlePress}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+      // Ensure it's focusable on tvOS
+      tvParallaxProperties={undefined}
+      accessible={true}
+      accessibilityRole="button">
       <Animated.View
         style={[
           styles.controlButton,
@@ -321,9 +444,7 @@ function ControlButton({ icon, onPress, size = 'medium' }: ControlButtonProps) {
           },
           isFocused && styles.controlButtonFocused,
         ]}>
-        <Text style={[styles.controlButtonText, { fontSize: fontSize[size] }]}>
-          {icon}
-        </Text>
+        <Icon name={icon} size={iconSize[size]} color="#fff" />
       </Animated.View>
     </TouchableOpacity>
   );
@@ -405,10 +526,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
+  errorButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
   errorButton: {
+    padding: 16,
+    backgroundColor: '#e50914',
+    borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  errorButtonSecondary: {
     padding: 16,
     backgroundColor: '#333',
     borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
   },
   errorButtonText: {
     color: '#fff',
