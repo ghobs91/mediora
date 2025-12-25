@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import {
   HomeScreen,
   LibraryScreen,
@@ -25,11 +26,11 @@ function TopNav({ currentRoute }: TopNavProps) {
   const [focusedItem, setFocusedItem] = React.useState<string | null>(null);
   
   const navItems = [
-    { name: 'Home', route: 'Home', icon: '🏠' },
-    { name: 'TV Shows', route: 'TVShows', icon: '📺' },
-    { name: 'Movies', route: 'Movies', icon: '🎬' },
-    { name: 'Search', route: 'Search', icon: '🔍' },
-    { name: 'Settings', route: 'Settings', icon: '⚙️' },
+    { name: 'Home', route: 'Home', icon: 'home' },
+    { name: 'TV Shows', route: 'TVShows', icon: 'tv' },
+    { name: 'Movies', route: 'Movies', icon: 'film' },
+    { name: 'Search', route: 'Search', icon: 'search' },
+    { name: 'Settings', route: 'Settings', icon: 'settings' },
   ];
 
   return (
@@ -50,10 +51,12 @@ function TopNav({ currentRoute }: TopNavProps) {
             activeOpacity={0.7}
             focusable={true}
             hasTVPreferredFocus={index === 0}>
-            <Text style={[
-              styles.navIcon,
-              { color: currentRoute === item.route ? '#fff' : '#888' }
-            ]}>{item.icon}</Text>
+            <Icon
+              name={item.icon}
+              size={26}
+              color={currentRoute === item.route ? '#fff' : '#888'}
+              style={styles.navIcon}
+            />
             <Text style={[
               styles.navText,
               currentRoute === item.route && styles.navTextActive,
@@ -213,7 +216,6 @@ const styles = StyleSheet.create({
   },
   navIcon: {
     marginRight: 8,
-    fontSize: 26,
   },
   navText: {
     fontSize: 17,

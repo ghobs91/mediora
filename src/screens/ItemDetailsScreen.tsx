@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen } from '../components';
@@ -165,10 +166,11 @@ export function ItemDetailsScreen() {
                 { transform: [{ scale: backButtonScale }] },
               ]}
             >
-              <Text style={[
-                styles.backButtonIcon,
-                backButtonFocused && { color: '#000' }
-              ]}>←</Text>
+              <Icon
+                name="arrow-back"
+                size={32}
+                color={backButtonFocused ? '#000' : '#fff'}
+              />
             </Animated.View>
           </TouchableOpacity>
         </View>

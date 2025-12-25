@@ -88,6 +88,19 @@ export interface JellyfinMediaSource {
   Size: number;
   Bitrate?: number;
   MediaStreams: JellyfinMediaStream[];
+  // Transcoding support fields
+  SupportsTranscoding?: boolean;
+  SupportsDirectPlay?: boolean;
+  SupportsDirectStream?: boolean;
+  RequiresOpening?: boolean;
+  RequiresClosing?: boolean;
+  TranscodingUrl?: string;
+  TranscodingSubProtocol?: string;
+  TranscodingContainer?: string;
+  // Video properties
+  VideoType?: string;
+  DefaultAudioStreamIndex?: number;
+  DefaultSubtitleStreamIndex?: number;
 }
 
 export interface JellyfinMediaStream {

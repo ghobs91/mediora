@@ -6,6 +6,7 @@ import {
   Text,
   ActivityIndicator,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService } from '../services';
@@ -88,9 +89,16 @@ function SettingsTab({
   isConnected,
   onPress,
 }: SettingsTabProps) {
+  const titleContent = isConnected ? (
+    <View style={styles.tabTitleContainer}>
+      <Text style={styles.tabTitleText}>{title}</Text>
+      <Icon name="checkmark-circle" size={18} color="#30d158" style={styles.tabCheckIcon} />
+    </View>
+  ) : title;
+
   return (
     <FocusableButton
-      title={title + (isConnected ? ' ✓' : '')}
+      title={titleContent}
       onPress={onPress}
       variant={isSelected ? 'primary' : 'secondary'}
       size="medium"
@@ -361,9 +369,17 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
         error={error || undefined}
       />
       {testResult && (
-        <Text style={[styles.testResult, testResult.startsWith('✓') ? styles.testSuccess : null]}>
-          {testResult}
-        </Text>
+        <View style={styles.testResultContainer}>
+          <Icon
+            name={testResult.startsWith('✓') ? 'checkmark-circle' : testResult.startsWith('✗') ? 'close-circle' : 'warning'}
+            size={24}
+            color={testResult.startsWith('✓') ? '#30d158' : '#ff453a'}
+            style={styles.testResultIcon}
+          />
+          <Text style={[styles.testResult, testResult.startsWith('✓') ? styles.testSuccess : null]}>
+            {testResult.replace(/^[✓✗⚠]\s*/, '')}
+          </Text>
+        </View>
       )}
       <View style={styles.buttonRow}>
         <FocusableButton
@@ -759,6 +775,30 @@ const styles = StyleSheet.create({
   },
   tab: {
     marginRight: 18,
+  },
+  tabTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tabTitleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  tabCheckIcon: {
+    marginLeft: 6,
+  },
+  tabText: {
+    color: '#fff',
+  },
+  testResultContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  testResultIcon: {
+    marginRight: 8,
+    marginTop: 2,
   },
   sectionContent: {
     paddingHorizontal: 48,
