@@ -128,14 +128,14 @@ export function HomeScreen() {
       />
 
       <MediaRow
-        title="Latest Movies"
+        title="New Movies"
         items={latestMovies}
         onItemPress={handleItemPress}
         getImageUrl={getImageUrl}
       />
 
       <MediaRow
-        title="Latest Episodes"
+        title="New Episodes"
         items={latestShows}
         onItemPress={handleItemPress}
         getImageUrl={getImageUrl}

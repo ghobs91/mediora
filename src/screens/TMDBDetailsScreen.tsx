@@ -9,8 +9,10 @@ import {
   Alert,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
 import { FocusableButton } from '../components';
 import { RootStackParamList, TMDBMovie, TMDBTVShow, TMDBMovieDetails, TMDBTVDetails, TMDBSeasonDetails, TMDBEpisode, TMDBCast } from '../types';
@@ -34,11 +36,45 @@ export function TMDBDetailsScreen() {
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState(1);
   const [seasonDetails, setSeasonDetails] = useState<TMDBSeasonDetails | null>(null);
   const [loadingSeasons, setLoadingSeasons] = useState(false);
+  const [requestingSeasons, setRequestingSeasons] = useState<Set<number>>(new Set());
+  const [selectedSeasonsToRequest, setSelectedSeasonsToRequest] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadDetails();
     checkIfExists();
+    checkJellyfinFirst();
   }, []);
+
+  const checkJellyfinFirst = async () => {
+    if (!jellyfin || !isJellyfinConnected) return;
+
+    setCheckingJellyfin(true);
+    try {
+      let jellyfinResults: any[] = [];
+      
+      if (mediaType === 'movie') {
+        jellyfinResults = await jellyfin.searchByTmdbId(item.id.toString(), 'Movie');
+      } else {
+        // For TV shows, we need to get details first to get TVDB ID
+        if (!tmdb) return;
+        const tvDetails = await tmdb.getTVDetails(item.id);
+        if (tvDetails.external_ids?.tvdb_id) {
+          jellyfinResults = await jellyfin.searchByTvdbId(tvDetails.external_ids.tvdb_id.toString());
+        }
+      }
+      
+      if (jellyfinResults.length > 0) {
+        // Content exists in Jellyfin - navigate to ItemDetailsScreen instead
+        const jellyfinItem = jellyfinResults[0];
+        // @ts-ignore - navigation typing
+        navigation.replace('ItemDetails', { item: jellyfinItem });
+      }
+    } catch (error) {
+      console.error('Failed to check Jellyfin availability:', error);
+    } finally {
+      setCheckingJellyfin(false);
+    }
+  };
 
   useEffect(() => {
     if (details) {
@@ -196,15 +232,23 @@ export function TMDBDetailsScreen() {
 
       console.log('[TMDBDetailsScreen] Found series in Sonarr:', sonarrResults[0].title);
 
-      // Add the series
-      await sonarr.addSeries(sonarrResults[0], {
+      // Add the series with selected seasons or all seasons
+      const seasonsToMonitor = selectedSeasonsToRequest.size > 0 
+        ? Array.from(selectedSeasonsToRequest)
+        : undefined; // undefined means monitor all seasons
+
+      await sonarr.addSeriesWithSeasons(sonarrResults[0], {
         rootFolderPath: settings.sonarr.rootFolderPath,
         qualityProfileId: settings.sonarr.qualityProfileId,
         searchForMissingEpisodes: true,
+        monitoredSeasons: seasonsToMonitor,
       });
 
       setAlreadyExists(true);
-      Alert.alert('Success', 'TV show has been added to Sonarr');
+      const seasonText = selectedSeasonsToRequest.size > 0 
+        ? `Season(s) ${Array.from(selectedSeasonsToRequest).join(', ')} added`
+        : 'TV show has been added';
+      Alert.alert('Success', seasonText + ' to Sonarr');
     } catch (error) {
       console.error('[TMDBDetailsScreen] Failed to add TV show:', error);
       let message = 'Failed to add TV show';
@@ -225,6 +269,71 @@ export function TMDBDetailsScreen() {
     } finally {
       setIsRequesting(false);
     }
+  };
+
+  const handleRequestSeason = async (seasonNumber: number) => {
+    if (!sonarr || !settings.sonarr) {
+      Alert.alert('Error', 'Sonarr is not configured');
+      return;
+    }
+
+    const tvDetails = details as TMDBTVDetails;
+    if (!tvDetails?.external_ids?.tvdb_id) {
+      Alert.alert('Error', 'TVDB ID not found for this show.');
+      return;
+    }
+
+    setRequestingSeasons(prev => new Set(prev).add(seasonNumber));
+
+    try {
+      // Check if series already exists
+      const existingSeries = await sonarr.checkSeriesExists(tvDetails.external_ids.tvdb_id);
+      
+      if (existingSeries && existingSeries.id) {
+        // Series exists, just monitor this season and search
+        await sonarr.updateSeasonMonitoring(existingSeries.id, seasonNumber, true);
+        await sonarr.searchForSeason(existingSeries.id, seasonNumber);
+        Alert.alert('Success', `Season ${seasonNumber} has been requested`);
+      } else {
+        // Series doesn't exist, add it with only this season monitored
+        const sonarrResults = await sonarr.lookupSeriesByTvdbId(tvDetails.external_ids.tvdb_id);
+        if (sonarrResults.length === 0) {
+          Alert.alert('Error', 'Series not found in Sonarr.');
+          return;
+        }
+
+        await sonarr.addSeriesWithSeasons(sonarrResults[0], {
+          rootFolderPath: settings.sonarr.rootFolderPath,
+          qualityProfileId: settings.sonarr.qualityProfileId,
+          searchForMissingEpisodes: true,
+          monitoredSeasons: [seasonNumber],
+        });
+        
+        Alert.alert('Success', `Series added with Season ${seasonNumber} monitored`);
+        setAlreadyExists(true);
+      }
+    } catch (error) {
+      console.error('[TMDBDetailsScreen] Failed to request season:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to request season');
+    } finally {
+      setRequestingSeasons(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(seasonNumber);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleSeasonSelection = (seasonNumber: number) => {
+    setSelectedSeasonsToRequest(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(seasonNumber)) {
+        newSet.delete(seasonNumber);
+      } else {
+        newSet.add(seasonNumber);
+      }
+      return newSet;
+    });
   };
 
   const title = 'title' in item ? item.title : item.name;
@@ -409,6 +518,14 @@ export function TMDBDetailsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Seasons & Episodes</Text>
             
+            {!alreadyExists && canRequest && (
+              <View style={styles.seasonSelectionHint}>
+                <Text style={styles.seasonSelectionHintText}>
+                  Select specific seasons to request, or request all
+                </Text>
+              </View>
+            )}
+            
             {/* Season Tabs */}
             <ScrollView
               horizontal
@@ -419,23 +536,43 @@ export function TMDBDetailsScreen() {
               {tvDetails.seasons
                 .filter(season => season.season_number > 0)
                 .map(season => (
-                  <TouchableOpacity
-                    key={season.id}
-                    style={[
-                      styles.seasonTab,
-                      selectedSeasonNumber === season.season_number && styles.seasonTabActive,
-                    ]}
-                    onPress={() => setSelectedSeasonNumber(season.season_number)}
-                  >
-                    <Text
+                  <View key={season.id} style={styles.seasonTabContainer}>
+                    <TouchableOpacity
                       style={[
-                        styles.seasonTabText,
-                        selectedSeasonNumber === season.season_number && styles.seasonTabTextActive,
+                        styles.seasonTab,
+                        selectedSeasonNumber === season.season_number && styles.seasonTabActive,
+                        selectedSeasonsToRequest.has(season.season_number) && 
+                          !alreadyExists && styles.seasonTabSelected,
                       ]}
+                      onPress={() => setSelectedSeasonNumber(season.season_number)}
+                      onLongPress={() => !alreadyExists && toggleSeasonSelection(season.season_number)}
                     >
-                      Season {season.season_number}
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        style={[
+                          styles.seasonTabText,
+                          selectedSeasonNumber === season.season_number && styles.seasonTabTextActive,
+                        ]}
+                      >
+                        Season {season.season_number}
+                      </Text>
+                      {selectedSeasonsToRequest.has(season.season_number) && !alreadyExists && (
+                        <Icon name="checkmark-circle" size={16} color="#4caf50" style={styles.seasonCheckIcon} />
+                      )}
+                    </TouchableOpacity>
+                    {!alreadyExists && canRequest && (
+                      <TouchableOpacity
+                        style={styles.seasonRequestButton}
+                        onPress={() => handleRequestSeason(season.season_number)}
+                        disabled={requestingSeasons.has(season.season_number)}
+                      >
+                        {requestingSeasons.has(season.season_number) ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Icon name="add-circle-outline" size={20} color="#2196f3" />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 ))}
             </ScrollView>
 
@@ -592,15 +729,23 @@ const styles = StyleSheet.create({
   seasonTabsContent: {
     paddingRight: 48,
   },
+  seasonTabContainer: {
+    marginRight: 12,
+  },
   seasonTab: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    marginRight: 12,
     borderRadius: 8,
     backgroundColor: '#222',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   seasonTabActive: {
     backgroundColor: '#fff',
+  },
+  seasonTabSelected: {
+    borderWidth: 2,
+    borderColor: '#4caf50',
   },
   seasonTabText: {
     color: '#888',
@@ -609,6 +754,26 @@ const styles = StyleSheet.create({
   },
   seasonTabTextActive: {
     color: '#000',
+  },
+  seasonCheckIcon: {
+    marginLeft: 6,
+  },
+  seasonRequestButton: {
+    marginTop: 8,
+    alignItems: 'center',
+    padding: 4,
+  },
+  seasonSelectionHint: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
+  },
+  seasonSelectionHintText: {
+    color: '#2196f3',
+    fontSize: 14,
   },
   loadingText: {
     color: '#888',

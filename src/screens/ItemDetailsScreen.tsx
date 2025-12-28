@@ -1,467 +1,428 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  Text,
-  Image,
-  Dimensions,
-  Alert,
-  TouchableOpacity,
-  Animated,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import React, { useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, Text, Image, Dimensions, TouchableOpacity, FlatList, Alert, ImageBackground } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
-import { FocusableButton, LoadingScreen } from '../components';
-import { RootStackParamList, JellyfinItem } from '../types';
+import { FocusableButton, LoadingScreen, CastList } from '../components';
+import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails } from '../types';
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, 'ItemDetails'>;
+
+interface EnrichedEpisode extends TMDBEpisode {
+  jellyfinItem?: JellyfinItem;
+  isAvailable: boolean;
+}
+
+interface EnrichedSeason {
+  seasonNumber: number;
+  name: string;
+  posterPath: string | null;
+  episodeCount: number;
+  episodes: EnrichedEpisode[];
+  isFullyAvailable: boolean;
+}
 
 export function ItemDetailsScreen() {
   const route = useRoute<ItemDetailsRouteProp>();
   const navigation = useNavigation();
-  const { jellyfin } = useServices();
-  const { item } = route.params;
+  const { jellyfin, tmdb, sonarr, isSonarrConnected } = useServices();
+  const { settings } = useSettings();
+  const { item: initialItem } = route.params;
 
-  const [seasons, setSeasons] = useState<JellyfinItem[]>([]);
-  const [episodes, setEpisodes] = useState<JellyfinItem[]>([]);
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
-  const [loadingSeasons, setLoadingSeasons] = useState(false);
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  // State
+  const [seriesItem, setSeriesItem] = useState<JellyfinItem | null>(initialItem.Type === 'Series' ? initialItem : null);
+  const [tmdbDetails, setTmdbDetails] = useState<TMDBTVDetails | null>(null);
+  const [movieDetails, setMovieDetails] = useState<TMDBMovieDetails | null>(null);
+  const [enrichedSeasons, setEnrichedSeasons] = useState<EnrichedSeason[]>([]);
 
-  const isSeries = item.Type === 'Series';
+  // Selection State
+  const [selectedSeason, setSelectedSeason] = useState<EnrichedSeason | null>(null);
+  const [selectedEpisode, setSelectedEpisode] = useState<EnrichedEpisode | null>(null);
 
+  // Data State
+  const [jellyfinEpisodes, setJellyfinEpisodes] = useState<JellyfinItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [cast, setCast] = useState<TMDBCast[]>([]);
+
+  const isMovie = initialItem.Type === 'Movie';
+  const isSeriesOrEpisode = initialItem.Type === 'Series' || initialItem.Type === 'Episode';
+
+  // Derived
+  const backdropUrl = jellyfin?.getImageUrl?.(initialItem.Id, 'Backdrop', { maxWidth: 1920 }) ?? null;
+
+  // Initialize
   useEffect(() => {
-    if (isSeries && jellyfin) {
-      loadSeasons();
-    }
-  }, [isSeries, jellyfin]);
+    init();
+  }, [initialItem]);
 
-  useEffect(() => {
-    if (selectedSeasonId && jellyfin) {
-      loadEpisodes();
-    }
-  }, [selectedSeasonId, jellyfin]);
-
-  const loadSeasons = async () => {
-    if (!jellyfin) return;
-    setLoadingSeasons(true);
+  const init = async () => {
+    setIsLoading(true);
     try {
-      const seasonsData = await jellyfin.getSeasons(item.Id);
-      // Filter out specials (Season 0) if present
-      const regularSeasons = seasonsData.filter(s => (s.IndexNumber ?? 0) > 0);
-      setSeasons(regularSeasons);
-      // Auto-select first season
-      if (regularSeasons.length > 0) {
-        setSelectedSeasonId(regularSeasons[0].Id);
+      if (isMovie) {
+        // Handle Movie
+        if (tmdb && initialItem.ProviderIds?.Tmdb) {
+          const details = await tmdb.getMovieDetails(parseInt(initialItem.ProviderIds.Tmdb));
+          setMovieDetails(details);
+          if (details.credits?.cast) {
+            setCast(details.credits.cast);
+          }
+        }
+      } else if (isSeriesOrEpisode) {
+        // Handle Series/Episode
+        let currentSeries = seriesItem;
+
+        // If passed item is an Episode, fetch Series first
+        if (initialItem.Type === 'Episode') {
+          if (initialItem.SeriesId && jellyfin) {
+            currentSeries = await jellyfin.getItem(initialItem.SeriesId);
+            setSeriesItem(currentSeries);
+          }
+        }
+
+        if (currentSeries && tmdb && currentSeries.ProviderIds?.Tmdb) {
+          // Fetch TMDB Details
+          const details = await tmdb.getTVDetails(parseInt(currentSeries.ProviderIds.Tmdb));
+          setTmdbDetails(details);
+
+          // Helper to load seasons structure
+          const seasons: EnrichedSeason[] = details.seasons
+            .filter(s => s.season_number > 0)
+            .map(s => ({
+              seasonNumber: s.season_number,
+              name: s.name,
+              posterPath: s.poster_path,
+              episodeCount: s.episode_count,
+              episodes: [],
+              isFullyAvailable: false,
+            }));
+
+          setEnrichedSeasons(seasons);
+          if (details.credits?.cast) {
+            setCast(details.credits.cast);
+          }
+
+          // Fetch Jellyfin Episodes for availability
+          let allEpisodes: JellyfinItem[] = [];
+          if (jellyfin) {
+            allEpisodes = await jellyfin.getEpisodes(currentSeries.Id);
+            setJellyfinEpisodes(allEpisodes);
+          }
+
+          // Determine Initial Selection
+          if (initialItem.Type === 'Episode') {
+            const seasonNum = initialItem.ParentIndexNumber || 1;
+            const seasonToSelect = seasons.find(s => s.seasonNumber === seasonNum) || seasons[0];
+            if (seasonToSelect) {
+              await loadSeasonEpisodes(seasonToSelect, parseInt(currentSeries.ProviderIds.Tmdb), allEpisodes || []);
+            }
+          } else {
+            if (seasons.length > 0) {
+              await loadSeasonEpisodes(seasons[0], parseInt(currentSeries.ProviderIds.Tmdb), allEpisodes || []);
+            }
+          }
+        } else if (currentSeries && jellyfin) {
+          // Fallback: Fetch from Jellyfin directly
+          const allEpisodes = await jellyfin.getEpisodes(currentSeries.Id);
+          setJellyfinEpisodes(allEpisodes);
+
+          // Group by Season
+          const seasonsMap = new Map<number, EnrichedSeason>();
+
+          allEpisodes.forEach(ep => {
+            const seasonNum = ep.ParentIndexNumber || 1;
+            if (!seasonsMap.has(seasonNum)) {
+              seasonsMap.set(seasonNum, {
+                seasonNumber: seasonNum,
+                name: ep.SeasonName || `Season ${seasonNum}`,
+                posterPath: null, // Jellyfin doesn't always give season posters easily here without more queries
+                episodeCount: 0,
+                episodes: [],
+                isFullyAvailable: true,
+              });
+            }
+            const season = seasonsMap.get(seasonNum)!;
+            season.episodeCount++;
+            season.episodes.push({
+              id: parseInt(ep.Id.replace(/[^0-9]/g, '').substring(0, 9)) || Math.floor(Math.random() * 100000), // Hack for ID
+              name: ep.Name,
+              episode_number: ep.IndexNumber || 0,
+              season_number: seasonNum,
+              overview: ep.Overview || '',
+              still_path: null, // Use Jellyfin image instead
+              air_date: ep.ProductionYear ? `${ep.ProductionYear}-01-01` : null,
+              vote_average: ep.CommunityRating || 0,
+              vote_count: 0,
+              production_code: '',
+              runtime: ep.RunTimeTicks ? Math.round(ep.RunTimeTicks / 10000000 / 60) : 0,
+              jellyfinItem: ep,
+              isAvailable: true,
+            });
+          });
+
+          const seasons = Array.from(seasonsMap.values()).sort((a, b) => a.seasonNumber - b.seasonNumber);
+          setEnrichedSeasons(seasons);
+
+          // Initial Selection
+          if (initialItem.Type === 'Episode') {
+            const seasonNum = initialItem.ParentIndexNumber || 1;
+            const seasonToSelect = seasons.find(s => s.seasonNumber === seasonNum) || seasons[0];
+            if (seasonToSelect) {
+              setSelectedSeason(seasonToSelect);
+            }
+          } else {
+            if (seasons.length > 0) {
+              setSelectedSeason(seasons[0]);
+            }
+          }
+        }
       }
-    } catch (error) {
-      console.error('Failed to load seasons:', error);
+    } catch (e) {
+      console.error("Error initializing details:", e);
     } finally {
-      setLoadingSeasons(false);
+      setIsLoading(false);
     }
   };
 
-  const loadEpisodes = async () => {
-    if (!jellyfin || !selectedSeasonId) return;
-    setLoadingEpisodes(true);
-    try {
-      const episodesData = await jellyfin.getEpisodes(item.Id, selectedSeasonId);
-      setEpisodes(episodesData);
-    } catch (error) {
-      console.error('Failed to load episodes:', error);
-    } finally {
-      setLoadingEpisodes(false);
+  useEffect(() => {
+    if (!isLoading && initialItem.Type === 'Episode' && selectedSeason && selectedSeason.episodes.length > 0 && !selectedEpisode) {
+      const ep = selectedSeason.episodes.find(e => e.episode_number === initialItem.IndexNumber);
+      if (ep) setSelectedEpisode(ep);
     }
+  }, [isLoading, selectedSeason, initialItem]);
+
+  const loadSeasonEpisodes = async (season: EnrichedSeason, tmdbId: number, jfEpisodes: JellyfinItem[]) => {
+    if (!tmdb) return;
+
+    try {
+      const seasonDetails = await tmdb.getSeasonDetails(tmdbId, season.seasonNumber);
+
+      const enrichedEpisodes: EnrichedEpisode[] = seasonDetails.episodes.map(tmdbEp => {
+        const jellyfinEp = jfEpisodes.find(
+          jfEp => jfEp.ParentIndexNumber === season.seasonNumber && jfEp.IndexNumber === tmdbEp.episode_number
+        );
+        return {
+          ...tmdbEp,
+          jellyfinItem: jellyfinEp,
+          isAvailable: !!jellyfinEp,
+        };
+      });
+
+      const updatedSeason = {
+        ...season,
+        episodes: enrichedEpisodes,
+        isFullyAvailable: enrichedEpisodes.every(e => e.isAvailable),
+      };
+
+      setEnrichedSeasons(prev => prev.map(s => s.seasonNumber === season.seasonNumber ? updatedSeason : s));
+      setSelectedSeason(updatedSeason);
+
+    } catch (e) {
+      console.error("Failed to load season details", e);
+    }
+  };
+
+  const handleSeasonSelect = (season: EnrichedSeason) => {
+    if (!seriesItem?.ProviderIds?.Tmdb) return;
+    loadSeasonEpisodes(season, parseInt(seriesItem.ProviderIds.Tmdb), jellyfinEpisodes);
+  };
+
+  const handleEpisodeSelect = (episode: EnrichedEpisode) => {
+    setSelectedEpisode(episode);
   };
 
   const handlePlay = () => {
-    // @ts-ignore - navigation typing
-    navigation.navigate('Player', { itemId: item.Id });
-  };
+    let targetId = initialItem.Id; // Default to initial Item (works for Movie or specific Episode passed)
 
-  const handleEpisodePlay = (episode: JellyfinItem) => {
-    // @ts-ignore - navigation typing
-    navigation.navigate('Player', { itemId: episode.Id });
-  };
-
-  const formatRuntime = (ticks?: number): string => {
-    if (!ticks) return '';
-    const minutes = Math.floor(ticks / 600000000);
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-
-    if (hours > 0) {
-      return `${hours}h ${remainingMinutes}m`;
+    if (selectedEpisode && selectedEpisode.jellyfinItem) {
+      targetId = selectedEpisode.jellyfinItem.Id;
     }
-    return `${minutes}m`;
-  };
 
-  const getBackdropUrl = (): string | null => {
-    if (!jellyfin) return null;
-    // For episodes, try Primary (thumbnail) first, then fall back to Backdrop
-    if (item.Type === 'Episode') {
-      return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 1920 });
+    // Check availablity
+    if (selectedEpisode && !selectedEpisode.isAvailable) {
+      if (selectedSeason) handleRequestSeason(selectedSeason.seasonNumber);
+      return;
     }
-    if (item.BackdropImageTags?.length) {
-      return jellyfin.getImageUrl(item.Id, 'Backdrop', { maxWidth: 1920 });
+
+    // @ts-ignore
+    navigation.navigate('Player', { itemId: targetId });
+  };
+
+  const handleRequestSeason = async (seasonNumber: number) => {
+    if (!sonarr || !seriesItem?.ProviderIds?.Tvdb || !isSonarrConnected) {
+      Alert.alert('Sonarr Not Connected', 'Please configure Sonarr in Settings.');
+      return;
     }
-    return null;
+    Alert.alert('Request Sent', `Requesting Season ${seasonNumber} (Functionality stubbed for now)`);
+    // Implement actual request logic if needed reusing service calls
   };
 
-  const getPosterUrl = (): string | null => {
-    if (!jellyfin) return null;
-    return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+  // Render Helpers
+  const renderEpisodeCard = ({ item }: { item: EnrichedEpisode }) => {
+    const isSelected = selectedEpisode?.id === item.id;
+    let imageUrl = item.still_path ? `https://image.tmdb.org/t/p/w300${item.still_path}` : null;
+    if (!imageUrl && item.jellyfinItem && jellyfin?.getImageUrl) {
+      imageUrl = jellyfin.getImageUrl(item.jellyfinItem.Id, 'Primary', { maxWidth: 320 });
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.episodeCard, isSelected && styles.episodeCardSelected]}
+        onPress={() => handleEpisodeSelect(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.episodeImageContainer}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.episodeThumbnail} />
+          ) : (
+            <View style={styles.episodePlaceholder}>
+              <Icon name="tv-outline" size={30} color="rgba(255,255,255,0.3)" />
+            </View>
+          )}
+          {!item.isAvailable && (
+            <View style={styles.unavailableOverlay}>
+              <Icon name="cloud-download-outline" size={24} color="#FF9500" />
+            </View>
+          )}
+        </View>
+        <View style={styles.episodeCardContent}>
+          <Text style={styles.episodeCardTitle} numberOfLines={1}>{item.episode_number}. {item.name}</Text>
+          <Text style={styles.episodeCardOverview} numberOfLines={2}>{item.overview}</Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
-  const backdropUrl = getBackdropUrl();
-  const posterUrl = getPosterUrl();
-
-  const [backButtonFocused, setBackButtonFocused] = useState(false);
-  const backButtonScale = useRef(new Animated.Value(1)).current;
-
-  const handleBackFocus = () => {
-    setBackButtonFocused(true);
-    Animated.spring(backButtonScale, {
-      toValue: 1.1,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
+  const renderSeasonTab = (season: EnrichedSeason) => {
+    const isSelected = selectedSeason?.seasonNumber === season.seasonNumber;
+    return (
+      <TouchableOpacity
+        key={season.seasonNumber}
+        style={[styles.seasonTab, isSelected && styles.seasonTabActive]}
+        onPress={() => handleSeasonSelect(season)}
+      >
+        <Text style={[styles.seasonTabText, isSelected && styles.seasonTabTextActive]}>{season.name}</Text>
+      </TouchableOpacity>
+    );
   };
 
-  const handleBackBlur = () => {
-    setBackButtonFocused(false);
-    Animated.spring(backButtonScale, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
+  if (isLoading) return <LoadingScreen message="Loading Details..." />;
+
+  // Guard for "Not Found" - Allow if it's a Movie OR if it's a Series and we have seriesItem
+  if (isSeriesOrEpisode && !seriesItem) return <View style={styles.container}><Text style={{ color: 'white' }}>Series Not Found</Text></View>;
+
+  const getHeroImage = () => {
+    if (selectedEpisode) {
+      if (selectedEpisode.jellyfinItem && jellyfin?.getImageUrl) {
+        return jellyfin.getImageUrl(selectedEpisode.jellyfinItem.Id, 'Primary', { maxWidth: 1920 });
+      }
+      if (selectedEpisode.still_path) {
+        return `https://image.tmdb.org/t/p/original${selectedEpisode.still_path}`;
+      }
+    }
+    return backdropUrl;
   };
+
+  const heroImage = getHeroImage();
+
+  let heroTitle = initialItem.Name;
+  let heroSubtitle = '';
+  let heroOverview = initialItem.Overview;
+
+  if (isMovie) {
+    heroTitle = movieDetails?.title || initialItem.Name;
+    heroSubtitle = movieDetails ? `${new Date(movieDetails.release_date).getFullYear()} • ${movieDetails.runtime} min` : '';
+    heroOverview = movieDetails?.overview || initialItem.Overview;
+  } else {
+    heroTitle = selectedEpisode ? selectedEpisode.name : (seriesItem?.SeriesName || seriesItem?.Name || '');
+    heroSubtitle = selectedEpisode
+      ? `S${selectedEpisode.season_number} • E${selectedEpisode.episode_number}`
+      : (tmdbDetails ? `${tmdbDetails.number_of_seasons} Seasons` : '');
+    heroOverview = selectedEpisode?.overview || seriesItem?.Overview;
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Backdrop */}
-      {backdropUrl && (
-        <Image
-          source={{ uri: backdropUrl }}
-          style={styles.backdrop}
-          resizeMode="cover"
-        />
-      )}
-      <View style={styles.backdropOverlay} />
+    <View style={styles.container}>
+      <ImageBackground source={{ uri: heroImage || undefined }} style={styles.backdrop} resizeMode="cover">
+        <View style={styles.backdropOverlay} />
+        <View style={styles.gradientOverlay} />
+      </ImageBackground>
 
-      <View style={styles.content}>
-        {/* Back Button - in normal flow at top */}
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            onFocus={handleBackFocus}
-            onBlur={handleBackBlur}
-          >
-            <Animated.View
-              style={[
-                styles.backButtonInner,
-                backButtonFocused && styles.backButtonFocused,
-                { transform: [{ scale: backButtonScale }] },
-              ]}
-            >
-              <Icon
-                name="arrow-back"
-                size={32}
-                color={backButtonFocused ? '#000' : '#fff'}
-              />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Icon name="arrow-back" size={28} color="#fff" />
+      </TouchableOpacity>
 
-        <View style={styles.mainContent}>
-          {/* Poster */}
-          {posterUrl && (
-            <Image
-              source={{ uri: posterUrl }}
-              style={styles.poster}
-              resizeMode="cover"
-            />
-          )}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.heroContent}>
+          {(isSeriesOrEpisode && seriesItem) && <Text style={styles.seriesTitle}>{seriesItem.SeriesName || seriesItem.Name}</Text>}
 
-          {/* Info */}
-          <View style={styles.info}>
-            <Text style={styles.title}>
-              {item.SeriesName || item.Name}
-            </Text>
+          <Text style={styles.heroTitle}>{heroTitle}</Text>
 
-            {item.SeriesName && (
-              <Text style={styles.episodeTitle}>
-                {item.SeasonName} • Episode {item.IndexNumber}: {item.Name}
-              </Text>
-            )}
-
-            <View style={styles.metadata}>
-              {item.ProductionYear && (
-                <Text style={styles.metadataItem}>{item.ProductionYear}</Text>
-              )}
-              {item.OfficialRating && (
-                <Text style={styles.metadataItem}>{item.OfficialRating}</Text>
-              )}
-              {item.RunTimeTicks && (
-                <Text style={styles.metadataItem}>
-                  {formatRuntime(item.RunTimeTicks)}
-                </Text>
-              )}
-              {item.CommunityRating && (
-                <Text style={styles.metadataItem}>
-                  ⭐ {item.CommunityRating.toFixed(1)}
-                </Text>
-              )}
-            </View>
-
-            {item.Overview && (
-              <Text style={styles.overview}>{item.Overview}</Text>
-            )}
-
-            {/* Progress */}
-            {item.UserData?.PlaybackPositionTicks && item.RunTimeTicks && (
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${(item.UserData.PlaybackPositionTicks / item.RunTimeTicks) * 100}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.progressText}>
-                  {formatRuntime(
-                    item.RunTimeTicks - item.UserData.PlaybackPositionTicks,
-                  )}{' '}
-                  remaining
-                </Text>
-              </View>
-            )}
-
-            {/* Progress indicator is shown but button moved outside */}
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>{heroSubtitle}</Text>
+            {selectedEpisode && <Text style={styles.metaText}> • {Math.round(selectedEpisode.vote_average * 10)}%</Text>}
+            {isMovie && movieDetails && <Text style={styles.metaText}> • {Math.round(movieDetails.vote_average * 10)}%</Text>}
           </View>
-        </View>
 
-        {/* Play Button Outside Nested Views for better tvOS focus - For Movies/Episodes */}
-        {!isSeries && (
-          <View style={styles.actionsRow}>
+          <Text style={styles.overview} numberOfLines={4}>{heroOverview}</Text>
+
+          <View style={styles.actionRow}>
             <FocusableButton
-              title={item.UserData?.PlaybackPositionTicks ? 'Resume' : 'Play'}
+              title={
+                (selectedEpisode?.jellyfinItem?.UserData?.PlaybackPositionTicks || initialItem.UserData?.PlaybackPositionTicks)
+                  ? "Resume" : "Play"
+              }
               onPress={handlePlay}
-              size="large"
-              hasTVPreferredFocus={true}
+              style={styles.playButton}
+              icon="play"
             />
-          </View>
-        )}
-
-        {/* Seasons & Episodes for TV Series */}
-        {isSeries && (
-          <View style={styles.seasonsSection}>
-            <Text style={styles.sectionTitle}>Seasons & Episodes</Text>
-
-            {loadingSeasons ? (
-              <Text style={styles.loadingText}>Loading seasons...</Text>
-            ) : seasons.length > 0 ? (
-              <>
-                {/* Season Tabs */}
-                <View style={styles.seasonTabsWrapper}>
-                  {seasons.map((season, index) => (
-                    <FocusableSeasonTab
-                      key={season.Id}
-                      season={season}
-                      isSelected={selectedSeasonId === season.Id}
-                      onPress={() => setSelectedSeasonId(season.Id)}
-                      hasTVPreferredFocus={index === 0}
-                    />
-                  ))}
-                </View>
-
-                {/* Episodes List */}
-                {loadingEpisodes ? (
-                  <Text style={styles.loadingText}>Loading episodes...</Text>
-                ) : episodes.length > 0 ? (
-                  <View style={styles.episodesList}>
-                    {episodes.map(episode => (
-                      <FocusableEpisodeCard
-                        key={episode.Id}
-                        episode={episode}
-                        jellyfin={jellyfin}
-                        onPress={() => handleEpisodePlay(episode)}
-                        formatRuntime={formatRuntime}
-                      />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.loadingText}>No episodes found</Text>
-                )}
-              </>
-            ) : (
-              <Text style={styles.loadingText}>No seasons found</Text>
+            {selectedEpisode && !selectedEpisode.isAvailable && (
+              <FocusableButton
+                title="Request"
+                onPress={() => selectedSeason && handleRequestSeason(selectedSeason.seasonNumber)}
+                variant="secondary"
+                style={styles.actionButton}
+                icon="download-outline"
+              />
             )}
+            <TouchableOpacity style={styles.circleButton}>
+              <Icon name="heart-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.circleButton}>
+              <Icon name="download-outline" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-    </ScrollView>
-  );
-}
+        </View>
 
-// Focusable Season Tab Component
-interface FocusableSeasonTabProps {
-  season: JellyfinItem;
-  isSelected: boolean;
-  onPress: () => void;
-  hasTVPreferredFocus?: boolean;
-}
-
-function FocusableSeasonTab({ season, isSelected, onPress, hasTVPreferredFocus }: FocusableSeasonTabProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const scaleValue = useRef(new Animated.Value(1)).current;
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    Animated.spring(scaleValue, {
-      toValue: 1.08,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
-  };
-
-  return (
-    <TouchableOpacity
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onPress={onPress}
-      hasTVPreferredFocus={hasTVPreferredFocus}
-    >
-      <Animated.View
-        style={[
-          styles.seasonTab,
-          isSelected && styles.seasonTabActive,
-          isFocused && styles.seasonTabFocused,
-          { transform: [{ scale: scaleValue }] },
-        ]}
-      >
-        <Text
-          style={[
-            styles.seasonTabText,
-            (isSelected || isFocused) && styles.seasonTabTextActive,
-          ]}
-        >
-          {season.Name}
-        </Text>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-// Focusable Episode Card Component
-interface FocusableEpisodeCardProps {
-  episode: JellyfinItem;
-  jellyfin: any;
-  onPress: () => void;
-  formatRuntime: (ticks?: number) => string;
-}
-
-function FocusableEpisodeCard({ episode, jellyfin, onPress, formatRuntime }: FocusableEpisodeCardProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const scaleValue = useRef(new Animated.Value(1)).current;
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    Animated.spring(scaleValue, {
-      toValue: 1.05,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 7,
-    }).start();
-  };
-
-  return (
-    <TouchableOpacity
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onPress={onPress}
-    >
-      <Animated.View
-        style={[
-          styles.episodeCard,
-          isFocused && styles.episodeCardFocused,
-          { transform: [{ scale: scaleValue }] },
-        ]}
-      >
-        {/* Episode Thumbnail */}
-        {jellyfin && episode.ImageTags?.Primary ? (
-          <Image
-            source={{
-              uri: jellyfin.getImageUrl(episode.Id, 'Primary', {
-                maxWidth: 320,
-              }),
-            }}
-            style={styles.episodeImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.episodeImage, styles.episodeImagePlaceholder]}>
-            <Text style={styles.episodeNumber}>
-              E{episode.IndexNumber ?? '?'}
-            </Text>
-          </View>
-        )}
-
-        {/* Episode Info */}
-        <View style={styles.episodeInfo}>
-          <Text style={styles.episodeCardTitle} numberOfLines={1}>
-            {episode.IndexNumber ?? '?'}. {episode.Name ?? 'Unknown Episode'}
-          </Text>
-          {episode.RunTimeTicks && (
-            <Text style={styles.episodeRuntime}>
-              {formatRuntime(episode.RunTimeTicks)}
-            </Text>
-          )}
-          {episode.Overview && (
-            <Text style={styles.episodeOverview} numberOfLines={2}>
-              {episode.Overview}
-            </Text>
-          )}
-          {/* Progress indicator */}
-          {episode.UserData?.PlaybackPositionTicks && episode.RunTimeTicks && (
-            <View style={styles.episodeProgressContainer}>
-              <View style={styles.episodeProgressBar}>
-                <View
-                  style={[
-                    styles.episodeProgressFill,
-                    {
-                      width: `${(episode.UserData.PlaybackPositionTicks / episode.RunTimeTicks) * 100}%`,
-                    },
-                  ]}
-                />
-              </View>
+        <View style={styles.sectionsContainer}>
+          {/* Season Selector - TV Only */}
+          {isSeriesOrEpisode && (
+            <View style={styles.section}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonScroll}>
+                {enrichedSeasons.map(renderSeasonTab)}
+              </ScrollView>
             </View>
           )}
+
+          {/* Episodes List - TV Only */}
+          {isSeriesOrEpisode && selectedSeason && (
+            <View style={styles.section}>
+              <FlatList
+                data={selectedSeason.episodes}
+                renderItem={renderEpisodeCard}
+                keyExtractor={item => String(item.id)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.episodesList}
+              />
+            </View>
+          )}
+
+          {/* Cast */}
+          <CastList cast={cast} />
         </View>
-      </Animated.View>
-    </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -473,217 +434,181 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   backdrop: {
-    width,
-    height: height * 0.6,
     position: 'absolute',
     top: 0,
+    left: 0,
+    width: width,
+    height: height * 0.7, // Cover top 70%
   },
   backdropOverlay: {
     ...StyleSheet.absoluteFillObject,
-    height: height * 0.6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  content: {
-    marginTop: height * 0.25,
-    padding: 48,
+  gradientOverlay: { // Simulate gradient
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 300,
+    backgroundColor: 'rgba(0,0,0,0.8)',
   },
-  topBar: {
-    flexDirection: 'row',
-    marginBottom: 24,
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 40,
+    zIndex: 10,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  backButtonInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backButtonFocused: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 3,
-    borderColor: '#007AFF',
-  },
-  backButtonIcon: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  mainContent: {
-    flexDirection: 'row',
-  },
-  poster: {
-    width: 300,
-    height: 450,
-    borderRadius: 12,
-    marginRight: 48,
-  },
-  info: {
+  scrollView: {
     flex: 1,
-    paddingTop: 24,
   },
-  title: {
+  scrollContent: {
+    paddingTop: height * 0.35, // Push content down
+    paddingBottom: 50,
+  },
+  heroContent: {
+    paddingHorizontal: 48,
+    marginBottom: 40,
+  },
+  seriesTitle: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  heroTitle: {
     color: '#fff',
     fontSize: 48,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontWeight: '800',
+    marginBottom: 12,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  episodeTitle: {
-    color: '#ccc',
-    fontSize: 24,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  metadata: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    flexWrap: 'wrap',
-  },
-  metadataItem: {
-    color: '#888',
+  metaText: {
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 18,
-    marginRight: 24,
-    marginBottom: 8,
+    fontWeight: '600',
+    marginRight: 10,
   },
   overview: {
-    color: '#ccc',
-    fontSize: 18,
-    lineHeight: 28,
-    marginBottom: 24,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    lineHeight: 24,
+    maxWidth: 700,
+    marginBottom: 30,
   },
-  progressContainer: {
-    marginBottom: 24,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 3,
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#e50914',
-    borderRadius: 3,
-  },
-  progressText: {
-    color: '#888',
-    fontSize: 14,
-  },
-  actions: {
+  actionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 16,
   },
-  actionsRow: {
+  playButton: {
+    minWidth: 160,
+  },
+  actionButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  circleButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  sectionsContainer: {
+    paddingLeft: 48,
+    backgroundColor: '#000', // Solid background for list area
+    paddingTop: 20,
+  },
+  section: {
+    marginBottom: 30,
+  },
+  seasonScroll: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 24,
-    marginBottom: 24,
-  },
-  seasonsSection: {
-    marginTop: 48,
-    width: '100%',
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 24,
-  },
-  seasonTabsWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 24,
-    gap: 12,
+    marginBottom: 10,
   },
   seasonTab: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     marginRight: 12,
-    borderRadius: 8,
-    backgroundColor: '#222',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   seasonTabActive: {
-    backgroundColor: '#fff',
-  },
-  seasonTabFocused: {
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#007AFF',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderColor: '#FFD700',
   },
   seasonTabText: {
-    color: '#888',
+    color: 'rgba(255,255,255,0.6)',
     fontSize: 16,
     fontWeight: '600',
   },
   seasonTabTextActive: {
-    color: '#000',
-  },
-  loadingText: {
-    color: '#888',
-    fontSize: 16,
-    textAlign: 'center',
-    paddingVertical: 24,
+    color: '#fff',
+    fontWeight: '700',
   },
   episodesList: {
-    gap: 16,
+    paddingRight: 48,
   },
   episodeCard: {
-    flexDirection: 'row',
-    backgroundColor: '#111',
-    borderRadius: 8,
+    width: 300,
+    marginRight: 16,
+  },
+  episodeCardSelected: {
+    // Highlight style
+    transform: [{ scale: 1.02 }],
+  },
+  episodeImageContainer: {
+    width: 300,
+    height: 169, // 16:9
+    borderRadius: 12,
+    backgroundColor: '#222',
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  episodeCardFocused: {
-    backgroundColor: '#222',
-    borderWidth: 4,
-    borderColor: '#fff',
+  episodeThumbnail: {
+    width: '100%',
+    height: '100%',
   },
-  episodeImage: {
-    width: 240,
-    height: 135,
-    backgroundColor: '#222',
-  },
-  episodeImagePlaceholder: {
+  episodePlaceholder: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  episodeNumber: {
-    color: '#666',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  episodeInfo: {
-    flex: 1,
-    padding: 16,
+  unavailableOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  episodeCardContent: {
+    paddingHorizontal: 4,
   },
   episodeCardTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
-  episodeRuntime: {
-    color: '#888',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  episodeOverview: {
-    color: '#ccc',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  episodeProgressContainer: {
-    marginTop: 8,
-  },
-  episodeProgressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
-  },
-  episodeProgressFill: {
-    height: '100%',
-    backgroundColor: '#e50914',
-    borderRadius: 2,
+  episodeCardOverview: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
   },
 });

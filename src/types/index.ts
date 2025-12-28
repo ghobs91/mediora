@@ -59,7 +59,9 @@ export interface JellyfinItem {
   Name: string;
   Type: string;
   SeriesName?: string;
+  SeriesId?: string;
   SeasonName?: string;
+  SeasonId?: string;
   IndexNumber?: number;
   ParentIndexNumber?: number;
   Overview?: string;
@@ -70,6 +72,11 @@ export interface JellyfinItem {
   ImageTags?: Record<string, string>;
   BackdropImageTags?: string[];
   ServerId: string;
+  ProviderIds?: {
+    Tvdb?: string;
+    Tmdb?: string;
+    Imdb?: string;
+  };
   UserData?: {
     PlaybackPositionTicks: number;
     PlayCount: number;
@@ -321,6 +328,74 @@ export interface SonarrSeason {
     sizeOnDisk: number;
     percentOfEpisodes: number;
   };
+}
+
+export interface SonarrEpisode {
+  id: number;
+  seriesId: number;
+  tvdbId: number;
+  episodeFileId: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string;
+  airDate: string;
+  airDateUtc: string;
+  overview: string;
+  hasFile: boolean;
+  monitored: boolean;
+  absoluteEpisodeNumber?: number;
+  unverifiedSceneNumbering: boolean;
+  series?: SonarrSeries;
+  images?: { coverType: string; url: string }[];
+}
+
+export interface SonarrEpisodeFile {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  relativePath: string;
+  path: string;
+  size: number;
+  dateAdded: string;
+  sceneName?: string;
+  quality: {
+    quality: {
+      id: number;
+      name: string;
+    };
+  };
+  mediaInfo?: {
+    videoCodec: string;
+    audioCodec: string;
+    audioChannels: number;
+  };
+}
+
+export interface SonarrQueueItem {
+  id: number;
+  seriesId: number;
+  episodeId: number;
+  title: string;
+  size: number;
+  sizeleft: number;
+  timeleft: string;
+  estimatedCompletionTime: string;
+  status: string;
+  trackedDownloadStatus: string;
+  trackedDownloadState: string;
+  downloadId: string;
+  protocol: string;
+  downloadClient: string;
+  indexer: string;
+  outputPath: string;
+  episode: SonarrEpisode;
+  series: SonarrSeries;
+}
+
+export interface SonarrSeasonPass {
+  seriesId: number;
+  seasonNumber: number;
+  monitored: boolean;
 }
 
 // Radarr Types

@@ -47,6 +47,8 @@ export function MediaRow(props: MediaRowProps) {
           )}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          removeClippedSubviews={true}
+          tvParallaxProperties={undefined}
         />
       </View>
     );
@@ -74,6 +76,8 @@ export function MediaRow(props: MediaRowProps) {
           )}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          removeClippedSubviews={true}
+          tvParallaxProperties={undefined}
         />
       </View>
     );

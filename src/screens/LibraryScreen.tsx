@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
-  ScrollView,
   StyleSheet,
   Text,
   FlatList,
-  TouchableOpacity,
-  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
@@ -32,7 +29,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     try {
       const libs = await jellyfin.getLibraries();
       // Filter libraries based on filterType if provided
-      const filteredLibs = filterType 
+      const filteredLibs = filterType
         ? libs.filter(lib => lib.CollectionType === filterType)
         : libs;
       setLibraries(filteredLibs);
@@ -110,39 +107,27 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
 
   return (
     <View style={styles.container}>
-      {/* Library Tabs */}
-      <ScrollView
-        horizontal
-        style={styles.tabContainer}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabContent}>
-        {libraries.map(library => (
-          <LibraryTab
-            key={library.Id}
-            library={library}
-            isSelected={selectedLibrary?.Id === library.Id}
-            onPress={() => setSelectedLibrary(library)}
-          />
-        ))}
-      </ScrollView>
-
       {/* Library Content */}
       {isLoadingItems ? (
         <LoadingScreen message="Loading items..." />
       ) : (
         <FlatList
           data={items}
-          numColumns={6}
+          key="grid-5"
+          numColumns={5}
           keyExtractor={item => item.Id}
           renderItem={({ item }) => (
             <MediaCard
               item={item}
               imageUrl={getImageUrl(item)}
               onPress={() => handleItemPress(item)}
+              size="xlarge"
             />
           )}
           contentContainerStyle={styles.gridContent}
           columnWrapperStyle={styles.gridRow}
+          removeClippedSubviews={true}
+          tvParallaxProperties={undefined}
           ListEmptyComponent={
             <View style={styles.emptyList}>
               <Text style={styles.emptyText}>No items in this library</Text>
@@ -154,104 +139,18 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   );
 }
 
-interface LibraryTabProps {
-  library: JellyfinLibrary;
-  isSelected: boolean;
-  onPress: () => void;
-}
-
-function LibraryTab({ library, isSelected, onPress }: LibraryTabProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const scaleValue = React.useRef(new Animated.Value(1)).current;
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    Animated.spring(scaleValue, {
-      toValue: 1.1,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
-  };
-
-  return (
-    <TouchableOpacity
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onPress={onPress}>
-      <Animated.View
-        style={[
-          styles.tab,
-          isSelected && styles.tabSelected,
-          isFocused && styles.tabFocused,
-          { transform: [{ scale: scaleValue }] },
-        ]}>
-        <Text
-          style={[
-            styles.tabText,
-            isSelected && styles.tabTextSelected,
-            isFocused && styles.tabTextFocused,
-          ]}>
-          {library.Name}
-        </Text>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
   },
-  tabContainer: {
-    maxHeight: 80,
-    paddingVertical: 16,
-    marginTop: 24,
-  },
-  tabContent: {
-    paddingHorizontal: 48,
-  },
-  tab: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    marginRight: 16,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  tabSelected: {
-    backgroundColor: '#333',
-  },
-  tabFocused: {
-    borderColor: '#fff',
-  },
-  tabText: {
-    color: '#888',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  tabTextSelected: {
-    color: '#fff',
-  },
-  tabTextFocused: {
-    color: '#fff',
-  },
   gridContent: {
-    paddingHorizontal: 40,
+    paddingHorizontal: 48,
+    paddingTop: 32,
     paddingBottom: 48,
   },
   gridRow: {
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
   },
   emptyContainer: {
     flex: 1,

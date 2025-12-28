@@ -2,6 +2,9 @@ import {
   SonarrSeries,
   SonarrRootFolder,
   SonarrQualityProfile,
+  SonarrEpisode,
+  SonarrEpisodeFile,
+  SonarrQueueItem,
 } from '../types';
 
 export class SonarrService {
@@ -229,5 +232,160 @@ export class SonarrService {
   async checkSeriesExists(tvdbId: number): Promise<SonarrSeries | null> {
     const allSeries = await this.getAllSeries();
     return allSeries.find(s => s.tvdbId === tvdbId) || null;
+  }
+
+  // Episodes
+  async getEpisodesBySeriesId(seriesId: number): Promise<SonarrEpisode[]> {
+    const response = await fetch(
+      `${this.serverUrl}/api/v3/episode?seriesId=${seriesId}`,
+      {
+        headers: this.getHeaders(),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get episodes: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getEpisodesBySeason(seriesId: number, seasonNumber: number): Promise<SonarrEpisode[]> {
+    const allEpisodes = await this.getEpisodesBySeriesId(seriesId);
+    return allEpisodes.filter(ep => ep.seasonNumber === seasonNumber);
+  }
+
+  // Episode Files
+  async getEpisodeFilesBySeriesId(seriesId: number): Promise<SonarrEpisodeFile[]> {
+    const response = await fetch(
+      `${this.serverUrl}/api/v3/episodefile?seriesId=${seriesId}`,
+      {
+        headers: this.getHeaders(),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get episode files: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // Queue (for download progress)
+  async getQueue(): Promise<{ records: SonarrQueueItem[]; totalRecords: number }> {
+    const response = await fetch(
+      `${this.serverUrl}/api/v3/queue?includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
+      {
+        headers: this.getHeaders(),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get queue: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getQueueBySeriesId(seriesId: number): Promise<SonarrQueueItem[]> {
+    const queueData = await this.getQueue();
+    return queueData.records.filter(item => item.seriesId === seriesId);
+  }
+
+  // Season-specific requests
+  async updateSeasonMonitoring(
+    seriesId: number,
+    seasonNumber: number,
+    monitored: boolean,
+  ): Promise<void> {
+    // First get the series
+    const series = await this.getSeriesById(seriesId);
+    
+    // Update the season monitoring status
+    const updatedSeasons = series.seasons.map(season => {
+      if (season.seasonNumber === seasonNumber) {
+        return { ...season, monitored };
+      }
+      return season;
+    });
+
+    // Update the series
+    const response = await fetch(`${this.serverUrl}/api/v3/series/${seriesId}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        ...series,
+        seasons: updatedSeasons,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update season monitoring: ${response.status}`);
+    }
+  }
+
+  async searchForSeason(seriesId: number, seasonNumber: number): Promise<void> {
+    const response = await fetch(
+      `${this.serverUrl}/api/v3/command`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          name: 'SeasonSearch',
+          seriesId,
+          seasonNumber,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to search for season: ${response.status}`);
+    }
+  }
+
+  async addSeriesWithSeasons(
+    series: SonarrSeries,
+    options: {
+      rootFolderPath: string;
+      qualityProfileId: number;
+      monitored?: boolean;
+      seasonFolder?: boolean;
+      searchForMissingEpisodes?: boolean;
+      monitoredSeasons?: number[]; // Specific seasons to monitor
+    },
+  ): Promise<SonarrSeries> {
+    // Update seasons monitoring based on monitoredSeasons option
+    let seasons = series.seasons;
+    if (options.monitoredSeasons) {
+      seasons = series.seasons.map(season => ({
+        ...season,
+        monitored: options.monitoredSeasons!.includes(season.seasonNumber),
+      }));
+    }
+
+    const payload = {
+      ...series,
+      rootFolderPath: options.rootFolderPath,
+      qualityProfileId: options.qualityProfileId,
+      monitored: options.monitored ?? true,
+      seasonFolder: options.seasonFolder ?? true,
+      seasons,
+      addOptions: {
+        searchForMissingEpisodes: options.searchForMissingEpisodes ?? true,
+      },
+    };
+
+    const response = await fetch(`${this.serverUrl}/api/v3/series`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to add series: ${response.status} - ${error}`);
+    }
+
+    return response.json();
   }
 }

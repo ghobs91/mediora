@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   ViewStyle,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface FocusableButtonProps {
   title: string | React.ReactNode;
@@ -17,6 +18,7 @@ interface FocusableButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   hasTVPreferredFocus?: boolean;
+  icon?: string;
 }
 
 export function FocusableButton({
@@ -28,6 +30,7 @@ export function FocusableButton({
   loading = false,
   style,
   hasTVPreferredFocus = false,
+  icon,
 }: FocusableButtonProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -117,21 +120,28 @@ export function FocusableButton({
             shadowOpacity: isFocused ? 0.6 : 0.3,
             shadowRadius: isFocused ? 20 : 8,
             elevation: isFocused ? 12 : 4,
+            flexDirection: 'row',
+            gap: 8,
           },
           style,
         ]}>
         {loading ? (
           <ActivityIndicator color={getTextColor()} />
-        ) : typeof title === 'string' ? (
-          <Text
-            style={[
-              styles.text,
-              { fontSize: textSizes[size], color: getTextColor() },
-            ]}>
-            {title}
-          </Text>
         ) : (
-          title
+          <>
+            {icon && <Icon name={icon} size={24} color={getTextColor()} />}
+            {typeof title === 'string' ? (
+              <Text
+                style={[
+                  styles.text,
+                  { fontSize: textSizes[size], color: getTextColor() },
+                ]}>
+                {title}
+              </Text>
+            ) : (
+              title
+            )}
+          </>
         )}
       </Animated.View>
     </TouchableOpacity>

@@ -17,7 +17,7 @@ interface MediaCardProps {
   title?: string;
   subtitle?: string;
   onPress: () => void;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'small' | 'medium' | 'large' | 'xlarge';
 }
 
 export function MediaCard({
@@ -56,6 +56,7 @@ export function MediaCard({
     small: { width: 120, height: 180 },
     medium: { width: 160, height: 240 },
     large: { width: 200, height: 300 },
+    xlarge: { width: 320, height: 480 },
   };
 
   const { width, height } = dimensions[size];
@@ -138,7 +139,8 @@ export function MediaCard({
 
 const styles = StyleSheet.create({
   container: {
-    margin: 8,
+    marginVertical: 12,
+    marginHorizontal: 4,
   },
   cardContainer: {
     borderRadius: 16,
