@@ -24,7 +24,7 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -107,14 +107,14 @@ export class JellyfinService {
       console.log('[Jellyfin] Initiating Quick Connect to:', this.serverUrl);
       const url = `${this.serverUrl}/QuickConnect/Initiate`;
       console.log('[Jellyfin] Request URL:', url);
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: getAuthHeader(undefined, this.deviceId),
       });
 
       console.log('[Jellyfin] Response status:', response.status);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[Jellyfin] Error response:', errorText);
@@ -379,7 +379,7 @@ export class JellyfinService {
       recursive: 'true',
       fields: 'Overview,MediaSources,UserData,ProviderIds',
       includeItemTypes: itemType,
-      anyProviderIdEquals: `tmdb.${tmdbId}`,
+      AnyProviderIdEquals: `tmdb.${tmdbId}`,
     });
 
     const response = await fetch(
@@ -394,7 +394,12 @@ export class JellyfinService {
     }
 
     const data = await response.json();
-    return data.Items || [];
+    const items = data.Items || [];
+
+    // Client-side verification to avoid false positives
+    return items.filter((item: JellyfinItem) =>
+      item.ProviderIds?.Tmdb === tmdbId
+    );
   }
 
   async searchByTvdbId(tvdbId: string): Promise<JellyfinItem[]> {
@@ -407,7 +412,7 @@ export class JellyfinService {
       recursive: 'true',
       fields: 'Overview,MediaSources,UserData,ProviderIds',
       includeItemTypes: 'Series',
-      anyProviderIdEquals: `tvdb.${tvdbId}`,
+      AnyProviderIdEquals: `tvdb.${tvdbId}`,
     });
 
     const response = await fetch(
@@ -422,7 +427,12 @@ export class JellyfinService {
     }
 
     const data = await response.json();
-    return data.Items || [];
+    const items = data.Items || [];
+
+    // Client-side verification to avoid false positives
+    return items.filter((item: JellyfinItem) =>
+      item.ProviderIds?.Tvdb === tvdbId
+    );
   }
 
   // TV Series - Seasons and Episodes

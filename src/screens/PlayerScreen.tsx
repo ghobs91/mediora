@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { OnProgressData, VideoRef } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
