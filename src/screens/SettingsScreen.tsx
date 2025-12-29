@@ -27,7 +27,7 @@ export function SettingsScreen() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('jellyfin');
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* Section Tabs */}
       <View style={styles.tabsContainer}>
         <SettingsTab
@@ -421,9 +421,8 @@ interface SonarrSettingsProps {
 }
 
 function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
-  // Force correct values - ignore any cached settings
-  const [serverUrl, setServerUrl] = useState('http://100.121.105.34:8989');
-  const [apiKey, setApiKey] = useState('6f44fe8b240547fcb116234394486060');
+  const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
+  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
   const [rootFolderPath, setRootFolderPath] = useState(
     settings?.rootFolderPath || '',
   );
@@ -602,9 +601,8 @@ interface RadarrSettingsProps {
 }
 
 function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
-  // Force correct values - ignore any cached settings
-  const [serverUrl, setServerUrl] = useState('http://100.121.105.34:7878');
-  const [apiKey, setApiKey] = useState('f142c8ab86c74ffd851dc63dbf538aa5');
+  const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
+  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
   const [rootFolderPath, setRootFolderPath] = useState(
     settings?.rootFolderPath || '',
   );
@@ -767,10 +765,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  contentContainer: {
+    paddingTop: 8,
+  },
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 48,
-    paddingTop: 28,
+    paddingTop: 20,
     marginBottom: 36,
   },
   tab: {
