@@ -628,11 +628,57 @@ export function ItemDetailsScreen() {
   let heroTitle = initialItem.Name;
   let heroSubtitle = '';
   let heroOverview = initialItem.Overview;
+  let logoUrl: string | null = null;
+  let tmdbScore: number | null = null;
+  let imdbScore: number | null = null;
+  let endsAtTime: string | null = null;
+  let rating: string | null = null;
+  let tagline: string | null = null;
+  let director: string | null = null;
+  let writer: string | null = null;
+  let genres: string[] = [];
+  let studios: string[] = [];
 
   if (isMovie) {
     heroTitle = movieDetails?.title || initialItem.Name;
     heroSubtitle = movieDetails ? `${new Date(movieDetails.release_date).getFullYear()} • ${movieDetails.runtime} min` : '';
     heroOverview = movieDetails?.overview || initialItem.Overview;
+
+    // Logo
+    if (initialItem.ImageTags?.Logo && jellyfin) {
+      logoUrl = jellyfin.getImageUrl(initialItem.Id, 'Logo', { maxWidth: 500 });
+    }
+
+    // Scores
+    tmdbScore = movieDetails?.vote_average || null;
+    imdbScore = initialItem.CommunityRating || null;
+
+    // Calculate "Ends at" time
+    if (movieDetails?.runtime) {
+      const now = new Date();
+      const endTime = new Date(now.getTime() + movieDetails.runtime * 60000);
+      endsAtTime = endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+
+    // Rating
+    rating = initialItem.OfficialRating || null;
+
+    // Tagline
+    tagline = movieDetails?.tagline || null;
+
+    // Director and Writer
+    if (movieDetails?.credits?.crew) {
+      const directorObj = movieDetails.credits.crew.find(c => c.job === 'Director');
+      director = directorObj?.name || null;
+      const writerObj = movieDetails.credits.crew.find(c => c.job === 'Writer' || c.job === 'Screenplay');
+      writer = writerObj?.name || null;
+    }
+
+    // Genres
+    genres = movieDetails?.genres?.map(g => g.name) || [];
+
+    // Studios
+    studios = movieDetails?.production_companies?.map(c => c.name) || [];
   } else {
     heroTitle = selectedEpisode ? selectedEpisode.name : (seriesItem?.SeriesName || seriesItem?.Name || '');
     heroSubtitle = selectedEpisode
@@ -661,12 +707,32 @@ export function ItemDetailsScreen() {
         <View style={[styles.heroContent, { paddingHorizontal: spacing }]}>
           {(isSeriesOrEpisode && seriesItem) && <Text style={styles.seriesTitle}>{seriesItem.SeriesName || seriesItem.Name}</Text>}
 
-          <Text style={styles.heroTitle}>{heroTitle}</Text>
+          {/* Movie Logo */}
+          {isMovie && logoUrl ? (
+            <Image source={{ uri: logoUrl }} style={styles.logoImage} resizeMode="contain" />
+          ) : (
+            <Text style={styles.heroTitle}>{heroTitle}</Text>
+          )}
 
           <View style={styles.metaRow}>
+            {rating && <View style={styles.ratingBadge}><Text style={styles.ratingText}>{rating}</Text></View>}
             <Text style={styles.metaText}>{heroSubtitle}</Text>
-            {/* ... */}
+            {tmdbScore && (
+              <View style={styles.scoreContainer}>
+                <Icon name="star" size={16} color="#FFD700" />
+                <Text style={styles.scoreText}>{tmdbScore.toFixed(1)}</Text>
+              </View>
+            )}
+            {imdbScore && (
+              <View style={styles.scoreContainer}>
+                <Text style={styles.imdbLabel}>IMDb</Text>
+                <Text style={styles.scoreText}>{imdbScore.toFixed(1)}</Text>
+              </View>
+            )}
+            {endsAtTime && <Text style={styles.endsAtText}>Ends at {endsAtTime}</Text>}
           </View>
+
+          {tagline && <Text style={styles.tagline}>{tagline}</Text>}
 
           <Text style={styles.overview} numberOfLines={4}>{heroOverview}</Text>
 
@@ -720,7 +786,59 @@ export function ItemDetailsScreen() {
             <TouchableOpacity style={styles.circleButton}>
               <Icon name="heart-outline" size={24} color="#fff" />
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.circleButton}>
+              <Icon name="ellipsis-horizontal" size={24} color="#fff" />
+            </TouchableOpacity>
           </View>
+
+          {/* Media Info */}
+          {isMovie && initialItem.MediaSources && initialItem.MediaSources.length > 0 && (
+            <View style={styles.mediaInfoContainer}>
+              <View style={styles.mediaInfoRow}>
+                <Icon name="film-outline" size={20} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.mediaInfoLabel}>4K HEVC SDR</Text>
+              </View>
+              <View style={styles.mediaInfoRow}>
+                <Icon name="musical-notes-outline" size={20} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.mediaInfoLabel}>AAC - 5.1 - Stereo</Text>
+              </View>
+              <View style={styles.mediaInfoRow}>
+                <Icon name="text-outline" size={20} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.mediaInfoLabel}>English [CC] - 16 more</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Details Grid */}
+          {isMovie && (genres.length > 0 || director || writer || studios.length > 0) && (
+            <View style={styles.detailsGrid}>
+              {genres.length > 0 && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Genres</Text>
+                  <Text style={styles.detailValue}>{genres.join(', ')}</Text>
+                </View>
+              )}
+              {director && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Director</Text>
+                  <Text style={styles.detailValue}>{director}</Text>
+                </View>
+              )}
+              {writer && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Writer</Text>
+                  <Text style={styles.detailValue}>{writer}</Text>
+                </View>
+              )}
+              {studios.length > 0 && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Studios</Text>
+                  <Text style={styles.detailValue}>{studios.slice(0, 2).join(', ')}</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {downloadProgress && (
             <View style={styles.progressContainer}>
@@ -760,7 +878,11 @@ export function ItemDetailsScreen() {
           )}
 
           {/* Cast */}
-          <CastList cast={cast} />
+          {cast.length > 0 && (
+            <View style={styles.section}>
+              <CastList cast={cast} />
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -819,5 +941,82 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
     padding: 2,
+  },
+  logoImage: {
+    width: 400,
+    height: 120,
+    marginBottom: 16,
+  },
+  ratingBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  ratingText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+    gap: 4,
+  },
+  scoreText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imdbLabel: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '700',
+    marginRight: 4,
+  },
+  endsAtText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  tagline: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 18,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  mediaInfoContainer: {
+    marginTop: 24,
+    marginBottom: 24,
+    gap: 12,
+  },
+  mediaInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mediaInfoLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 15,
+  },
+  detailsGrid: {
+    marginTop: 24,
+    gap: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+  },
+  detailLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 15,
+    width: 120,
+    fontWeight: '600',
+  },
+  detailValue: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
+    flex: 1,
   },
 });

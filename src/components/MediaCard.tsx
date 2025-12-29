@@ -7,7 +7,9 @@ import {
   View,
   Animated,
   Platform,
+  Alert,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { TMDBService } from '../services';
 
@@ -18,10 +20,13 @@ interface MediaCardProps {
   title?: string;
   subtitle?: string;
   onPress: () => void;
+  onRemove?: () => void;
+  onMarkWatched?: () => void;
   size?: 'small' | 'medium' | 'large' | 'xlarge';
   width?: number;
   height?: number;
 }
+
 
 export function MediaCard({
   item,
@@ -30,6 +35,8 @@ export function MediaCard({
   title,
   subtitle,
   onPress,
+  onRemove,
+  onMarkWatched,
   size = 'medium',
   width: customWidth,
   height: customHeight,
@@ -55,6 +62,36 @@ export function MediaCard({
       friction: 7,
       tension: 100,
     }).start();
+  };
+
+  const handleContextMenu = () => {
+    if (!onMarkWatched && !onRemove) return;
+
+    const options = [];
+    if (onMarkWatched) options.push('Mark as Watched');
+    if (onRemove) options.push('Remove from Continue Watching');
+    options.push('Cancel');
+
+    Alert.alert(
+      'Options',
+      'Choose an action',
+      [
+        ...(onMarkWatched ? [{
+          text: 'Mark as Watched',
+          onPress: onMarkWatched,
+        }] : []),
+        ...(onRemove ? [{
+          text: 'Remove from Continue Watching',
+          onPress: onRemove,
+          style: 'destructive' as const,
+        }] : []),
+        {
+          text: 'Cancel',
+          style: 'cancel' as const,
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const dimensions = {
@@ -92,6 +129,8 @@ export function MediaCard({
       onFocus={handleFocus}
       onBlur={handleBlur}
       onPress={onPress}
+      onLongPress={(onMarkWatched || onRemove) ? handleContextMenu : undefined}
+      delayLongPress={500}
       style={styles.container}>
       <Animated.View
         style={[
@@ -128,6 +167,24 @@ export function MediaCard({
             <View style={{ flex: 1 - (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) }} />
           </View>
         ) : null}
+        {onRemove && isFocused && (
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={(e) => {
+              // Prevent selecting the card when removing
+              if (Platform.OS === 'ios' || Platform.OS === 'android') {
+                // In RN mobile, we might need stopPropagation if it was a nested button
+                // But here card itself is TouchableOpacity.
+              }
+              onRemove();
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.removeButtonInner}>
+              <Icon name="close" size={20} color="#fff" />
+            </View>
+          </TouchableOpacity>
+        )}
       </Animated.View>
       <View style={[styles.textContainer, { width }]}>
         <Text style={styles.title} numberOfLines={1}>
@@ -204,5 +261,21 @@ const styles = StyleSheet.create({
     height: 5,
     backgroundColor: 'rgba(10, 132, 255, 0.9)',
     borderRadius: 5,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+  },
+  removeButtonInner: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
 });
