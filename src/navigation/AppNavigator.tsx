@@ -13,6 +13,7 @@ import {
   ItemDetailsScreen,
   TMDBDetailsScreen,
 } from '../screens';
+import { useResponsiveColumns } from '../hooks';
 import { RootStackParamList } from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -24,7 +25,7 @@ interface TopNavProps {
 function TopNav({ currentRoute }: TopNavProps) {
   const navigation = useNavigation<any>();
   const [focusedItem, setFocusedItem] = React.useState<string | null>(null);
-  
+
   const navItems = [
     { name: 'Home', route: 'Home', icon: 'home' },
     { name: 'TV Shows', route: 'TVShows', icon: 'tv' },
@@ -32,6 +33,8 @@ function TopNav({ currentRoute }: TopNavProps) {
     { name: 'Search', route: 'Search', icon: 'search' },
     { name: 'Settings', route: 'Settings', icon: 'settings' },
   ];
+
+  const { numColumns, windowWidth } = useResponsiveColumns();
 
   return (
     <View style={styles.topNav}>

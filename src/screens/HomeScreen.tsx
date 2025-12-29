@@ -6,6 +6,7 @@ import {
   Text,
   RefreshControl,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useServices, useSettings } from '../context';
@@ -33,20 +34,72 @@ export function HomeScreen() {
         jellyfin.getLatestMedia(undefined, 20),
       ]);
 
-      // Combine resume and next up, prioritizing resume items
-      const combinedItems = [...resume];
-      const resumeIds = new Set(resume.map(item => item.Id));
-      nextUp.forEach(item => {
-        if (!resumeIds.has(item.Id)) {
-          combinedItems.push(item);
+      // Combine resume and next up candidates
+      const allResumeCandidates = [...resume, ...nextUp];
+
+      // Deduplicate items by SeriesId, keeping only the latest episode
+      const seriesBestEpisodeMap = new Map<string, JellyfinItem>();
+      const processedSeriesIds = new Set<string>();
+      const processedItemIds = new Set<string>();
+
+      // First pass: Find the "best" (latest) episode for each series
+      allResumeCandidates.forEach(item => {
+        if (item.Type !== 'Episode' || !item.SeriesId) return;
+
+        const existingBest = seriesBestEpisodeMap.get(item.SeriesId);
+        if (!existingBest) {
+          seriesBestEpisodeMap.set(item.SeriesId, item);
+        } else {
+          // Compare to see which is "later"
+          const currentSeason = item.ParentIndexNumber ?? -1;
+          const currentEpisode = item.IndexNumber ?? -1;
+          const bestSeason = existingBest.ParentIndexNumber ?? -1;
+          const bestEpisode = existingBest.IndexNumber ?? -1;
+
+          if (
+            currentSeason > bestSeason ||
+            (currentSeason === bestSeason && currentEpisode > bestEpisode)
+          ) {
+            seriesBestEpisodeMap.set(item.SeriesId, item);
+          }
         }
       });
-      setResumeItems(combinedItems.slice(0, 15));
+
+      // Second pass: Build final list preserving order of first appearance
+      const finalResumeItems: JellyfinItem[] = [];
+
+      allResumeCandidates.forEach(item => {
+        // Skip if we've already included this specific item ID (handle exact duplicates)
+        if (processedItemIds.has(item.Id)) return;
+
+        if (item.Type === 'Episode' && item.SeriesId) {
+          // Check if this series has already been added to the final list
+          if (processedSeriesIds.has(item.SeriesId)) return;
+
+          // Add the BEST episode for this series
+          const bestEpisode = seriesBestEpisodeMap.get(item.SeriesId);
+          if (bestEpisode) {
+            finalResumeItems.push(bestEpisode);
+            processedSeriesIds.add(item.SeriesId);
+            processedItemIds.add(bestEpisode.Id);
+            // Also mark the original item as processed so we don't try to add it again
+            if (bestEpisode.Id !== item.Id) {
+              processedItemIds.add(item.Id);
+            }
+          }
+        } else {
+          // Not an episode (or no SeriesId), just add it
+          finalResumeItems.push(item);
+          processedItemIds.add(item.Id);
+        }
+      });
+
+      setResumeItems(finalResumeItems.slice(0, 15));
       setNextUpItems([]);
 
       // Separate movies and episodes
       const movies = latest.filter(item => item.Type === 'Movie');
-      const episodes = latest.filter(item => item.Type === 'Episode');
+      const episodes = latest.filter(item => item.Type === 'Episode' || item.Type === 'Series');
 
       setLatestMovies(movies);
       setLatestShows(episodes);
@@ -102,15 +155,27 @@ export function HomeScreen() {
     latestMovies.length > 0 ||
     latestShows.length > 0;
 
+
   return (
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          tintColor="#fff"
-        />
+        Platform.select({
+          ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#fff"
+            />
+          ) : undefined,
+          default: (
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#fff"
+            />
+          ),
+        })
       }>
       {!hasContent && (
         <View style={styles.emptyContentContainer}>
@@ -128,15 +193,15 @@ export function HomeScreen() {
       />
 
       <MediaRow
-        title="New Movies"
-        items={latestMovies}
+        title="New Episodes"
+        items={latestShows}
         onItemPress={handleItemPress}
         getImageUrl={getImageUrl}
       />
 
       <MediaRow
-        title="New Episodes"
-        items={latestShows}
+        title="New Movies"
+        items={latestMovies}
         onItemPress={handleItemPress}
         getImageUrl={getImageUrl}
       />

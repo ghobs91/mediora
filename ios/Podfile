@@ -5,7 +5,7 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :tvos, min_ios_version_supported
+# platform :tvos, min_ios_version_supported
 prepare_react_native_project!
 
 linkage = ENV['USE_FRAMEWORKS']
@@ -15,6 +15,7 @@ if linkage != nil
 end
 
 target 'mediora' do
+  platform :tvos, '15.1'
   config = use_native_modules!
 
   use_react_native!(
@@ -22,13 +23,88 @@ target 'mediora' do
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+end
 
-  post_install do |installer|
-    react_native_post_install(
-      installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
-    )
+target 'mediora-mobile' do
+  platform :ios, '15.1'
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :hermes_enabled => true
+  )
+end
+
+post_install do |installer|
+  react_native_post_install(
+    installer,
+    "../node_modules/react-native",
+    :mac_catalyst_enabled => true,
+  )
+
+  # Fix for Hermes on Mac Catalyst ambiguous bundle format
+  installer.aggregate_targets.each do |target|
+    if target.name.include?("mediora-mobile")
+      frameworks_script = "Pods/Target Support Files/#{target.name}/#{target.name}-frameworks.sh"
+      if File.exist?(frameworks_script)
+        puts "Patching #{frameworks_script} for Mac Catalyst Hermes fix"
+        content = File.read(frameworks_script)
+        # Remove root symlinks that confuse codesign on Catalyst
+        symlink_fix = <<-BASH
+    # Catalyst fix: Remove root symlinks to avoid 'ambiguous bundle format'
+    HERMES_PATH="${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework"
+    if [ -d "$HERMES_PATH/Versions" ]; then
+      echo "Removing hermesvm.framework root symlinks for Catalyst compatibility..."
+      rm -f "$HERMES_PATH/hermesvm"
+      rm -f "$HERMES_PATH/Resources"
+    fi
+BASH
+        content.gsub!(/if \[\[ "\$CONFIGURATION" == "Debug" \]\]; then/, symlink_fix + "\n" + 'if [[ "$CONFIGURATION" == "Debug" ]]; then')
+        # Ensure we use deep flag but wait, deep might not even be needed if symlinks are gone
+        content.gsub!(/codesign --force --sign/, 'codesign --force --deep --sign')
+        File.write(frameworks_script, content)
+      end
+    end
+  end
+
+  # Native patch for RefreshControl on Mac Catalyst Mac idiom
+  # Using relative path from Podfile to node_modules/react-native
+  rn_path = File.join(File.dirname(__FILE__), '../node_modules/react-native')
+
+  # 1. Patch Fabric version (RCTPullToRefreshViewComponentView.mm)
+  fabric_path = File.join(rn_path, 'React/Fabric/Mounting/ComponentViews/ScrollView/RCTPullToRefreshViewComponentView.mm')
+  if File.exist?(fabric_path)
+    puts "Patching RCTPullToRefreshViewComponentView.mm for Catalyst Mac idiom support"
+    content = File.read(fabric_path)
+    mac_idiom_check = <<-OBJC
+  BOOL isMacIdiom = NO;
+#if TARGET_OS_MACCATALYST
+  if (@available(macCatalyst 13.0, *)) {
+    isMacIdiom = [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomMac;
+  }
+#endif
+  if (isMacIdiom) {
+    return;
+  }
+OBJC
+    # Insert guard at start of _attach
+    unless content.include?("isMacIdiom")
+      content.gsub!(/- \(void\)_attach\n\{/, "- (void)_attach\n{\n#{mac_idiom_check}")
+      File.write(fabric_path, content)
+    end
+  end
+
+  # 2. Patch Legacy version (RCTRefreshControl.m)
+  legacy_path = File.join(rn_path, 'React/Views/RefreshControl/RCTRefreshControl.m')
+  if File.exist?(legacy_path)
+    puts "Patching RCTRefreshControl.m for Catalyst Mac idiom support"
+    content = File.read(legacy_path)
+    # Guard the init method to avoid creating UIRefreshControl on Mac idiom
+    unless content.include?("isMacIdiom")
+      content.gsub!(/- \(instancetype\)init\n\{/, "- (instancetype)init\n{\n#{mac_idiom_check}")
+      File.write(legacy_path, content)
+    end
   end
 end

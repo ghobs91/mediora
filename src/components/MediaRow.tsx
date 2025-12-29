@@ -1,6 +1,7 @@
 import React from 'react';
 import { FlatList, Text, StyleSheet, View } from 'react-native';
 import { MediaCard } from './MediaCard';
+import { useResponsiveColumns } from '../hooks';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 
 interface JellyfinMediaRowProps {
@@ -23,17 +24,18 @@ type MediaRowProps = JellyfinMediaRowProps | TMDBMediaRowProps;
 
 export function MediaRow(props: MediaRowProps) {
   const { title } = props;
+  const { spacing } = useResponsiveColumns();
 
   if ('items' in props && props.items) {
     const { items, onItemPress, getImageUrl } = props;
-    
+
     if (items.length === 0) {
       return null;
     }
 
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { marginLeft: spacing }]}>{title}</Text>
         <FlatList
           horizontal
           data={items}
@@ -46,7 +48,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: spacing - 8 }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -56,14 +58,14 @@ export function MediaRow(props: MediaRowProps) {
 
   if ('tmdbItems' in props && props.tmdbItems) {
     const { tmdbItems, onItemPress } = props;
-    
+
     if (tmdbItems.length === 0) {
       return null;
     }
 
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { marginLeft: spacing }]}>{title}</Text>
         <FlatList
           horizontal
           data={tmdbItems}
@@ -75,7 +77,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingHorizontal: spacing - 8 }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />

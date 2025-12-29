@@ -734,6 +734,47 @@ export class JellyfinService {
     });
   }
 
+  // User Data - Played Status
+  async markPlayed(itemId: string): Promise<boolean> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to mark played: ${response.status}`);
+      return false;
+    }
+    return true;
+  }
+
+  async markUnplayed(itemId: string): Promise<boolean> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to mark unplayed: ${response.status}`);
+      return false;
+    }
+    return true;
+  }
+
   // Stop active encoding session (important for HLS transcoding)
   async stopEncodingSession(): Promise<void> {
     if (!this.accessToken) {

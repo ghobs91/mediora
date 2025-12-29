@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
   Animated,
+  Platform,
 } from 'react-native';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { TMDBService } from '../services';
@@ -18,6 +19,8 @@ interface MediaCardProps {
   subtitle?: string;
   onPress: () => void;
   size?: 'small' | 'medium' | 'large' | 'xlarge';
+  width?: number;
+  height?: number;
 }
 
 export function MediaCard({
@@ -28,6 +31,8 @@ export function MediaCard({
   subtitle,
   onPress,
   size = 'medium',
+  width: customWidth,
+  height: customHeight,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -53,13 +58,14 @@ export function MediaCard({
   };
 
   const dimensions = {
-    small: { width: 120, height: 180 },
-    medium: { width: 160, height: 240 },
-    large: { width: 200, height: 300 },
-    xlarge: { width: 320, height: 480 },
+    small: { width: Platform.isTV ? 120 : 100, height: Platform.isTV ? 180 : 150 },
+    medium: { width: Platform.isTV ? 160 : 140, height: Platform.isTV ? 240 : 210 },
+    large: { width: Platform.isTV ? 200 : 180, height: Platform.isTV ? 300 : 270 },
+    xlarge: { width: Platform.isTV ? 320 : 280, height: Platform.isTV ? 480 : 420 },
   };
 
-  const { width, height } = dimensions[size];
+  const width = customWidth || dimensions[size].width;
+  const height = customHeight || (customWidth ? customWidth * 1.5 : dimensions[size].height);
 
   let displayTitle = title;
   let displaySubtitle = subtitle;
@@ -110,18 +116,18 @@ export function MediaCard({
         {item?.UserData?.PlaybackPositionTicks != null &&
           item?.RunTimeTicks != null &&
           item.RunTimeTicks > 0 ? (
-            <View style={styles.progressContainer}>
-              <View
-                style={[
-                  styles.progressBar,
-                  {
-                    flex: item.UserData.PlaybackPositionTicks / item.RunTimeTicks,
-                  },
-                ]}
-              />
-              <View style={{ flex: 1 - (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) }} />
-            </View>
-          ) : null}
+          <View style={styles.progressContainer}>
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  flex: item.UserData.PlaybackPositionTicks / item.RunTimeTicks,
+                },
+              ]}
+            />
+            <View style={{ flex: 1 - (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) }} />
+          </View>
+        ) : null}
       </Animated.View>
       <View style={[styles.textContainer, { width }]}>
         <Text style={styles.title} numberOfLines={1}>

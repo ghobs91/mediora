@@ -12,6 +12,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaRow, MediaCard } from '../components';
+import { useResponsiveColumns } from '../hooks';
 import { TMDBMovie, TMDBTVShow } from '../types';
 
 type SearchMode = 'all' | 'movies' | 'tv';
@@ -26,6 +27,7 @@ export function SearchScreen() {
   const [trendingTV, setTrendingTV] = useState<TMDBTVShow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const { numColumns, itemWidth, spacing } = useResponsiveColumns();
 
   const loadTrending = useCallback(async () => {
     if (!tmdb) return;
@@ -133,14 +135,17 @@ export function SearchScreen() {
         </View>
       ) : hasSearched ? (
         results.length > 0 ? (
-          <View style={styles.resultsGrid}>
-            {results.map((item, index) => (
-              <MediaCard
-                key={`result-${item.id}-${index}`}
-                tmdbItem={item}
-                onPress={() => handleItemPress(item)}
-              />
-            ))}
+          <View style={[styles.resultsContainer, { paddingHorizontal: spacing }]}>
+            <View style={styles.resultsGrid}>
+              {results.map((item, index) => (
+                <MediaCard
+                  key={`result-${item.id}-${index}`}
+                  tmdbItem={item}
+                  onPress={() => handleItemPress(item)}
+                  width={itemWidth}
+                />
+              ))}
+            </View>
           </View>
         ) : (
           <View style={styles.noResults}>
@@ -277,10 +282,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginTop: 16,
   },
+  resultsContainer: {
+    width: '100%',
+  },
   resultsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 40,
+    gap: 12,
   },
   noResults: {
     padding: 48,

@@ -3,10 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "npx react-native run-android",
+    "ios": "npx react-native run-ios",
+    "ios-mobile": "npx react-native run-ios --scheme mediora-mobile",
+    "macos": "xcodebuild -workspace ios/mediora.xcworkspace -scheme mediora-mobile -destination 'platform=macOS,variant=Mac Catalyst' build",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "npx react-native start",
     "test": "jest"
   },
   "dependencies": {
