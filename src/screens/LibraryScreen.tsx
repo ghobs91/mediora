@@ -4,10 +4,12 @@ import {
   StyleSheet,
   Text,
   FlatList,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
+import { useResponsiveColumns } from '../hooks';
 import { JellyfinLibrary, JellyfinItem } from '../types';
 
 interface LibraryScreenProps {
@@ -22,6 +24,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const [items, setItems] = useState<JellyfinItem[]>([]);
   const [isLoadingLibraries, setIsLoadingLibraries] = useState(true);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const { numColumns, itemWidth, spacing } = useResponsiveColumns();
 
   const loadLibraries = useCallback(async () => {
     if (!jellyfin) return;
@@ -113,18 +116,21 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
       ) : (
         <FlatList
           data={items}
-          key="grid-5"
-          numColumns={5}
+          key={`grid-${numColumns}`}
+          numColumns={numColumns}
           keyExtractor={item => item.Id}
           renderItem={({ item }) => (
             <MediaCard
               item={item}
               imageUrl={getImageUrl(item)}
               onPress={() => handleItemPress(item)}
-              size="xlarge"
+              width={itemWidth}
             />
           )}
-          contentContainerStyle={styles.gridContent}
+          contentContainerStyle={[
+            styles.gridContent,
+            { paddingHorizontal: spacing, paddingTop: spacing }
+          ]}
           columnWrapperStyle={styles.gridRow}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
@@ -145,8 +151,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   gridContent: {
-    paddingHorizontal: 48,
-    paddingTop: 32,
     paddingBottom: 48,
   },
   gridRow: {

@@ -100,6 +100,36 @@ export class TMDBService {
     };
   }
 
+  async findByExternalId(
+    externalId: string,
+    source: 'imdb_id' | 'tvdb_id',
+  ): Promise<TMDBSearchResult> {
+    const params = this.addApiKey(new URLSearchParams({
+      external_source: source,
+    }));
+
+    const response = await fetch(`${BASE_URL}/find/${externalId}?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to find by external ID: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Combine results from different arrays into a single results array
+    const results = [
+      ...(data.movie_results || []).map((m: any) => ({ ...m, media_type: 'movie' })),
+      ...(data.tv_results || []).map((t: any) => ({ ...t, media_type: 'tv' })),
+    ];
+
+    return {
+      page: 1,
+      results,
+      total_pages: 1,
+      total_results: results.length,
+    };
+  }
+
   // Details
   async getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
     const params = this.addApiKey(new URLSearchParams({

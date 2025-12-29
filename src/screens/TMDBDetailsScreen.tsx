@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Text,
   Image,
-  Dimensions,
+  useWindowDimensions,
   Alert,
   TouchableOpacity,
   FlatList,
@@ -26,6 +26,12 @@ export function TMDBDetailsScreen() {
   const { tmdb, sonarr, radarr, jellyfin, isSonarrConnected, isRadarrConnected, isJellyfinConnected } = useServices();
   const { settings } = useSettings();
   const { item, mediaType } = route.params;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  // Responsive values
+  const backdropHeight = windowHeight * 0.6;
+  const posterWidth = Math.max(windowWidth * 0.2, 200);
+  const posterHeight = posterWidth * 1.5;
 
   const [details, setDetails] = useState<TMDBMovieDetails | TMDBTVDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +57,7 @@ export function TMDBDetailsScreen() {
     setCheckingJellyfin(true);
     try {
       let jellyfinResults: any[] = [];
-      
+
       if (mediaType === 'movie') {
         jellyfinResults = await jellyfin.searchByTmdbId(item.id.toString(), 'Movie');
       } else {
@@ -62,7 +68,7 @@ export function TMDBDetailsScreen() {
           jellyfinResults = await jellyfin.searchByTvdbId(tvDetails.external_ids.tvdb_id.toString());
         }
       }
-      
+
       if (jellyfinResults.length > 0) {
         // Content exists in Jellyfin - navigate to ItemDetailsScreen instead
         const jellyfinItem = jellyfinResults[0];
@@ -221,7 +227,7 @@ export function TMDBDetailsScreen() {
         qualityProfileId: settings.sonarr.qualityProfileId,
       });
       console.log('[TMDBDetailsScreen] Looking up series with TVDB ID:', tvDetails.external_ids.tvdb_id);
-      
+
       // Look up the series in Sonarr
       const sonarrResults = await sonarr.lookupSeriesByTvdbId(tvDetails.external_ids.tvdb_id);
 
@@ -233,7 +239,7 @@ export function TMDBDetailsScreen() {
       console.log('[TMDBDetailsScreen] Found series in Sonarr:', sonarrResults[0].title);
 
       // Add the series with selected seasons or all seasons
-      const seasonsToMonitor = selectedSeasonsToRequest.size > 0 
+      const seasonsToMonitor = selectedSeasonsToRequest.size > 0
         ? Array.from(selectedSeasonsToRequest)
         : undefined; // undefined means monitor all seasons
 
@@ -245,14 +251,14 @@ export function TMDBDetailsScreen() {
       });
 
       setAlreadyExists(true);
-      const seasonText = selectedSeasonsToRequest.size > 0 
+      const seasonText = selectedSeasonsToRequest.size > 0
         ? `Season(s) ${Array.from(selectedSeasonsToRequest).join(', ')} added`
         : 'TV show has been added';
       Alert.alert('Success', seasonText + ' to Sonarr');
     } catch (error) {
       console.error('[TMDBDetailsScreen] Failed to add TV show:', error);
       let message = 'Failed to add TV show';
-      
+
       if (error instanceof Error) {
         if (error.message.includes('401')) {
           message = 'Sonarr authentication failed. Please check your API key in Settings.';
@@ -264,7 +270,7 @@ export function TMDBDetailsScreen() {
           message = error.message;
         }
       }
-      
+
       Alert.alert('Error', message);
     } finally {
       setIsRequesting(false);
@@ -288,7 +294,7 @@ export function TMDBDetailsScreen() {
     try {
       // Check if series already exists
       const existingSeries = await sonarr.checkSeriesExists(tvDetails.external_ids.tvdb_id);
-      
+
       if (existingSeries && existingSeries.id) {
         // Series exists, just monitor this season and search
         await sonarr.updateSeasonMonitoring(existingSeries.id, seasonNumber, true);
@@ -308,7 +314,7 @@ export function TMDBDetailsScreen() {
           searchForMissingEpisodes: true,
           monitoredSeasons: [seasonNumber],
         });
-        
+
         Alert.alert('Success', `Series added with Season ${seasonNumber} monitored`);
         setAlreadyExists(true);
       }
@@ -345,7 +351,7 @@ export function TMDBDetailsScreen() {
 
   const renderCastMember = ({ item: castMember }: { item: TMDBCast }) => {
     const profileUrl = TMDBService.getProfileUrl(castMember.profile_path);
-    
+
     return (
       <View style={styles.castMember}>
         {profileUrl ? (
@@ -367,7 +373,7 @@ export function TMDBDetailsScreen() {
 
   const renderEpisode = ({ item: episode }: { item: TMDBEpisode }) => {
     const stillUrl = TMDBService.getStillUrl(episode.still_path);
-    
+
     return (
       <TouchableOpacity style={styles.episodeCard}>
         {stillUrl ? (
@@ -400,19 +406,19 @@ export function TMDBDetailsScreen() {
       {backdropUrl && (
         <Image
           source={{ uri: backdropUrl }}
-          style={styles.backdrop}
+          style={[styles.backdrop, { width: windowWidth, height: backdropHeight }]}
           resizeMode="cover"
         />
       )}
-      <View style={styles.backdropOverlay} />
+      <View style={[styles.backdropOverlay, { height: backdropHeight }]} />
 
-      <View style={styles.content}>
+      <View style={[styles.content, { marginTop: backdropHeight * 0.5 }]}>
         <View style={styles.mainContent}>
           {/* Poster */}
           {posterUrl && (
             <Image
               source={{ uri: posterUrl }}
-              style={styles.poster}
+              style={[styles.poster, { width: posterWidth, height: posterHeight }]}
               resizeMode="cover"
             />
           )}
@@ -517,7 +523,7 @@ export function TMDBDetailsScreen() {
         {mediaType === 'tv' && tvDetails && tvDetails.seasons && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Seasons & Episodes</Text>
-            
+
             {!alreadyExists && canRequest && (
               <View style={styles.seasonSelectionHint}>
                 <Text style={styles.seasonSelectionHintText}>
@@ -525,7 +531,7 @@ export function TMDBDetailsScreen() {
                 </Text>
               </View>
             )}
-            
+
             {/* Season Tabs */}
             <ScrollView
               horizontal
@@ -541,8 +547,8 @@ export function TMDBDetailsScreen() {
                       style={[
                         styles.seasonTab,
                         selectedSeasonNumber === season.season_number && styles.seasonTabActive,
-                        selectedSeasonsToRequest.has(season.season_number) && 
-                          !alreadyExists && styles.seasonTabSelected,
+                        selectedSeasonsToRequest.has(season.season_number) &&
+                        !alreadyExists && styles.seasonTabSelected,
                       ]}
                       onPress={() => setSelectedSeasonNumber(season.season_number)}
                       onLongPress={() => !alreadyExists && toggleSeasonSelection(season.season_number)}
@@ -595,34 +601,26 @@ export function TMDBDetailsScreen() {
   );
 }
 
-const { width, height } = Dimensions.get('window');
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
   },
   backdrop: {
-    width,
-    height: height * 0.6,
     position: 'absolute',
     top: 0,
   },
   backdropOverlay: {
     ...StyleSheet.absoluteFillObject,
-    height: height * 0.6,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   content: {
-    marginTop: height * 0.3,
     padding: 48,
   },
   mainContent: {
     flexDirection: 'row',
   },
   poster: {
-    width: 300,
-    height: 450,
     borderRadius: 12,
     marginRight: 48,
   },
