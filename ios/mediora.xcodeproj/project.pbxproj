@@ -408,8 +408,8 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
-				PRODUCT_NAME = mediora;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = Mediora;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TVOS_DEPLOYMENT_TARGET = 15.1;
@@ -444,8 +444,8 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
-				PRODUCT_NAME = mediora;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_NAME = Mediora;
 				SWIFT_VERSION = 5.0;
 				TVOS_DEPLOYMENT_TARGET = 15.1;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -664,8 +664,8 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.mediora-mobile";
-				PRODUCT_NAME = mediora;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.mobile";
+				PRODUCT_NAME = Mediora;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";

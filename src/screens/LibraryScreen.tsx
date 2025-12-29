@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Text,
   FlatList,
-  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
@@ -19,7 +18,7 @@ interface LibraryScreenProps {
 export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const navigation = useNavigation();
   const { jellyfin, isJellyfinConnected } = useServices();
-  const [libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
+  const [_libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
   const [selectedLibrary, setSelectedLibrary] = useState<JellyfinLibrary | null>(null);
   const [items, setItems] = useState<JellyfinItem[]>([]);
   const [isLoadingLibraries, setIsLoadingLibraries] = useState(true);
@@ -129,7 +128,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           )}
           contentContainerStyle={[
             styles.gridContent,
-            { paddingHorizontal: spacing, paddingTop: spacing }
+            { paddingHorizontal: spacing, paddingTop: spacing + 32 }
           ]}
           columnWrapperStyle={styles.gridRow}
           removeClippedSubviews={true}

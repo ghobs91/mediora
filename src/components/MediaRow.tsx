@@ -95,6 +95,7 @@ export function MediaRow(props: MediaRowProps) {
 const styles = StyleSheet.create({
   container: {
     marginBottom: 32,
+    marginTop: 8,
   },
   title: {
     color: 'rgba(255, 255, 255, 0.95)',

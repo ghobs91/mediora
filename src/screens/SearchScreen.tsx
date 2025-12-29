@@ -95,7 +95,7 @@ export function SearchScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* Search Input */}
       <View style={styles.searchContainer}>
         <TextInput
@@ -230,6 +230,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  contentContainer: {
+    paddingTop: 8,
   },
   searchContainer: {
     paddingHorizontal: 48,

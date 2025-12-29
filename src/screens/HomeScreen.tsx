@@ -5,18 +5,16 @@ import {
   StyleSheet,
   Text,
   RefreshControl,
-  TouchableOpacity,
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useServices, useSettings } from '../context';
+import { useServices } from '../context';
 import { MediaRow, LoadingScreen } from '../components';
 import { JellyfinItem } from '../types';
 
 export function HomeScreen() {
   const navigation = useNavigation();
   const { jellyfin, isJellyfinConnected } = useServices();
-  const { settings } = useSettings();
   const [resumeItems, setResumeItems] = useState<JellyfinItem[]>([]);
   const [nextUpItems, setNextUpItems] = useState<JellyfinItem[]>([]);
   const [latestMovies, setLatestMovies] = useState<JellyfinItem[]>([]);
@@ -187,6 +185,7 @@ export function HomeScreen() {
   return (
     <ScrollView
       style={styles.container}
+      contentContainerStyle={styles.contentContainer}
       refreshControl={
         Platform.select({
           ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
@@ -245,6 +244,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  contentContainer: {
+    paddingTop: 32,
   },
   emptyContainer: {
     flex: 1,
