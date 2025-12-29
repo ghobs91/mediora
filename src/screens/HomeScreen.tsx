@@ -134,6 +134,34 @@ export function HomeScreen() {
     return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
   };
 
+  const handleRemoveFromContinueWatching = async (item: JellyfinItem) => {
+    if (!jellyfin) return;
+
+    try {
+      const success = await jellyfin.removeFromContinueWatching(item.Id);
+      if (success) {
+        setResumeItems(prev => prev.filter(i => i.Id !== item.Id));
+      }
+    } catch (error) {
+      console.error('Failed to remove item from continue watching:', error);
+    }
+  };
+
+  const handleMarkAsWatched = async (item: JellyfinItem) => {
+    if (!jellyfin) return;
+
+    try {
+      const success = await jellyfin.markPlayed(item.Id);
+      if (success) {
+        // Remove from continue watching list
+        setResumeItems(prev => prev.filter(i => i.Id !== item.Id));
+      }
+    } catch (error) {
+      console.error('Failed to mark item as watched:', error);
+    }
+  };
+
+
   if (!isJellyfinConnected) {
     return (
       <View style={styles.emptyContainer}>
@@ -189,6 +217,8 @@ export function HomeScreen() {
         title="Continue Watching"
         items={resumeItems}
         onItemPress={handleItemPress}
+        onItemRemove={handleRemoveFromContinueWatching}
+        onItemMarkWatched={handleMarkAsWatched}
         getImageUrl={getImageUrl}
       />
 

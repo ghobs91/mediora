@@ -643,7 +643,7 @@ export class JellyfinService {
 
   getImageUrl(
     itemId: string,
-    imageType: 'Primary' | 'Backdrop' | 'Thumb' = 'Primary',
+    imageType: 'Primary' | 'Backdrop' | 'Thumb' | 'Logo' = 'Primary',
     options?: {
       maxWidth?: number;
       maxHeight?: number;
@@ -774,6 +774,50 @@ export class JellyfinService {
     }
     return true;
   }
+
+  async removeFromContinueWatching(itemId: string): Promise<boolean> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    // The proper way to remove from continue watching is to mark it as played
+    // This will remove it from the "Resume" list
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
+      {
+        method: 'POST',
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to remove from continue watching: ${response.status}`);
+      return false;
+    }
+    return true;
+  }
+
+  async toggleFavorite(itemId: string, isFavorite: boolean): Promise<boolean> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const method = isFavorite ? 'POST' : 'DELETE';
+    const response = await fetch(
+      `${this.serverUrl}/Users/${this.userId}/FavoriteItems/${itemId}`,
+      {
+        method,
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to toggle favorite: ${response.status}`);
+      return false;
+    }
+    return true;
+  }
+
 
   // Stop active encoding session (important for HLS transcoding)
   async stopEncodingSession(): Promise<void> {

@@ -62,15 +62,14 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: '700',
         marginBottom: 16,
-        paddingHorizontal: 0,
     },
     listContent: {
         paddingRight: 20,
-        gap: 16,
     },
     card: {
         width: 120,
         alignItems: 'center',
+        marginRight: 16,
     },
     imageContainer: {
         width: 120,

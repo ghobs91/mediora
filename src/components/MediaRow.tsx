@@ -8,6 +8,8 @@ interface JellyfinMediaRowProps {
   title: string;
   items: JellyfinItem[];
   onItemPress: (item: JellyfinItem) => void;
+  onItemRemove?: (item: JellyfinItem) => void;
+  onItemMarkWatched?: (item: JellyfinItem) => void;
   getImageUrl?: (item: JellyfinItem) => string | null;
   tmdbItems?: never;
 }
@@ -27,7 +29,7 @@ export function MediaRow(props: MediaRowProps) {
   const { spacing } = useResponsiveColumns();
 
   if ('items' in props && props.items) {
-    const { items, onItemPress, getImageUrl } = props;
+    const { items, onItemPress, onItemRemove, onItemMarkWatched, getImageUrl } = props;
 
     if (items.length === 0) {
       return null;
@@ -45,6 +47,8 @@ export function MediaRow(props: MediaRowProps) {
               item={item}
               imageUrl={getImageUrl?.(item)}
               onPress={() => onItemPress(item)}
+              onRemove={onItemRemove ? () => onItemRemove(item) : undefined}
+              onMarkWatched={onItemMarkWatched ? () => onItemMarkWatched(item) : undefined}
             />
           )}
           showsHorizontalScrollIndicator={false}
