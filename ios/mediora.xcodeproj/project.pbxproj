@@ -16,17 +16,19 @@
 		A5D3B02DCFCAC892858C4F3D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		AD41AB8D379291D627F7CCCF /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		B48ED8A01D322F82FB4DB481 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B81C21D6CAEC9244E5C269B4 /* Foundation.framework */; };
+		C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
+		C84EECCD2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
 		C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */; };
+		D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* mediora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mediora.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* Mediora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mediora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = mediora/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = mediora/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = mediora/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-mediora.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-mediora.debug.xcconfig"; path = "Target Support Files/Pods-mediora/Pods-mediora.debug.xcconfig"; sourceTree = "<group>"; };
-		457814BFBEF795278B5D965B /* mediora-mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "mediora-mobile.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		457814BFBEF795278B5D965B /* Mediora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mediora.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5709B34CF0A7D63546082F79 /* Pods-mediora.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-mediora.release.xcconfig"; path = "Target Support Files/Pods-mediora/Pods-mediora.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-mediora.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-mediora.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = mediora/AppDelegate.swift; sourceTree = "<group>"; };
@@ -35,7 +37,8 @@
 		8EE7C2C7CD5B7093E3B0D2DA /* Pods-mediora-mobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-mediora-mobile.debug.xcconfig"; path = "Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile.debug.xcconfig"; sourceTree = "<group>"; };
 		B1A385C6CA8E8DD3A0C2947E /* libPods-mediora-mobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-mediora-mobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B81C21D6CAEC9244E5C269B4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
+		C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = MedioraIcon.icon; sourceTree = "<group>"; };
+		CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -68,7 +71,8 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
-				CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */,
+				CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */,
+				C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */,
 			);
 			name = mediora;
 			sourceTree = "<group>";
@@ -108,8 +112,8 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* mediora.app */,
-				457814BFBEF795278B5D965B /* mediora-mobile.app */,
+				13B07F961A680F5B00A75B9A /* Mediora.app */,
+				457814BFBEF795278B5D965B /* Mediora.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -154,7 +158,7 @@
 			);
 			name = mediora;
 			productName = mediora;
-			productReference = 13B07F961A680F5B00A75B9A /* mediora.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* Mediora.app */;
 			productType = "com.apple.product-type.application";
 		};
 		712D486BA5FE8B6740DDFA33 /* mediora-mobile */ = {
@@ -174,7 +178,7 @@
 			);
 			name = "mediora-mobile";
 			productName = mediora;
-			productReference = 457814BFBEF795278B5D965B /* mediora-mobile.app */;
+			productReference = 457814BFBEF795278B5D965B /* Mediora.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -215,6 +219,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
+				C84EECCD2F03EC75007E8102 /* MedioraIcon.icon in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -225,8 +230,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				AD41AB8D379291D627F7CCCF /* Images.xcassets in Resources */,
+				C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */,
 				A5D3B02DCFCAC892858C4F3D /* PrivacyInfo.xcprivacy in Resources */,
-				D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */,
+				D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,9 +263,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -274,9 +284,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -290,9 +304,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -349,9 +367,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -384,7 +406,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-mediora.debug.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -421,7 +444,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-mediora.release.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -456,7 +480,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 86A495CB3B2AABDA1BC7F2B3 /* Pods-mediora-mobile.release.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -640,7 +664,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 8EE7C2C7CD5B7093E3B0D2DA /* Pods-mediora-mobile.debug.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -664,7 +688,7 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.mobile";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.mobile;
 				PRODUCT_NAME = Mediora;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;

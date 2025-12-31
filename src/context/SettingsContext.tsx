@@ -7,7 +7,9 @@ import React, {
   ReactNode,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { AppSettings } from '../types';
+import { iCloudService } from '../services/icloud';
 
 const SETTINGS_STORAGE_KEY = '@mediora/settings';
 
@@ -46,9 +48,43 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const loadSettings = async () => {
     try {
       const stored = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+      let loadedSettings = DEFAULT_SETTINGS;
+      
       if (stored) {
-        setSettings(JSON.parse(stored));
+        loadedSettings = JSON.parse(stored);
       }
+
+      // On tvOS, try to load settings from iCloud if local settings are empty
+      if (Platform.isTV && !loadedSettings.jellyfin) {
+        console.log('[Settings] tvOS detected, checking iCloud for synced settings...');
+        
+        const iCloudJellyfin = await iCloudService.getJellyfinSettings();
+        const iCloudSonarr = await iCloudService.getSonarrSettings();
+        const iCloudRadarr = await iCloudService.getRadarrSettings();
+
+        if (iCloudJellyfin) {
+          loadedSettings.jellyfin = iCloudJellyfin;
+          console.log('[Settings] Loaded Jellyfin settings from iCloud');
+        }
+        if (iCloudSonarr) {
+          loadedSettings.sonarr = iCloudSonarr;
+          console.log('[Settings] Loaded Sonarr settings from iCloud');
+        }
+        if (iCloudRadarr) {
+          loadedSettings.radarr = iCloudRadarr;
+          console.log('[Settings] Loaded Radarr settings from iCloud');
+        }
+
+        // Save the loaded iCloud settings to local storage for next time
+        if (iCloudJellyfin || iCloudSonarr || iCloudRadarr) {
+          await AsyncStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify(loadedSettings)
+          );
+        }
+      }
+
+      setSettings(loadedSettings);
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -73,6 +109,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     async (jellyfinSettings: AppSettings['jellyfin']) => {
       const newSettings = { ...settings, jellyfin: jellyfinSettings };
       await saveSettings(newSettings);
+      
+      // Sync to iCloud on iOS/macOS (not tvOS)
+      if (!Platform.isTV && jellyfinSettings) {
+        await iCloudService.saveJellyfinSettings(jellyfinSettings);
+      }
     },
     [settings],
   );
@@ -89,6 +130,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     async (sonarrSettings: AppSettings['sonarr']) => {
       const newSettings = { ...settings, sonarr: sonarrSettings };
       await saveSettings(newSettings);
+      
+      // Sync to iCloud on iOS/macOS (not tvOS)
+      if (!Platform.isTV && sonarrSettings) {
+        await iCloudService.saveSonarrSettings(sonarrSettings);
+      }
     },
     [settings],
   );
@@ -97,6 +143,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     async (radarrSettings: AppSettings['radarr']) => {
       const newSettings = { ...settings, radarr: radarrSettings };
       await saveSettings(newSettings);
+      
+      // Sync to iCloud on iOS/macOS (not tvOS)
+      if (!Platform.isTV && radarrSettings) {
+        await iCloudService.saveRadarrSettings(radarrSettings);
+      }
     },
     [settings],
   );
@@ -108,6 +159,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const clearJellyfinSettings = useCallback(async () => {
     const newSettings = { ...settings, jellyfin: null };
     await saveSettings(newSettings);
+    
+    // Clear from iCloud if on iOS/macOS
+    if (!Platform.isTV) {
+      await iCloudService.clearJellyfinSettings();
+    }
   }, [settings]);
 
   return (
