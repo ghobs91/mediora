@@ -666,13 +666,7 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
         autoCapitalize="none"
         autoCorrect={false}
       />
-      <FocusableInput
-        label="Quality Profile ID"
-        value={qualityProfileId}
-        onChangeText={setQualityProfileId}
-        placeholder="1"
-        keyboardType="numeric"
-      />
+      {/* Quality Profile ID is now handled automatically and not shown to the user */}
       {errorMessage !== '' && (
         <Text style={styles.testFailure}>
           {errorMessage}
@@ -877,13 +871,7 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
         autoCapitalize="none"
         autoCorrect={false}
       />
-      <FocusableInput
-        label="Quality Profile ID"
-        value={qualityProfileId}
-        onChangeText={setQualityProfileId}
-        placeholder="1"
-        keyboardType="numeric"
-      />
+      {/* Quality Profile ID is now handled automatically and not shown to the user */}
       {errorMessage !== '' && (
         <Text style={styles.testFailure}>
           {errorMessage}
