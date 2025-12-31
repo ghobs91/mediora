@@ -797,6 +797,115 @@ export class JellyfinService {
     return true;
   }
 
+  // Server Discovery - Static method for discovering Jellyfin servers on local network
+  static async discoverServers(
+    timeoutMs: number = 15000,
+    onProgress?: (current: number, total: number) => void
+  ): Promise<Array<{
+    address: string;
+    name: string;
+    id: string;
+  }>> {
+    const discoveredServers = new Map<string, { address: string; name: string; id: string }>();
+    
+    // Common Jellyfin ports
+    const commonPorts = [8096, 8920];
+    
+    // Generate IPs to check - scan common ranges
+    const ipsToCheck: string[] = ['localhost'];
+    
+    // 192.168.1.x (most common home network)
+    for (let i = 1; i <= 255; i++) {
+      ipsToCheck.push(`192.168.1.${i}`);
+    }
+    
+    // 192.168.0.x (also common)
+    for (let i = 1; i <= 100; i++) {
+      ipsToCheck.push(`192.168.0.${i}`);
+    }
+    
+    // 10.0.0.x (some routers)
+    for (let i = 1; i <= 20; i++) {
+      ipsToCheck.push(`10.0.0.${i}`);
+    }
+
+    console.log('[Jellyfin] Starting server discovery...');
+    console.log(`[Jellyfin] Scanning ${ipsToCheck.length} IPs on ports ${commonPorts.join(', ')}`);
+    const startTime = Date.now();
+
+    let checksCompleted = 0;
+    const totalChecks = ipsToCheck.length * commonPorts.length;
+    
+    // Batch processing to avoid overwhelming the network
+    const batchSize = 20; // Process 20 requests at a time
+    
+    for (let batchStart = 0; batchStart < ipsToCheck.length; batchStart += batchSize) {
+      const batch = ipsToCheck.slice(batchStart, batchStart + batchSize);
+      
+      const batchChecks = batch.flatMap(ip =>
+        commonPorts.map(port => (async () => {
+          try {
+            const serverUrl = `http://${ip}:${port}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 500); // 500ms per check
+            
+            const response = await fetch(`${serverUrl}/System/Info/Public`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+              const data = await response.json();
+              const key = `${ip}:${port}`;
+              
+              if (!discoveredServers.has(key)) {
+                console.log(`[Jellyfin] ✓ Found server: ${data.ServerName} at ${serverUrl}`);
+                discoveredServers.set(key, {
+                  address: serverUrl,
+                  name: data.ServerName || 'Jellyfin Server',
+                  id: data.Id || key,
+                });
+              }
+            }
+          } catch {
+            // Log occasional samples to help debugging
+            if (checksCompleted % 100 === 0) {
+              console.log(`[Jellyfin] Checked ${checksCompleted}/${totalChecks}...`);
+            }
+          } finally {
+            checksCompleted++;
+            if (onProgress) {
+              onProgress(checksCompleted, totalChecks);
+            }
+          }
+        })())
+      );
+      
+      // Process batch in parallel
+      await Promise.all(batchChecks);
+      
+      // Stop if we found a server
+      if (discoveredServers.size > 0) {
+        console.log('[Jellyfin] Server found, stopping discovery early');
+        break;
+      }
+      
+      // Check timeout
+      if (Date.now() - startTime > timeoutMs) {
+        console.log('[Jellyfin] Discovery timeout reached');
+        break;
+      }
+    }
+
+    const servers = Array.from(discoveredServers.values());
+    console.log(`[Jellyfin] Discovery complete. Found ${servers.length} server(s) in ${Date.now() - startTime}ms`);
+    
+    return servers;
+  }
+
   async toggleFavorite(itemId: string, isFavorite: boolean): Promise<boolean> {
     if (!this.userId || !this.accessToken) {
       throw new Error('Not authenticated');

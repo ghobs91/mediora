@@ -132,11 +132,51 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
   const [_quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveryProgress, setDiscoveryProgress] = useState({ current: 0, total: 0 });
+  const [discoveredServers, setDiscoveredServers] = useState<Array<{address: string; name: string; id: string}>>([]);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isConnected = !!settings?.accessToken;
+
+  const handleDiscoverServers = async () => {
+    setIsDiscovering(true);
+    setError(null);
+    setDiscoveredServers([]);
+    setDiscoveryProgress({ current: 0, total: 0 });
+    
+    try {
+      console.log('[Settings] Starting server discovery...');
+      const servers = await JellyfinService.discoverServers(
+        15000, // 15 second timeout
+        (current, total) => {
+          setDiscoveryProgress({ current, total });
+        }
+      );
+      setDiscoveredServers(servers);
+      
+      if (servers.length === 0) {
+        setError('No servers found. Make sure Jellyfin is running and accessible on your network.');
+      } else {
+        console.log('[Settings] Found servers:', servers);
+      }
+    } catch (err) {
+      console.error('[Settings] Discovery error:', err);
+      setError('Server discovery failed');
+    } finally {
+      setIsDiscovering(false);
+      setDiscoveryProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleSelectServer = (server: {address: string; name: string; id: string}) => {
+    setServerUrl(server.address);
+    setDiscoveredServers([]);
+    setTestResult(null);
+    setError(null);
+  };
 
   const handleTestConnection = async () => {
     if (!serverUrl.trim()) {
@@ -357,8 +397,59 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
         Connect to your Jellyfin server using Quick Connect
       </Text>
       <Text style={styles.helperText}>
-        Enter your server URL (e.g., http://192.168.1.100:8096 or https://jellyfin.mydomain.com)
+        Scan your local network or enter your server URL manually
       </Text>
+      
+      {/* Server Discovery */}
+      <View style={styles.discoveryContainer}>
+        <FocusableButton
+          title="Scan Local Network"
+          onPress={handleDiscoverServers}
+          loading={isDiscovering}
+          disabled={isDiscovering || isConnecting || isTesting}
+          variant="secondary"
+          size="medium"
+          icon="scan"
+        />
+        {isDiscovering && (
+          <View>
+            <Text style={styles.discoveryText}>
+              Scanning network... {discoveryProgress.total > 0 && `(${discoveryProgress.current}/${discoveryProgress.total})`}
+            </Text>
+            <Text style={styles.discoveryHint}>
+              This may take 10-15 seconds
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Discovered Servers List */}
+      {discoveredServers.length > 0 && (
+        <View style={styles.discoveredServersContainer}>
+          <Text style={styles.discoveredServersTitle}>Found Servers:</Text>
+          {discoveredServers.map((server) => (
+            <FocusableButton
+              key={server.id}
+              title={
+                <View style={styles.serverItemContent}>
+                  <Icon name="server" size={20} color="#fff" style={styles.serverIcon} />
+                  <View style={styles.serverInfo}>
+                    <Text style={styles.serverName}>{server.name}</Text>
+                    <Text style={styles.serverAddress}>{server.address}</Text>
+                  </View>
+                </View>
+              }
+              onPress={() => handleSelectServer(server)}
+              variant="secondary"
+              size="medium"
+              style={styles.serverItem}
+            />
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.orText}>or enter manually:</Text>
+      
       <FocusableInput
         label="Server URL"
         value={serverUrl}
@@ -421,6 +512,7 @@ interface SonarrSettingsProps {
 }
 
 function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
+  const { settings: allSettings } = useSettings();
   const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
   const [apiKey, setApiKey] = useState(settings?.apiKey || '');
   const [rootFolderPath, setRootFolderPath] = useState(
@@ -433,6 +525,23 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Prefill server URL from Jellyfin if empty
+  useEffect(() => {
+    if (!serverUrl && allSettings.jellyfin?.serverUrl) {
+      try {
+        // Extract protocol and host from Jellyfin URL
+        const jellyfinUrl = allSettings.jellyfin.serverUrl;
+        const match = jellyfinUrl.match(/^(https?:\/\/[^:]+)(:\d+)?/);
+        if (match) {
+          const baseUrl = `${match[1]}:8989`;
+          setServerUrl(baseUrl);
+        }
+      } catch (err) {
+        console.log('[Sonarr] Could not parse Jellyfin URL:', err);
+      }
+    }
+  }, [allSettings.jellyfin?.serverUrl, serverUrl]);
 
   const handleTest = async () => {
     if (!serverUrl.trim() || !apiKey.trim()) return;
@@ -496,10 +605,25 @@ function SonarrSettings({ settings, onUpdate }: SonarrSettingsProps) {
     setIsSaving(true);
     try {
       if (serverUrl.trim() && apiKey.trim()) {
+        let normalizedUrl = serverUrl.trim();
+        if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+          normalizedUrl = 'http://' + normalizedUrl;
+        }
+        let finalRootFolderPath = rootFolderPath.trim();
+        try {
+          const service = new SonarrService(normalizedUrl, apiKey.trim());
+          const rootFolders = await service.getRootFolders();
+          if (rootFolders.length > 0) {
+            finalRootFolderPath = rootFolders[0].path;
+            setRootFolderPath(finalRootFolderPath);
+          }
+        } catch (err) {
+          console.warn('[Sonarr] Could not fetch root folders on save:', err);
+        }
         await onUpdate({
-          serverUrl: serverUrl.trim(),
+          serverUrl: normalizedUrl,
           apiKey: apiKey.trim(),
-          rootFolderPath: rootFolderPath.trim(),
+          rootFolderPath: finalRootFolderPath,
           qualityProfileId: parseInt(qualityProfileId, 10) || 1,
         });
       } else {
@@ -601,6 +725,7 @@ interface RadarrSettingsProps {
 }
 
 function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
+  const { settings: allSettings } = useSettings();
   const [serverUrl, setServerUrl] = useState(settings?.serverUrl || '');
   const [apiKey, setApiKey] = useState(settings?.apiKey || '');
   const [rootFolderPath, setRootFolderPath] = useState(
@@ -613,6 +738,23 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<boolean | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Prefill server URL from Jellyfin if empty
+  useEffect(() => {
+    if (!serverUrl && allSettings.jellyfin?.serverUrl) {
+      try {
+        // Extract protocol and host from Jellyfin URL
+        const jellyfinUrl = allSettings.jellyfin.serverUrl;
+        const match = jellyfinUrl.match(/^(https?:\/\/[^:]+)(:\d+)?/);
+        if (match) {
+          const baseUrl = `${match[1]}:7878`;
+          setServerUrl(baseUrl);
+        }
+      } catch (err) {
+        console.log('[Radarr] Could not parse Jellyfin URL:', err);
+      }
+    }
+  }, [allSettings.jellyfin?.serverUrl, serverUrl]);
 
   const handleTest = async () => {
     if (!serverUrl.trim() || !apiKey.trim()) return;
@@ -674,10 +816,25 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
     setIsSaving(true);
     try {
       if (serverUrl.trim() && apiKey.trim()) {
+        let normalizedUrl = serverUrl.trim();
+        if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+          normalizedUrl = 'http://' + normalizedUrl;
+        }
+        let finalRootFolderPath = rootFolderPath.trim();
+        try {
+          const service = new RadarrService(normalizedUrl, apiKey.trim());
+          const rootFolders = await service.getRootFolders();
+          if (rootFolders.length > 0) {
+            finalRootFolderPath = rootFolders[0].path;
+            setRootFolderPath(finalRootFolderPath);
+          }
+        } catch (err) {
+          console.warn('[Radarr] Could not fetch root folders on save:', err);
+        }
         await onUpdate({
-          serverUrl: serverUrl.trim(),
+          serverUrl: normalizedUrl,
           apiKey: apiKey.trim(),
-          rootFolderPath: rootFolderPath.trim(),
+          rootFolderPath: finalRootFolderPath,
           qualityProfileId: parseInt(qualityProfileId, 10) || 1,
         });
       } else {
@@ -767,6 +924,66 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingTop: 8,
+  },
+  discoveryContainer: {
+    marginBottom: 24,
+  },
+  discoveryText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 15,
+    marginTop: 12,
+    fontStyle: 'italic',
+  },
+  discoveryHint: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  discoveredServersContainer: {
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: 'rgba(26, 26, 26, 0.6)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 132, 255, 0.3)',
+  },
+  discoveredServersTitle: {
+    color: 'rgba(10, 132, 255, 0.95)',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  serverItem: {
+    marginBottom: 8,
+  },
+  serverItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  serverIcon: {
+    marginRight: 12,
+  },
+  serverInfo: {
+    flex: 1,
+  },
+  serverName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  serverAddress: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+  },
+  orText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 15,
+    textAlign: 'center',
+    marginVertical: 16,
+    fontWeight: '500',
   },
   tabsContainer: {
     flexDirection: 'row',
