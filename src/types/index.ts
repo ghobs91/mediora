@@ -469,6 +469,9 @@ export interface AppSettings {
     rootFolderPath: string;
     qualityProfileId: number;
   } | null;
+  iptv: {
+    selectedCountries: string[]; // Array of country codes
+  } | null;
 }
 
 // Navigation Types
@@ -477,9 +480,40 @@ export type RootStackParamList = {
   Home: undefined;
   TVShows: undefined;
   Movies: undefined;
+  LiveTV: undefined;
   Search: undefined;
   Settings: undefined;
   Player: { itemId: string };
+  LivePlayer: { channelId: string; channelName: string; streamUrl: string; logo?: string };
   ItemDetails: { item: JellyfinItem };
   TMDBDetails: { item: TMDBMovie | TMDBTVShow; mediaType: 'movie' | 'tv' };
 };
+
+// Live TV Types
+export interface LiveTVChannel {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  group?: string;
+  jellyfinId?: string; // If from Jellyfin
+}
+
+// EPG Types
+export interface EPGProgram {
+  channelId: string;
+  title: string;
+  description?: string;
+  start: Date;
+  stop: Date;
+  category?: string;
+  icon?: string;
+}
+
+export interface EPGChannel {
+  id: string;
+  displayName: string;
+  icon?: string;
+  programs: EPGProgram[];
+}
+

@@ -5,13 +5,15 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
-import { JellyfinService, SonarrService, RadarrService } from '../services';
+import { JellyfinService, SonarrService, RadarrService, IPTV_REGIONS, IPTVCountry } from '../services';
 
-type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr';
+type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv';
 
 export function SettingsScreen() {
   const {
@@ -19,12 +21,15 @@ export function SettingsScreen() {
     updateJellyfinSettings,
     updateSonarrSettings,
     updateRadarrSettings,
+    updateIPTVSettings,
     clearJellyfinSettings,
   } = useSettings();
   const { isJellyfinConnected, isSonarrConnected, isRadarrConnected } =
     useServices();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('jellyfin');
+
+  const hasIPTVCountries = (settings.iptv?.selectedCountries?.length ?? 0) > 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -48,6 +53,12 @@ export function SettingsScreen() {
           isConnected={isRadarrConnected}
           onPress={() => setActiveSection('radarr')}
         />
+        <SettingsTab
+          title="Live TV"
+          isSelected={activeSection === 'livetv'}
+          isConnected={hasIPTVCountries}
+          onPress={() => setActiveSection('livetv')}
+        />
       </View>
 
       {/* Section Content */}
@@ -69,6 +80,12 @@ export function SettingsScreen() {
           <RadarrSettings
             settings={settings.radarr}
             onUpdate={updateRadarrSettings}
+          />
+        )}
+        {activeSection === 'livetv' && (
+          <LiveTVSettings
+            settings={settings.iptv}
+            onUpdate={updateIPTVSettings}
           />
         )}
       </View>
@@ -905,6 +922,167 @@ function RadarrSettings({ settings, onUpdate }: RadarrSettingsProps) {
   );
 }
 
+// Live TV / IPTV Settings Section
+interface LiveTVSettingsProps {
+  settings: {
+    selectedCountries: string[];
+  } | null;
+  onUpdate: (settings: { selectedCountries: string[] } | null) => Promise<void>;
+}
+
+function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(
+    new Set(settings?.selectedCountries || [])
+  );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const toggleCountry = (code: string) => {
+    const newSelected = new Set(selectedCountries);
+    if (newSelected.has(code)) {
+      newSelected.delete(code);
+    } else {
+      newSelected.add(code);
+    }
+    setSelectedCountries(newSelected);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const countries = Array.from(selectedCountries);
+      
+      // Save to local settings
+      // IPTV channels will be loaded client-side from M3U playlists
+      console.log(`[Settings] Saving ${countries.length} IPTV countries: ${countries.join(', ')}`);
+      
+      if (countries.length > 0) {
+        await onUpdate({ selectedCountries: countries });
+      } else {
+        await onUpdate(null);
+      }
+      
+      Alert.alert(
+        'Saved',
+        `${countries.length} countries selected. Go to Live TV to see channels.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Failed to save IPTV settings:', error);
+      Alert.alert('Error', 'Failed to save IPTV settings', [{ text: 'OK' }]);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const filteredRegions = IPTV_REGIONS.map(region => ({
+    ...region,
+    countries: region.countries.filter(country =>
+      !searchQuery ||
+      country.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      country.code.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+  })).filter(region => region.countries.length > 0);
+
+  const selectAllInRegion = (regionName: string) => {
+    const region = IPTV_REGIONS.find(r => r.name === regionName);
+    if (region) {
+      const newSelected = new Set(selectedCountries);
+      region.countries.forEach(c => newSelected.add(c.code));
+      setSelectedCountries(newSelected);
+    }
+  };
+
+  const clearAllInRegion = (regionName: string) => {
+    const region = IPTV_REGIONS.find(r => r.name === regionName);
+    if (region) {
+      const newSelected = new Set(selectedCountries);
+      region.countries.forEach(c => newSelected.delete(c.code));
+      setSelectedCountries(newSelected);
+    }
+  };
+
+  return (
+    <View style={styles.sectionForm}>
+      <Text style={styles.sectionDescription}>
+        Select countries to add IPTV channels to Jellyfin. 
+        Channels and EPG data will be managed via Jellyfin Live TV.
+      </Text>
+      
+      <Text style={styles.selectedCount}>
+        {selectedCountries.size} {selectedCountries.size === 1 ? 'country' : 'countries'} selected
+      </Text>
+
+      <FocusableInput
+        label="Search Countries"
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Type to filter countries..."
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+
+      <View style={styles.countryListContainer}>
+        {filteredRegions.map(region => (
+          <View key={region.name} style={styles.regionContainer}>
+            <View style={styles.regionHeader}>
+              <Text style={styles.regionTitle}>{region.name}</Text>
+              <View style={styles.regionButtons}>
+                <TouchableOpacity
+                  onPress={() => selectAllInRegion(region.name)}
+                  style={styles.regionButton}>
+                  <Text style={styles.regionButtonText}>Select All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => clearAllInRegion(region.name)}
+                  style={styles.regionButton}>
+                  <Text style={styles.regionButtonText}>Clear</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.countriesGrid}>
+              {region.countries.map((country: IPTVCountry) => {
+                const isSelected = selectedCountries.has(country.code);
+                return (
+                  <TouchableOpacity
+                    key={country.code}
+                    style={[
+                      styles.countryItem,
+                      isSelected && styles.countryItemSelected,
+                    ]}
+                    onPress={() => toggleCountry(country.code)}>
+                    <Text style={styles.countryFlag}>{country.flag}</Text>
+                    <Text
+                      style={[
+                        styles.countryName,
+                        isSelected && styles.countryNameSelected,
+                      ]}
+                      numberOfLines={1}>
+                      {country.name}
+                    </Text>
+                    {isSelected && (
+                      <Icon name="checkmark-circle" size={20} color="#30d158" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.buttonRow}>
+        <FocusableButton
+          title={`Save (${selectedCountries.size} selected)`}
+          onPress={handleSave}
+          loading={isSaving}
+          size="medium"
+        />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1105,5 +1283,82 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 28,
     fontWeight: '500',
+  },
+  // Live TV / IPTV Settings styles
+  selectedCount: {
+    color: 'rgba(10, 132, 255, 0.95)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  countryListContainer: {
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  regionContainer: {
+    marginBottom: 24,
+  },
+  regionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  regionTitle: {
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  regionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  regionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  regionButtonText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  countriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    minWidth: 160,
+  },
+  countryItemSelected: {
+    backgroundColor: 'rgba(48, 209, 88, 0.15)',
+    borderColor: 'rgba(48, 209, 88, 0.5)',
+  },
+  countryFlag: {
+    fontSize: 20,
+  },
+  countryName: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  countryNameSelected: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });

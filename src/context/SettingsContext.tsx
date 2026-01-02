@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   tmdb: null,
   sonarr: null,
   radarr: null,
+  iptv: null,
 };
 
 interface SettingsContextType {
@@ -29,6 +30,7 @@ interface SettingsContextType {
   updateTMDBSettings: (settings: AppSettings['tmdb']) => Promise<void>;
   updateSonarrSettings: (settings: AppSettings['sonarr']) => Promise<void>;
   updateRadarrSettings: (settings: AppSettings['radarr']) => Promise<void>;
+  updateIPTVSettings: (settings: AppSettings['iptv']) => Promise<void>;
   clearAllSettings: () => Promise<void>;
   clearJellyfinSettings: () => Promise<void>;
 }
@@ -152,6 +154,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [settings],
   );
 
+  const updateIPTVSettings = useCallback(
+    async (iptvSettings: AppSettings['iptv']) => {
+      const newSettings = { ...settings, iptv: iptvSettings };
+      await saveSettings(newSettings);
+    },
+    [settings],
+  );
+
   const clearAllSettings = useCallback(async () => {
     await saveSettings(DEFAULT_SETTINGS);
   }, []);
@@ -175,6 +185,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateTMDBSettings,
         updateSonarrSettings,
         updateRadarrSettings,
+        updateIPTVSettings,
         clearAllSettings,
         clearJellyfinSettings,
       }}>

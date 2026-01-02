@@ -927,6 +927,94 @@ export class JellyfinService {
     return true;
   }
 
+  // Live TV - Get live TV channels from Jellyfin
+  async getLiveTVChannels(): Promise<JellyfinItem[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    try {
+      const queryString = buildQueryString({
+        userId: this.userId,
+        fields: 'ChannelInfo',
+      });
+
+      const response = await fetch(
+        `${this.serverUrl}/LiveTv/Channels?${queryString}`,
+        {
+          headers: getAuthHeader(this.accessToken, this.deviceId),
+        },
+      );
+
+      if (!response.ok) {
+        console.log('[Jellyfin] No Live TV channels found or Live TV not configured');
+        return [];
+      }
+
+      const data = await response.json();
+      return data.Items || [];
+    } catch (error) {
+      console.error('[Jellyfin] Failed to get Live TV channels:', error);
+      return [];
+    }
+  }
+
+  // Get live stream URL for a channel
+  getLiveStreamUrl(channelId: string): string {
+    const queryString = buildQueryString({
+      api_key: this.accessToken || '',
+      deviceId: this.deviceId,
+      playSessionId: this.playSessionId,
+    });
+
+    return `${this.serverUrl}/LiveTv/LiveStreamFiles/${channelId}/stream.m3u8?${queryString}`;
+  }
+
+  // Get program guide/EPG data for Live TV channels
+  async getLiveTVPrograms(channelIds?: string[], minStartDate?: Date, maxStartDate?: Date): Promise<any[]> {
+    if (!this.userId || !this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    try {
+      const params: any = {
+        userId: this.userId,
+        fields: 'ChannelInfo,PrimaryImageAspectRatio',
+      };
+
+      if (channelIds && channelIds.length > 0) {
+        params.channelIds = channelIds.join(',');
+      }
+
+      if (minStartDate) {
+        params.minStartDate = minStartDate.toISOString();
+      }
+
+      if (maxStartDate) {
+        params.maxStartDate = maxStartDate.toISOString();
+      }
+
+      const queryString = buildQueryString(params);
+
+      const response = await fetch(
+        `${this.serverUrl}/LiveTv/Programs?${queryString}`,
+        {
+          headers: getAuthHeader(this.accessToken, this.deviceId),
+        },
+      );
+
+      if (!response.ok) {
+        console.log('[Jellyfin] No program guide data available');
+        return [];
+      }
+
+      const data = await response.json();
+      return data.Items || [];
+    } catch (error) {
+      console.error('[Jellyfin] Failed to get program guide:', error);
+      return [];
+    }
+  }
 
   // Stop active encoding session (important for HLS transcoding)
   async stopEncodingSession(): Promise<void> {
@@ -946,5 +1034,213 @@ export class JellyfinService {
       // Ignore errors when stopping encoding - the session may already be stopped
       console.log('[Jellyfin] Stop encoding session (may already be stopped):', error);
     }
+  }
+}
+
+// M3U Parser for IPTV playlists
+export interface M3UChannel {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  group?: string;
+}
+
+export async function parseM3U(url: string): Promise<M3UChannel[]> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch M3U playlist: ${response.status}`);
+    }
+
+    const content = await response.text();
+    const channels: M3UChannel[] = [];
+    const lines = content.split('\n');
+
+    let currentChannel: Partial<M3UChannel> = {};
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (line.startsWith('#EXTINF:')) {
+        // Parse channel info
+        const nameMatch = line.match(/,(.+)$/);
+        const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+        const groupMatch = line.match(/group-title="([^"]+)"/);
+        const idMatch = line.match(/tvg-id="([^"]+)"/);
+        
+        currentChannel = {
+          name: nameMatch ? nameMatch[1].trim() : 'Unknown Channel',
+          logo: logoMatch ? logoMatch[1] : undefined,
+          group: groupMatch ? groupMatch[1] : 'General',
+          id: idMatch ? idMatch[1] : Math.random().toString(36).substring(7),
+        };
+      } else if (line && !line.startsWith('#')) {
+        // This is the stream URL
+        if (currentChannel.name) {
+          channels.push({
+            id: currentChannel.id || Math.random().toString(36).substring(7),
+            name: currentChannel.name,
+            url: line,
+            logo: currentChannel.logo,
+            group: currentChannel.group,
+          });
+        }
+        currentChannel = {};
+      }
+    }
+
+    console.log(`[M3U Parser] Parsed ${channels.length} channels from playlist`);
+    return channels;
+  } catch (error) {
+    console.error('[M3U Parser] Failed to parse M3U playlist:', error);
+    throw error;
+  }
+}
+
+// Live TV Tuner Host Management
+export interface TunerHost {
+  Id?: string;
+  Type: 'm3u' | 'hdhomerun';
+  Url: string;
+  EnableAllTuners?: boolean;
+  Source?: string;
+  TunerCount?: number;
+  UserAgent?: string;
+  DeviceId?: string;
+  FriendlyName?: string;
+  ImportFavoritesOnly?: boolean;
+  AllowHWTranscoding?: boolean;
+}
+
+export interface ListingProvider {
+  Id?: string;
+  Type: 'xmltv' | 'schedules_direct';
+  Path?: string; // For XMLTV URL
+  EnableAllTuners?: boolean;
+  EnabledTuners?: string[];
+  ListingsId?: string;
+  ZipCode?: string;
+  Country?: string;
+}
+
+export async function addTunerHost(
+  serverUrl: string,
+  accessToken: string,
+  deviceId: string,
+  tuner: TunerHost,
+): Promise<TunerHost> {
+  const url = `${serverUrl}/LiveTv/TunerHosts`;
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeader(accessToken, deviceId),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(tuner),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to add tuner host: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+export async function getTunerHosts(
+  serverUrl: string,
+  accessToken: string,
+  deviceId: string,
+): Promise<TunerHost[]> {
+  // Jellyfin doesn't have a direct GET /LiveTv/TunerHosts endpoint
+  // We use GET /LiveTv/Info to get Live TV service information
+  // which may contain tuner data, but this requires admin access
+  const url = `${serverUrl}/LiveTv/Info`;
+  const response = await fetchWithTimeout(url, {
+    method: 'GET',
+    headers: getAuthHeader(accessToken, deviceId),
+  });
+
+  if (!response.ok) {
+    // If we can't get Live TV info, return empty array
+    // This may happen if user doesn't have admin access
+    console.log('[Jellyfin] Cannot get Live TV info - may require admin access');
+    return [];
+  }
+
+  // The LiveTv/Info endpoint doesn't directly return tuner hosts
+  // We would need to access the server configuration which requires admin access
+  // For now, return empty array - the app will manage IPTV locally
+  return [];
+}
+
+export async function deleteTunerHost(
+  serverUrl: string,
+  accessToken: string,
+  deviceId: string,
+  tunerId: string,
+): Promise<void> {
+  const url = `${serverUrl}/LiveTv/TunerHosts?id=${tunerId}`;
+  const response = await fetchWithTimeout(url, {
+    method: 'DELETE',
+    headers: getAuthHeader(accessToken, deviceId),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete tuner host: ${response.status}`);
+  }
+}
+
+export async function addListingProvider(
+  serverUrl: string,
+  accessToken: string,
+  deviceId: string,
+  provider: ListingProvider,
+): Promise<ListingProvider> {
+  const url = `${serverUrl}/LiveTv/ListingProviders`;
+  const response = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeader(accessToken, deviceId),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(provider),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to add listing provider: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+export async function getListingProviders(
+  _serverUrl: string,
+  _accessToken: string,
+  _deviceId: string,
+): Promise<ListingProvider[]> {
+  // Jellyfin doesn't have a direct GET /LiveTv/ListingProviders endpoint
+  // This requires accessing server configuration with admin access
+  // For now, return empty array - the app will manage EPG locally
+  console.log('[Jellyfin] Listing providers API not available - managing EPG locally');
+  return [];
+}
+
+export async function deleteListingProvider(
+  serverUrl: string,
+  accessToken: string,
+  deviceId: string,
+  providerId: string,
+): Promise<void> {
+  const url = `${serverUrl}/LiveTv/ListingProviders?id=${providerId}`;
+  const response = await fetchWithTimeout(url, {
+    method: 'DELETE',
+    headers: getAuthHeader(accessToken, deviceId),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete listing provider: ${response.status}`);
   }
 }

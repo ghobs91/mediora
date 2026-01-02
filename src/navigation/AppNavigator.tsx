@@ -12,6 +12,8 @@ import {
   PlayerScreen,
   ItemDetailsScreen,
   TMDBDetailsScreen,
+  LiveTVScreen,
+  LivePlayerScreen,
 } from '../screens';
 import { useResponsiveColumns } from '../hooks';
 import { RootStackParamList } from '../types';
@@ -30,6 +32,7 @@ function TopNav({ currentRoute }: TopNavProps) {
     { name: 'Home', route: 'Home', icon: 'home' },
     { name: 'TV Shows', route: 'TVShows', icon: 'tv' },
     { name: 'Movies', route: 'Movies', icon: 'film' },
+    { name: 'Live TV', route: 'LiveTV', icon: 'radio' },
     { name: 'Search', route: 'Search', icon: 'search' },
     { name: 'Settings', route: 'Settings', icon: 'settings' },
   ];
@@ -117,6 +120,15 @@ function SettingsWithNav() {
   );
 }
 
+function LiveTVWithNav() {
+  return (
+    <View style={styles.container}>
+      <TopNav currentRoute="LiveTV" />
+      <LiveTVScreen />
+    </View>
+  );
+}
+
 export function AppNavigator() {
   return (
     <NavigationContainer>
@@ -129,11 +141,19 @@ export function AppNavigator() {
         <Stack.Screen name="Home" component={HomeWithNav} />
         <Stack.Screen name="TVShows" component={TVShowsWithNav} />
         <Stack.Screen name="Movies" component={MoviesWithNav} />
+        <Stack.Screen name="LiveTV" component={LiveTVWithNav} />
         <Stack.Screen name="Search" component={SearchWithNav} />
         <Stack.Screen name="Settings" component={SettingsWithNav} />
         <Stack.Screen
           name="Player"
           component={PlayerScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="LivePlayer"
+          component={LivePlayerScreen}
           options={{
             animation: 'fade',
           }}

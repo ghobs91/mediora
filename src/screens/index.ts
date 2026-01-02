@@ -5,3 +5,5 @@ export { SettingsScreen } from './SettingsScreen';
 export { PlayerScreen } from './PlayerScreen';
 export { ItemDetailsScreen } from './ItemDetailsScreen';
 export { TMDBDetailsScreen } from './TMDBDetailsScreen';
+export { LiveTVScreen } from './LiveTVScreen';
+export { LivePlayerScreen } from './LivePlayerScreen';
