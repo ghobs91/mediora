@@ -636,6 +636,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(28, 28, 30, 0.95)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingTop: 48,
   },
   controls: {
     flexDirection: 'row',

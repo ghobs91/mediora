@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList, Text, StyleSheet, View } from 'react-native';
+import { FlatList, Text, StyleSheet, View, Platform } from 'react-native';
 import { MediaCard } from './MediaCard';
 import { useResponsiveColumns } from '../hooks';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
@@ -27,6 +27,9 @@ type MediaRowProps = JellyfinMediaRowProps | TMDBMediaRowProps;
 export function MediaRow(props: MediaRowProps) {
   const { title } = props;
   const { spacing } = useResponsiveColumns();
+  
+  // Sidebar is 220px wide, use consistent padding for content
+  const horizontalPadding = 48;
 
   if ('items' in props && props.items) {
     const { items, onItemPress, onItemRemove, onItemMarkWatched, getImageUrl } = props;
@@ -37,7 +40,7 @@ export function MediaRow(props: MediaRowProps) {
 
     return (
       <View style={styles.container}>
-        <Text style={[styles.title, { marginLeft: spacing }]}>{title}</Text>
+        <Text style={[styles.title, { marginLeft: horizontalPadding }]}>{title}</Text>
         <FlatList
           horizontal
           data={items}
@@ -52,7 +55,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: spacing - 8 }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - 8, paddingRight: 40 }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -69,7 +72,7 @@ export function MediaRow(props: MediaRowProps) {
 
     return (
       <View style={styles.container}>
-        <Text style={[styles.title, { marginLeft: spacing }]}>{title}</Text>
+        <Text style={[styles.title, { marginLeft: horizontalPadding }]}>{title}</Text>
         <FlatList
           horizontal
           data={tmdbItems}
@@ -81,7 +84,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingHorizontal: spacing - 8 }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - 8, paddingRight: 40 }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />

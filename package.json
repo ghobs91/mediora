@@ -6,10 +6,20 @@
     "android": "npx react-native run-android",
     "ios": "npx react-native run-ios",
     "ios-mobile": "npx react-native run-ios --scheme mediora-mobile",
+    "tvos": "npx react-native run-ios --scheme mediora --simulator 'Apple TV'",
     "macos": "xcodebuild -workspace ios/mediora.xcworkspace -scheme mediora-mobile -destination 'platform=macOS,variant=Mac Catalyst' build",
     "lint": "eslint .",
     "start": "npx react-native start",
-    "test": "jest"
+    "test": "jest",
+    "generate-icons": "./scripts/generate-all-icons.sh",
+    "generate-tvos-icons": "./scripts/generate-tvos-icons.sh",
+    "capture-screenshots": "./scripts/capture-screenshots.sh",
+    "fastlane:tvos:beta": "cd fastlane && bundle exec fastlane tvos beta",
+    "fastlane:tvos:release": "cd fastlane && bundle exec fastlane tvos release",
+    "fastlane:ios:beta": "cd fastlane && bundle exec fastlane ios beta",
+    "archive:tvos": "xcodebuild -workspace ios/mediora.xcworkspace -scheme mediora -destination 'generic/platform=tvOS' -archivePath build/Mediora-tvOS.xcarchive archive",
+    "archive:ios": "xcodebuild -workspace ios/mediora.xcworkspace -scheme mediora-mobile -destination 'generic/platform=iOS' -archivePath build/Mediora-iOS.xcarchive archive",
+    "validate": "./scripts/validate-submission.sh"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

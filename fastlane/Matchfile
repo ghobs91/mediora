@@ -1,0 +1,31 @@
+# Fastlane Match Configuration
+# Documentation: https://docs.fastlane.tools/actions/match/
+
+# Git repository to store certificates
+# Create a private repo and set the URL here
+# git_url("git@github.com:yourusername/mediora-certificates.git")
+
+# Storage mode (git, google_cloud, s3)
+storage_mode("git")
+
+# Type of profile (appstore, adhoc, development)
+type("appstore")
+
+# App identifiers to manage
+app_identifier(["com.mediora.app", "com.mediora.app.mobile"])
+
+# Your Apple Developer username
+# username("your-apple-id@example.com")
+
+# Team ID
+team_id("XTXZ3CYRPX")
+
+# Platform
+platform("tvos")
+
+# Keychain (for CI)
+# keychain_name("fastlane_keychain")
+# keychain_password(ENV["MATCH_KEYCHAIN_PASSWORD"])
+
+# Read-only mode (for CI builds that don't need to create new profiles)
+# readonly(true)

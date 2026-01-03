@@ -1,0 +1,12 @@
+Initial release of Mediora for Apple TV!
+
+• Connect to your Jellyfin media server
+• Browse your movie and TV show libraries  
+• Beautiful native Apple TV interface
+• Seamless video playback with resume support
+• Search across your entire media collection
+• TMDB integration for rich metadata
+• Live TV and EPG support
+• Sonarr and Radarr integration
+• iCloud sync for settings
+• Optimized for Siri Remote navigation

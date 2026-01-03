@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Video, { VideoRef } from 'react-native-video';
+import Video, { VideoRef, SelectedTrackType } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { LoadingScreen } from '../components';
 import { RootStackParamList } from '../types';
@@ -27,6 +27,9 @@ export function LivePlayerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<number | undefined>(undefined);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [availableTextTracks, setAvailableTextTracks] = useState<any[]>([]);
 
   const videoRef = useRef<VideoRef>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,6 +85,19 @@ export function LivePlayerScreen() {
     showControlsWithTimeout();
   };
 
+  const handleToggleSubtitles = () => {
+    if (!subtitlesEnabled && availableTextTracks.length > 0) {
+      // Enable first available subtitle track
+      setSelectedSubtitleTrack(0);
+      setSubtitlesEnabled(true);
+    } else {
+      // Disable subtitles
+      setSelectedSubtitleTrack(undefined);
+      setSubtitlesEnabled(false);
+    }
+    showControlsWithTimeout();
+  };
+
   const handleRetry = () => {
     setError(null);
     setIsLoading(true);
@@ -123,6 +139,11 @@ export function LivePlayerScreen() {
         paused={false}
         volume={isMuted ? 0 : volume}
         rate={1}
+        selectedTextTrack={selectedSubtitleTrack !== undefined ? { type: SelectedTrackType.INDEX, value: selectedSubtitleTrack } : undefined}
+        onTextTracks={(data) => {
+          console.log('[LivePlayer] Text tracks available:', data.textTracks);
+          setAvailableTextTracks(data.textTracks || []);
+        }}
         onLoad={() => {
           console.log('[LivePlayer] Stream loaded:', channelName);
           setIsLoading(false);
@@ -198,6 +219,19 @@ export function LivePlayerScreen() {
           {/* Bottom Controls */}
           <View style={styles.bottomContainer}>
             <View style={styles.controlRow}>
+              <TouchableOpacity
+                style={[styles.subtitleButton, !availableTextTracks.length && styles.disabledButton]}
+                onPress={handleToggleSubtitles}
+                disabled={!availableTextTracks.length}>
+                <Icon 
+                  name={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"} 
+                  size={24} 
+                  color={subtitlesEnabled ? "#e50914" : "#fff"} 
+                />
+                {subtitlesEnabled && (
+                  <Text style={styles.subtitleLabel}>CC</Text>
+                )}
+              </TouchableOpacity>
               <View style={styles.volumeControls}>
                 <TouchableOpacity 
                   onPress={handleToggleMute}
@@ -303,6 +337,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
+  },
+  subtitleButton: {
+    padding: 8,
+    marginRight: 16,
+    position: 'relative',
+  },
+  disabledButton: {
+    opacity: 0.3,
+  },
+  subtitleLabel: {
+    position: 'absolute',
+    bottom: -12,
+    alignSelf: 'center',
+    color: '#e50914',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   volumeControls: {
     flexDirection: 'row',

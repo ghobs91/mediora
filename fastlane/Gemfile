@@ -1,0 +1,14 @@
+# Gemfile for Fastlane
+# Run: bundle install
+
+source "https://rubygems.org"
+
+# Fastlane
+gem "fastlane", "~> 2.219"
+
+# Fastlane plugins
+plugins_path = File.join(File.dirname(__FILE__), 'fastlane', 'Pluginfile')
+eval_gemfile(plugins_path) if File.exist?(plugins_path)
+
+# CocoaPods (iOS dependencies)
+gem "cocoapods", "~> 1.14"

@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   contentContainer: {
-    paddingTop: 8,
+    paddingTop: 48,
   },
   searchContainer: {
     paddingHorizontal: 48,

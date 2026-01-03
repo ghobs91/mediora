@@ -659,6 +659,14 @@ export class JellyfinService {
     return `${this.serverUrl}/Items/${itemId}/Images/${imageType}?${queryString}`;
   }
 
+  getSubtitleUrl(itemId: string, mediaSourceId: string, streamIndex: number, format: string = 'vtt'): string {
+    const queryString = buildQueryString({
+      api_key: this.accessToken || '',
+    });
+    
+    return `${this.serverUrl}/Videos/${itemId}/${mediaSourceId}/Subtitles/${streamIndex}/Stream.${format}?${queryString}`;
+  }
+
   // Playback reporting
   async reportPlaybackStart(
     itemId: string,

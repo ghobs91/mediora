@@ -1089,7 +1089,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   contentContainer: {
-    paddingTop: 8,
+    paddingTop: 48,
   },
   discoveryContainer: {
     marginBottom: 24,
@@ -1154,7 +1154,7 @@ const styles = StyleSheet.create({
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 48,
-    paddingTop: 20,
+    paddingTop: 0,
     marginBottom: 36,
   },
   tab: {
@@ -1165,6 +1165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabTitleText: {
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.3,

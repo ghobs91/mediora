@@ -1,0 +1,42 @@
+# Fastlane Deliver Configuration for App Store Metadata
+# Documentation: https://docs.fastlane.tools/actions/deliver/
+
+# App Store Connect Metadata Configuration
+
+# Price Tier (0 = Free)
+price_tier(0)
+
+# Automatically submit for review after upload
+submit_for_review(false)
+
+# Automatic release after approval
+automatic_release(false)
+
+# Skip binary upload (metadata only)
+# skip_binary_upload(true)
+
+# Skip screenshots upload
+# skip_screenshots(true)
+
+# Skip metadata upload
+# skip_metadata(true)
+
+# App Rating Configuration
+app_rating_config_path("./fastlane/metadata/app_rating.json")
+
+# Phased release (gradual rollout)
+phased_release(false)
+
+# Precheck: warn about potential issues before submission
+precheck_include_in_app_purchases(false)
+run_precheck_before_submit(true)
+
+# Submit for review options
+submission_information({
+  add_id_info_uses_idfa: false,
+  content_rights_has_rights: true,
+  content_rights_contains_third_party_content: false,
+  export_compliance_uses_encryption: true,
+  export_compliance_encryption_updated: false,
+  export_compliance_is_exempt: true
+})

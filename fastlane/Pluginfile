@@ -1,0 +1,8 @@
+# Fastlane Plugins
+# Loaded automatically in Gemfile
+
+# Versioning plugin
+# gem 'fastlane-plugin-versioning'
+
+# Badge plugin (adds version badge to icons)
+# gem 'fastlane-plugin-badge'
