@@ -1,9 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { View, StyleSheet } from 'react-native';
 import {
   HomeScreen,
   LibraryScreen,
@@ -15,71 +13,19 @@ import {
   LiveTVScreen,
   LivePlayerScreen,
 } from '../screens';
-import { useResponsiveColumns } from '../hooks';
+import { Sidebar } from '../components/Sidebar';
 import { RootStackParamList } from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-interface TopNavProps {
-  currentRoute: string;
-}
-
-function TopNav({ currentRoute }: TopNavProps) {
-  const navigation = useNavigation<any>();
-  const [focusedItem, setFocusedItem] = React.useState<string | null>(null);
-
-  const navItems = [
-    { name: 'Home', route: 'Home', icon: 'home' },
-    { name: 'TV Shows', route: 'TVShows', icon: 'tv' },
-    { name: 'Movies', route: 'Movies', icon: 'film' },
-    { name: 'Live TV', route: 'LiveTV', icon: 'radio' },
-    { name: 'Search', route: 'Search', icon: 'search' },
-    { name: 'Settings', route: 'Settings', icon: 'settings' },
-  ];
-
-  const { numColumns, windowWidth } = useResponsiveColumns();
-
-  return (
-    <View style={styles.topNav}>
-      <Text style={styles.logo}>Mediora</Text>
-      <View style={styles.navItems}>
-        {navItems.map((item, index) => (
-          <TouchableOpacity
-            key={item.route}
-            style={[
-              styles.navItem,
-              currentRoute === item.route && styles.navItemActive,
-              focusedItem === item.route && currentRoute !== item.route && styles.navItemFocused,
-            ]}
-            onPress={() => navigation.navigate(item.route as any)}
-            onFocus={() => setFocusedItem(item.route)}
-            onBlur={() => setFocusedItem(null)}
-            activeOpacity={0.7}
-            focusable={true}
-            hasTVPreferredFocus={index === 0}>
-            <Icon
-              name={item.icon}
-              size={26}
-              color={currentRoute === item.route ? '#fff' : '#888'}
-              style={styles.navIcon}
-            />
-            <Text style={[
-              styles.navText,
-              currentRoute === item.route && styles.navTextActive,
-            ]}>{item.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-// Wrapper components that include the top nav
+// Wrapper components that include the sidebar
 function HomeWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="Home" />
-      <HomeScreen />
+      <Sidebar currentRoute="Home" />
+      <View style={styles.content}>
+        <HomeScreen />
+      </View>
     </View>
   );
 }
@@ -87,8 +33,10 @@ function HomeWithNav() {
 function TVShowsWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="TVShows" />
-      <LibraryScreen filterType="tvshows" />
+      <Sidebar currentRoute="TVShows" />
+      <View style={styles.content}>
+        <LibraryScreen filterType="tvshows" />
+      </View>
     </View>
   );
 }
@@ -96,8 +44,10 @@ function TVShowsWithNav() {
 function MoviesWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="Movies" />
-      <LibraryScreen filterType="movies" />
+      <Sidebar currentRoute="Movies" />
+      <View style={styles.content}>
+        <LibraryScreen filterType="movies" />
+      </View>
     </View>
   );
 }
@@ -105,8 +55,10 @@ function MoviesWithNav() {
 function SearchWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="Search" />
-      <SearchScreen />
+      <Sidebar currentRoute="Search" />
+      <View style={styles.content}>
+        <SearchScreen />
+      </View>
     </View>
   );
 }
@@ -114,8 +66,10 @@ function SearchWithNav() {
 function SettingsWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="Settings" />
-      <SettingsScreen />
+      <Sidebar currentRoute="Settings" />
+      <View style={styles.content}>
+        <SettingsScreen />
+      </View>
     </View>
   );
 }
@@ -123,8 +77,10 @@ function SettingsWithNav() {
 function LiveTVWithNav() {
   return (
     <View style={styles.container}>
-      <TopNav currentRoute="LiveTV" />
-      <LiveTVScreen />
+      <Sidebar currentRoute="LiveTV" />
+      <View style={styles.content}>
+        <LiveTVScreen />
+      </View>
     </View>
   );
 }
@@ -137,6 +93,7 @@ export function AppNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#000' },
+          animation: 'none',
         }}>
         <Stack.Screen name="Home" component={HomeWithNav} />
         <Stack.Screen name="TVShows" component={TVShowsWithNav} />
@@ -180,74 +137,11 @@ export function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    flexDirection: 'row',
     backgroundColor: '#000',
   },
-  topNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 48,
-    paddingVertical: 18,
-    backgroundColor: 'rgba(28, 28, 30, 0.72)',
-    backdropFilter: 'blur(20px)',
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-    zIndex: 1000,
-  },
-  logo: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#fff',
-    marginRight: 72,
-    letterSpacing: 0.8,
-  },
-  navItems: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: 'transparent',
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  navItemActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'transparent',
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-  },
-  navItemFocused: {
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    borderWidth: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    transform: [{ scale: 1.05 }],
-  },
-  navIcon: {
-    marginRight: 8,
-  },
-  navText: {
-    fontSize: 17,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  navTextActive: {
-    color: 'rgba(255, 255, 255, 0.95)',
-    fontWeight: '700',
+  content: {
+    flex: 1,
+    backgroundColor: '#000',
   },
 });

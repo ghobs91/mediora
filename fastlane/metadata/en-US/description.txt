@@ -1,0 +1,36 @@
+Mediora is a powerful media client that connects to your Jellyfin media server, allowing you to stream your personal media collection on your Apple TV.
+
+KEY FEATURES:
+
+• JELLYFIN INTEGRATION
+Connect to your Jellyfin server and access your entire media library. Browse movies, TV shows, and more with a beautiful, native Apple TV interface.
+
+• OPTIMIZED FOR APPLE TV
+Experience your media with an interface designed specifically for the big screen. Navigate effortlessly using the Siri Remote with smooth animations and intuitive controls.
+
+• SEAMLESS PLAYBACK
+Enjoy high-quality video playback with support for various formats. Resume watching from where you left off across all your devices with continue watching support.
+
+• SMART SEARCH
+Quickly find what you want to watch with powerful search functionality across your entire media library.
+
+• TMDB INTEGRATION
+Get rich metadata, artwork, and information about your movies and TV shows powered by The Movie Database (TMDB).
+
+• LIVE TV & EPG (IPTV)
+Watch live TV channels and browse the electronic program guide directly on your Apple TV.
+
+• SONARR & RADARR SUPPORT
+Manage your media collection with Sonarr and Radarr integration. Add new shows and movies to your library right from the app.
+
+• iCLOUD SYNC
+Keep your settings and preferences synced across all your Apple devices with iCloud.
+
+• PRIVACY FOCUSED
+Your data stays on your device. We don't collect personal information or track your viewing habits.
+
+REQUIREMENTS:
+• A Jellyfin media server (visit jellyfin.org)
+• Network access to your server (local or remote)
+
+Note: Mediora is a client application only. You need to set up your own Jellyfin server with your personal media collection. Mediora does not provide any media content.

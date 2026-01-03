@@ -1,0 +1,105 @@
+name: tvOS App Store Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: 'Upload to TestFlight'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  build-tvos:
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: fastlane
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 'latest-stable'
+
+      - name: Import Certificates
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.CERTIFICATES_PASSWORD }}
+
+      - name: Install Provisioning Profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.TVOS_PROVISIONING_PROFILE }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/tvos.mobileprovision
+
+      - name: Build tvOS Archive
+        run: |
+          xcodebuild -workspace ios/mediora.xcworkspace \
+            -scheme mediora \
+            -destination 'generic/platform=tvOS' \
+            -archivePath $PWD/build/Mediora-tvOS.xcarchive \
+            clean archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/Mediora-tvOS.xcarchive \
+            -exportPath $PWD/build \
+            -exportOptionsPlist ios/ExportOptions-tvOS.plist
+
+      - name: Upload to TestFlight
+        if: ${{ github.event.inputs.upload_to_testflight != 'false' }}
+        run: |
+          xcrun altool --upload-app \
+            --type tvos \
+            --file $PWD/build/Mediora.ipa \
+            --apiKey ${{ secrets.APP_STORE_API_KEY_ID }} \
+            --apiIssuer ${{ secrets.APP_STORE_API_ISSUER }}
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mediora-tvOS-IPA
+          path: build/*.ipa
+          retention-days: 30
+
+  notify:
+    needs: build-tvos
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify Success
+        if: needs.build-tvos.result == 'success'
+        run: echo "✅ tvOS build completed successfully!"
+        
+      - name: Notify Failure
+        if: needs.build-tvos.result == 'failure'
+        run: echo "❌ tvOS build failed!"

@@ -1,0 +1,1 @@
+jellyfin,media,streaming,plex,movies,tv,shows,emby,kodi,video,player,home,theater,server,apple,tv

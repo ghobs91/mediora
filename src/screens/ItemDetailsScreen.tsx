@@ -4,13 +4,17 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen, CastList } from '../components';
-import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails } from '../types';
+import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails, SonarrEpisode, SonarrQueueItem } from '../types';
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, 'ItemDetails'>;
 
 interface EnrichedEpisode extends TMDBEpisode {
   jellyfinItem?: JellyfinItem;
   isAvailable: boolean;
+  sonarrEpisode?: SonarrEpisode;
+  hasFile?: boolean;
+  isDownloading?: boolean;
+  downloadProgress?: number;
 }
 
 interface EnrichedSeason {
@@ -51,6 +55,11 @@ export function ItemDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [cast, setCast] = useState<TMDBCast[]>([]);
+  
+  // Sonarr State
+  const [sonarrEpisodes, setSonarrEpisodes] = useState<SonarrEpisode[]>([]);
+  const [sonarrSeriesId, setSonarrSeriesId] = useState<number | null>(null);
+  const [sonarrQueue, setSonarrQueue] = useState<SonarrQueueItem[]>([]);
 
   const isMovie = initialItem.Type === 'Movie';
   const isSeriesOrEpisode = initialItem.Type === 'Series' || initialItem.Type === 'Episode';
@@ -254,10 +263,25 @@ export function ItemDetailsScreen() {
         const jellyfinEp = jfEpisodes.find(
           jfEp => jfEp.ParentIndexNumber === season.seasonNumber && jfEp.IndexNumber === tmdbEp.episode_number
         );
+        
+        // Find Sonarr episode data
+        const sonarrEp = sonarrEpisodes.find(
+          sEp => sEp.seasonNumber === season.seasonNumber && sEp.episodeNumber === tmdbEp.episode_number
+        );
+        
+        // Check if episode is downloading
+        const queueItem = sonarrQueue.find(
+          q => q.episodeId === sonarrEp?.id
+        );
+        
         return {
           ...tmdbEp,
           jellyfinItem: jellyfinEp,
           isAvailable: !!jellyfinEp,
+          sonarrEpisode: sonarrEp,
+          hasFile: sonarrEp?.hasFile || false,
+          isDownloading: !!queueItem,
+          downloadProgress: queueItem ? (queueItem.size - queueItem.sizeleft) / queueItem.size : undefined,
         };
       });
 
@@ -403,17 +427,46 @@ export function ItemDetailsScreen() {
     }));
   };
 
-  const handlePlay = () => {
+  const handlePlay = async () => {
     let targetId = initialItem.Id; // Default to initial Item (works for Movie or specific Episode passed)
 
-    if (selectedEpisode && selectedEpisode.jellyfinItem) {
-      targetId = selectedEpisode.jellyfinItem.Id;
-    }
-
-    // Check availablity
-    if (selectedEpisode && !selectedEpisode.isAvailable) {
-      if (selectedSeason) handleRequestSeason(selectedSeason.seasonNumber);
-      return;
+    if (selectedEpisode) {
+      // If in Jellyfin, play from Jellyfin
+      if (selectedEpisode.jellyfinItem) {
+        targetId = selectedEpisode.jellyfinItem.Id;
+      }
+      // If file exists in Sonarr but not in Jellyfin, try to find it
+      else if (selectedEpisode.hasFile && jellyfin && seriesItem) {
+        try {
+          // Refresh Jellyfin library to pick up new files
+          Alert.alert('Syncing Library', 'Checking Jellyfin for new episodes...');
+          
+          // Fetch fresh episode list from Jellyfin
+          const freshEpisodes = await jellyfin.getEpisodes(seriesItem.Id);
+          const foundEp = freshEpisodes.find(
+            ep => ep.ParentIndexNumber === selectedEpisode.season_number && 
+                  ep.IndexNumber === selectedEpisode.episode_number
+          );
+          
+          if (foundEp) {
+            // Found it! Play it
+            targetId = foundEp.Id;
+          } else {
+            Alert.alert(
+              'File Not Yet Scanned',
+              'Episode file exists in Sonarr but hasn\'t been scanned by Jellyfin yet. Please wait for Jellyfin to scan the library.'
+            );
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to refresh episode list:', e);
+        }
+      }
+      // Not available at all
+      else if (!selectedEpisode.isAvailable && !selectedEpisode.hasFile) {
+        if (selectedSeason) handleRequestSeason(selectedSeason.seasonNumber);
+        return;
+      }
     }
 
     // @ts-ignore
@@ -488,19 +541,30 @@ export function ItemDetailsScreen() {
     status: string;
   } | null>(null);
 
-  // Poll for progress if connected to Sonarr
+  // Fetch Sonarr data and poll for progress
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    const checkProgress = async () => {
+    
+    const loadSonarrData = async () => {
       if (!sonarr || !isSonarrConnected || !seriesItem?.ProviderIds?.Tvdb) return;
 
       try {
-        const sonarrSeries = await sonarr.checkSeriesExists(parseInt(seriesItem.ProviderIds.Tvdb));
+        const tvdbId = parseInt(seriesItem.ProviderIds.Tvdb);
+        const sonarrSeries = await sonarr.checkSeriesExists(tvdbId);
+        
         if (sonarrSeries?.id) {
+          setSonarrSeriesId(sonarrSeries.id);
+          
+          // Fetch episodes
+          const episodes = await sonarr.getEpisodesBySeriesId(sonarrSeries.id);
+          setSonarrEpisodes(episodes);
+          
+          // Fetch queue
           const queue = await sonarr.getQueueBySeriesId(sonarrSeries.id);
+          setSonarrQueue(queue);
 
+          // Aggregate progress for the overall series
           if (queue.length > 0) {
-            // Aggregate progress for the season/series
             const totalSize = queue.reduce((acc, item) => acc + item.size, 0);
             const totalLeft = queue.reduce((acc, item) => acc + item.sizeleft, 0);
             const percent = totalSize > 0 ? ((totalSize - totalLeft) / totalSize) * 100 : 0;
@@ -508,7 +572,7 @@ export function ItemDetailsScreen() {
             setDownloadProgress({
               percent,
               sizeLeft: totalLeft,
-              timeLeft: queue[0].timeleft, // Approximate
+              timeLeft: queue[0].timeleft,
               status: queue[0].status
             });
           } else {
@@ -516,19 +580,26 @@ export function ItemDetailsScreen() {
           }
         }
       } catch (e) {
-        // Silent fail for polling
+        console.error('Failed to load Sonarr data:', e);
       }
     };
 
-    if (sonarr && isSonarrConnected) {
-      checkProgress();
-      interval = setInterval(checkProgress, 5000);
+    if (sonarr && isSonarrConnected && seriesItem) {
+      loadSonarrData();
+      interval = setInterval(loadSonarrData, 10000); // Refresh every 10 seconds
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [sonarr, isSonarrConnected, seriesItem]);
+  
+  // Reload season episodes when Sonarr data changes
+  useEffect(() => {
+    if (selectedSeason && tmdbDetails?.id && sonarrEpisodes.length > 0) {
+      loadSeasonEpisodes(selectedSeason, tmdbDetails.id, jellyfinEpisodes);
+    }
+  }, [sonarrEpisodes, sonarrQueue]);
 
   // ... (Init logic remains similar, mostly UI changes)
 
@@ -539,6 +610,12 @@ export function ItemDetailsScreen() {
     if (!imageUrl && item.jellyfinItem && jellyfin?.getImageUrl) {
       imageUrl = jellyfin.getImageUrl(item.jellyfinItem.Id, 'Primary', { maxWidth: 320 });
     }
+    
+    // Determine episode status
+    const inJellyfin = !!item.jellyfinItem;
+    const hasFileInSonarr = item.hasFile && !inJellyfin;
+    const isDownloading = item.isDownloading;
+    const canPlay = inJellyfin || hasFileInSonarr;
 
     return (
       <TouchableOpacity
@@ -546,7 +623,7 @@ export function ItemDetailsScreen() {
           styles.episodeCard,
           { width: episodeWidth },
           isSelected && styles.episodeCardSelected,
-          !item.isAvailable && styles.episodeCardMissing
+          !canPlay && !isDownloading && styles.episodeCardMissing
         ]}
         onPress={() => handleEpisodeSelect(item)}
         activeOpacity={0.7}
@@ -554,28 +631,51 @@ export function ItemDetailsScreen() {
         <View style={[
           styles.episodeImageContainer,
           { width: episodeWidth, height: episodeHeight },
-          !item.isAvailable && styles.episodeImageMissing
+          !canPlay && !isDownloading && styles.episodeImageMissing
         ]}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={[styles.episodeThumbnail, !item.isAvailable && styles.episodeThumbnailMissing]} />
+            <Image source={{ uri: imageUrl }} style={[styles.episodeThumbnail, !canPlay && !isDownloading && styles.episodeThumbnailMissing]} />
           ) : (
             <View style={styles.episodePlaceholder}>
               <Icon name="tv-outline" size={30} color="rgba(255,255,255,0.3)" />
             </View>
           )}
+          
+          {/* Download Progress Indicator */}
+          {isDownloading && item.downloadProgress !== undefined && (
+            <View style={styles.episodeDownloadOverlay}>
+              <View style={styles.episodeProgressBar}>
+                <View style={[styles.episodeProgressFill, { width: `${item.downloadProgress * 100}%` }]} />
+              </View>
+              <Text style={styles.episodeDownloadText}>
+                {Math.round(item.downloadProgress * 100)}%
+              </Text>
+            </View>
+          )}
+          
+          {/* Status Badges */}
           {item.jellyfinItem?.UserData?.Played && (
             <View style={styles.watchedIndicator}>
               <Icon name="checkmark-circle" size={24} color="#FFD700" />
             </View>
           )}
+          
+          {hasFileInSonarr && (
+            <View style={styles.sonarrBadge}>
+              <Icon name="cloud-done" size={16} color="#4caf50" />
+            </View>
+          )}
         </View>
         <View style={styles.episodeCardContent}>
-          <Text style={[styles.episodeCardTitle, !item.isAvailable && styles.textMissing]} numberOfLines={1}>
+          <Text style={[styles.episodeCardTitle, !canPlay && !isDownloading && styles.textMissing]} numberOfLines={1}>
             {item.episode_number}. {item.name}
           </Text>
-          <Text style={[styles.episodeCardOverview, !item.isAvailable && styles.textMissing]} numberOfLines={2}>
+          <Text style={[styles.episodeCardOverview, !canPlay && !isDownloading && styles.textMissing]} numberOfLines={2}>
             {item.overview}
           </Text>
+          {hasFileInSonarr && (
+            <Text style={styles.sonarrStatusText}>Available in Sonarr</Text>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -941,6 +1041,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 12,
     padding: 2,
+  },
+  episodeDownloadOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    padding: 8,
+    alignItems: 'center',
+  },
+  episodeProgressBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  episodeProgressFill: {
+    height: '100%',
+    backgroundColor: '#4caf50',
+  },
+  episodeDownloadText: {
+    color: '#4caf50',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  sonarrBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  sonarrStatusText: {
+    color: '#4caf50',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600',
   },
   logoImage: {
     width: 400,

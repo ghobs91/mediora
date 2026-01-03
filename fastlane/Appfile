@@ -1,0 +1,24 @@
+# Fastlane Appfile for Mediora
+# Documentation: https://docs.fastlane.tools/advanced/#appfile
+
+# App Identifiers
+app_identifier("com.mediora.app") # The bundle identifier of your tvOS app
+
+# Apple ID Configuration
+# Uncomment and fill in your Apple ID email
+# apple_id("your-apple-id@example.com")
+
+# Team ID - Replace with your actual team ID
+team_id("XTXZ3CYRPX")
+
+# App Store Connect Team ID (may be different from development team)
+# itc_team_id("YOUR_ITC_TEAM_ID")
+
+# For multiple apps, use a block
+for_platform :tvos do
+  app_identifier("com.mediora.app")
+end
+
+for_platform :ios do
+  app_identifier("com.mediora.app.mobile")
+end

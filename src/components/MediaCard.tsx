@@ -25,6 +25,8 @@ interface MediaCardProps {
   size?: 'small' | 'medium' | 'large' | 'xlarge';
   width?: number;
   height?: number;
+  downloadProgress?: number; // 0-1 for active downloads
+  isDownloading?: boolean;
 }
 
 
@@ -40,6 +42,8 @@ export function MediaCard({
   size = 'medium',
   width: customWidth,
   height: customHeight,
+  downloadProgress,
+  isDownloading,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -167,6 +171,26 @@ export function MediaCard({
             <View style={{ flex: 1 - (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) }} />
           </View>
         ) : null}
+        {isDownloading && downloadProgress != null && (
+          <View style={styles.downloadProgressContainer}>
+            <View style={styles.downloadProgressBackground}>
+              <View
+                style={[
+                  styles.downloadProgressBar,
+                  {
+                    width: `${Math.round(downloadProgress * 100)}%`,
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.downloadBadge}>
+              <Icon name="arrow-down-circle" size={12} color="#fff" />
+              <Text style={styles.downloadText}>
+                {Math.round(downloadProgress * 100)}%
+              </Text>
+            </View>
+          </View>
+        )}
         {onRemove && isFocused && (
           <TouchableOpacity
             style={styles.removeButton}
@@ -261,6 +285,36 @@ const styles = StyleSheet.create({
     height: 5,
     backgroundColor: 'rgba(10, 132, 255, 0.9)',
     borderRadius: 5,
+  },
+  downloadProgressContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  downloadProgressBackground: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  downloadProgressBar: {
+    height: 6,
+    backgroundColor: '#4caf50',
+    borderRadius: 3,
+  },
+  downloadBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  downloadText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   removeButton: {
     position: 'absolute',

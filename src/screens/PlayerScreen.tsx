@@ -9,9 +9,10 @@ import {
   Platform,
   Modal,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Video, { OnProgressData, VideoRef } from 'react-native-video';
+import Video, { OnProgressData, VideoRef, SelectedTrackType } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
@@ -38,6 +39,7 @@ export function PlayerScreen() {
   const [streamAttempt, setStreamAttempt] = useState<'hls' | 'transcoded'>('hls');
   const [isRetrying, setIsRetrying] = useState(false);
   const [progressBarWidth, setProgressBarWidth] = useState(0);
+  const [isBuffering, setIsBuffering] = useState(true);
 
   // Advanced Controls State
   const [isFavorite, setIsFavorite] = useState(false);
@@ -45,6 +47,7 @@ export function PlayerScreen() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [episodes, setEpisodes] = useState<JellyfinItem[]>([]);
   const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<number | undefined>(undefined);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [isPiP, setIsPiP] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -52,6 +55,7 @@ export function PlayerScreen() {
   const [showSubtitles, setShowSubtitles] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
 
@@ -243,6 +247,32 @@ export function PlayerScreen() {
     }
   };
 
+  const handleToggleSubtitles = () => {
+    const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
+    
+    if (subtitleTracks.length === 0) {
+      return; // No subtitles available
+    }
+
+    if (!subtitlesEnabled) {
+      // Enable subtitles with the first available track or default track
+      const defaultTrack = subtitleTracks.find(track => track.IsDefault) || subtitleTracks[0];
+      setSelectedSubtitleTrack(defaultTrack.Index);
+      setSubtitlesEnabled(true);
+      console.log('[PlayerScreen] Subtitles enabled, track:', defaultTrack.DisplayTitle || defaultTrack.Language);
+    } else {
+      // Disable subtitles
+      setSelectedSubtitleTrack(undefined);
+      setSubtitlesEnabled(false);
+      console.log('[PlayerScreen] Subtitles disabled');
+    }
+    showControlsWithTimeout();
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(Math.max(0, Math.min(1, newVolume)));
+  };
+
   const handleProgressPress = (event: any) => {
 
     if (progressBarWidth === 0 || duration === 0) return;
@@ -292,8 +322,18 @@ export function PlayerScreen() {
   };
 
   const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
+  const hasSubtitles = subtitleTracks.length > 0;
+  const currentSubtitleTrack = subtitleTracks.find(track => track.Index === selectedSubtitleTrack);
   const castList = item?.People || [];
   const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  // Build text tracks for external subtitles
+  const textTracks = subtitleTracks.map(track => ({
+    title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
+    language: track.Language || 'und',
+    type: 'text/vtt' as const,
+    uri: jellyfin?.getSubtitleUrl(itemId, playbackInfo?.MediaSources[0]?.Id || '', track.Index) || '',
+  }));
 
   const currentEpisodeIndex = episodes.findIndex(e => e.Id === item?.Id);
   const hasPrevious = currentEpisodeIndex > 0;
@@ -361,21 +401,33 @@ export function PlayerScreen() {
         paused={!isPlaying}
         volume={volume}
         rate={playbackRate}
-        selectedTextTrack={selectedSubtitleTrack !== undefined ? { type: 'index', value: selectedSubtitleTrack } : undefined}
+        textTracks={textTracks}
+        selectedTextTrack={
+          subtitlesEnabled && selectedSubtitleTrack !== undefined 
+            ? { type: SelectedTrackType.INDEX, value: subtitleTracks.findIndex(t => t.Index === selectedSubtitleTrack) } 
+            : { type: SelectedTrackType.DISABLED }
+        }
         onProgress={handleProgress}
+        onLoadStart={() => {
+          console.log('[PlayerScreen] Video load started');
+          setIsBuffering(true);
+        }}
         onLoad={(data) => {
           console.log('[PlayerScreen] Video loaded, duration:', data.duration);
           handleLoad(data);
+          setIsBuffering(false);
           // Start auto-hide timer for controls
           showControlsWithTimeout();
         }}
         onReadyForDisplay={() => {
           console.log('[PlayerScreen] Video ready for display');
+          setIsBuffering(false);
           // Ensure controls auto-hide after video is ready
           showControlsWithTimeout();
         }}
         onBuffer={(data) => {
           console.log('[PlayerScreen] Buffering:', data.isBuffering);
+          setIsBuffering(data.isBuffering);
         }}
         onEnd={() => {
           console.log('[PlayerScreen] Video ended');
@@ -429,6 +481,14 @@ export function PlayerScreen() {
           setError(errorMessage);
         }}
       />
+
+      {/* Buffering Indicator */}
+      {isBuffering && (
+        <View style={styles.bufferingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.bufferingText}>Buffering...</Text>
+        </View>
+      )}
 
       {showControls && (
         <Animated.View
@@ -504,20 +564,59 @@ export function PlayerScreen() {
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.bottomIconButton}
-                  onPress={() => setShowSubtitles(true)}>
-                  <Icon name="closed-captions-outline" size={22} color="#fff" />
+                  style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
+                  onPress={handleToggleSubtitles}
+                  disabled={!hasSubtitles}>
+                  <Icon 
+                    name={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"} 
+                    size={22} 
+                    color={subtitlesEnabled ? "#e50914" : "#fff"} 
+                  />
+                  {subtitlesEnabled && currentSubtitleTrack && (
+                    <Text style={styles.subtitleLabel}>
+                      {currentSubtitleTrack.Language?.substring(0, 2).toUpperCase() || 'CC'}
+                    </Text>
+                  )}
                 </TouchableOpacity>
-                <View style={styles.volumeRow}>
-                  <TouchableOpacity onPress={() => setVolume(Math.max(0, volume - 0.1))}>
-                    <Icon name="volume-mute-outline" size={20} color="#fff" />
+                <TouchableOpacity
+                  style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
+                  onPress={() => setShowSubtitles(true)}
+                  disabled={!hasSubtitles}>
+                  <Icon name="list-outline" size={22} color="#fff" />
+                </TouchableOpacity>
+                <View>
+                  <TouchableOpacity
+                    style={styles.bottomIconButton}
+                    onPress={() => {
+                      setShowVolumeSlider(!showVolumeSlider);
+                      showControlsWithTimeout();
+                    }}>
+                    <Icon 
+                      name={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"} 
+                      size={22} 
+                      color="#fff" 
+                    />
                   </TouchableOpacity>
-                  <View style={styles.volumeTrack}>
-                    <View style={[styles.volumeLevel, { width: `${volume * 100}%` }]} />
-                  </View>
-                  <TouchableOpacity onPress={() => setVolume(Math.min(1, volume + 0.1))}>
-                    <Icon name="volume-high-outline" size={20} color="#fff" />
-                  </TouchableOpacity>
+                  {showVolumeSlider && showControls && (
+                    <View style={styles.volumeSliderPopup}>
+                      <TouchableOpacity 
+                        style={styles.volumeIconTop}
+                        onPress={() => handleVolumeChange(1)}>
+                        <Icon name="volume-high" size={18} color="#fff" />
+                      </TouchableOpacity>
+                      <View style={styles.volumeSliderContainer}>
+                        <View style={styles.volumeSliderTrack}>
+                          <View style={[styles.volumeSliderFill, { height: `${volume * 100}%` }]} />
+                        </View>
+                      </View>
+                      <TouchableOpacity 
+                        style={styles.volumeIconBottom}
+                        onPress={() => handleVolumeChange(0)}>
+                        <Icon name="volume-mute" size={18} color="#fff" />
+                      </TouchableOpacity>
+                      <Text style={styles.volumePercentage}>{Math.round(volume * 100)}%</Text>
+                    </View>
+                  )}
                 </View>
                 <TouchableOpacity
                   style={styles.bottomIconButton}
@@ -565,16 +664,28 @@ export function PlayerScreen() {
         visible={showSubtitles}
         title="Subtitles"
         onClose={() => setShowSubtitles(false)}
-        data={subtitleTracks}
+        data={[{ Index: -1, DisplayTitle: 'Off', Type: 'Subtitle' as const }, ...subtitleTracks]}
         keyExtractor={(item) => item.Index.toString()}
         renderItem={({ item: track }) => (
           <TouchableOpacity
-            style={[styles.modalItem, selectedSubtitleTrack === track.Index && styles.modalItemActive]}
+            style={[
+              styles.modalItem, 
+              (track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index) && styles.modalItemActive
+            ]}
             onPress={() => {
-              setSelectedSubtitleTrack(track.Index);
+              if (track.Index === -1) {
+                setSelectedSubtitleTrack(undefined);
+                setSubtitlesEnabled(false);
+              } else {
+                setSelectedSubtitleTrack(track.Index);
+                setSubtitlesEnabled(true);
+              }
               setShowSubtitles(false);
             }}>
-            <Text style={[styles.modalItemText, selectedSubtitleTrack === track.Index && { color: '#000' }]}>
+            <Text style={[
+              styles.modalItemText, 
+              (track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index) && { color: '#000' }
+            ]}>
               {track.DisplayTitle || track.Language || `Track ${track.Index}`}
             </Text>
           </TouchableOpacity>
@@ -746,6 +857,19 @@ const styles = StyleSheet.create({
     width,
     height,
   },
+  bufferingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  bufferingText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+    fontWeight: '500',
+  },
   controlsOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -806,6 +930,18 @@ const styles = StyleSheet.create({
   },
   bottomIconButton: {
     padding: 4,
+    position: 'relative',
+  },
+  disabledButton: {
+    opacity: 0.3,
+  },
+  subtitleLabel: {
+    position: 'absolute',
+    bottom: -12,
+    alignSelf: 'center',
+    color: '#e50914',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   progressSection: {
     flexDirection: 'row',
@@ -937,6 +1073,51 @@ const styles = StyleSheet.create({
   personRole: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
+  },
+  volumeSliderPopup: {
+    position: 'absolute',
+    bottom: 40,
+    left: '50%',
+    marginLeft: -30,
+    width: 60,
+    height: 200,
+    backgroundColor: 'rgba(30, 30, 30, 0.95)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  volumeIconTop: {
+    padding: 4,
+  },
+  volumeIconBottom: {
+    padding: 4,
+  },
+  volumeSliderContainer: {
+    flex: 1,
+    width: 6,
+    marginVertical: 8,
+    justifyContent: 'flex-end',
+  },
+  volumeSliderTrack: {
+    width: 6,
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  volumeSliderFill: {
+    width: '100%',
+    backgroundColor: '#fff',
+  },
+  volumePercentage: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
 

@@ -1,0 +1,158 @@
+# Fastlane configuration for Mediora
+# Documentation: https://docs.fastlane.tools
+
+default_platform(:tvos)
+
+# Constants
+TVOS_SCHEME = "mediora"
+IOS_SCHEME = "mediora-mobile"
+WORKSPACE = "ios/mediora.xcworkspace"
+
+platform :tvos do
+  desc "Build and upload tvOS app to TestFlight"
+  lane :beta do
+    setup_ci if ENV['CI']
+    
+    # Increment build number
+    increment_build_number(
+      xcodeproj: "ios/mediora.xcodeproj"
+    )
+    
+    # Build the app
+    build_app(
+      workspace: WORKSPACE,
+      scheme: TVOS_SCHEME,
+      destination: "generic/platform=tvOS",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "Mediora-tvOS.ipa"
+    )
+    
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      apple_id: ENV['APP_STORE_CONNECT_APP_ID_TVOS']
+    )
+  end
+
+  desc "Submit tvOS app for App Store review"
+  lane :release do
+    # Build for App Store
+    build_app(
+      workspace: WORKSPACE,
+      scheme: TVOS_SCHEME,
+      destination: "generic/platform=tvOS",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "Mediora-tvOS.ipa"
+    )
+    
+    # Upload to App Store Connect
+    upload_to_app_store(
+      skip_screenshots: false,
+      skip_metadata: false,
+      submit_for_review: false,
+      automatic_release: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "Build tvOS for local testing"
+  lane :build do
+    build_app(
+      workspace: WORKSPACE,
+      scheme: TVOS_SCHEME,
+      destination: "generic/platform=tvOS",
+      export_method: "development",
+      output_directory: "./build",
+      output_name: "Mediora-tvOS-dev.ipa"
+    )
+  end
+end
+
+platform :ios do
+  desc "Build and upload iOS app to TestFlight"
+  lane :beta do
+    setup_ci if ENV['CI']
+    
+    increment_build_number(
+      xcodeproj: "ios/mediora.xcodeproj"
+    )
+    
+    build_app(
+      workspace: WORKSPACE,
+      scheme: IOS_SCHEME,
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "Mediora-iOS.ipa"
+    )
+    
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      apple_id: ENV['APP_STORE_CONNECT_APP_ID_IOS']
+    )
+  end
+
+  desc "Submit iOS app for App Store review"
+  lane :release do
+    build_app(
+      workspace: WORKSPACE,
+      scheme: IOS_SCHEME,
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      output_directory: "./build",
+      output_name: "Mediora-iOS.ipa"
+    )
+    
+    upload_to_app_store(
+      skip_screenshots: false,
+      skip_metadata: false,
+      submit_for_review: false,
+      automatic_release: false
+    )
+  end
+end
+
+# Shared lanes
+desc "Run tests"
+lane :test do
+  run_tests(
+    workspace: WORKSPACE,
+    scheme: TVOS_SCHEME,
+    devices: ["Apple TV"]
+  )
+end
+
+desc "Generate screenshots"
+lane :screenshots do
+  capture_screenshots(
+    workspace: WORKSPACE,
+    scheme: TVOS_SCHEME
+  )
+end
+
+desc "Sync certificates and profiles (match)"
+lane :sync_certs do
+  match(
+    type: "appstore",
+    app_identifier: ["com.mediora.app", "com.mediora.app.mobile"]
+  )
+end
+
+desc "Increment version number"
+lane :bump do |options|
+  increment_version_number(
+    xcodeproj: "ios/mediora.xcodeproj",
+    bump_type: options[:type] || "patch"
+  )
+end
+
+# Error handling
+error do |lane, exception|
+  # Slack notification on error (optional)
+  # slack(
+  #   message: "Error in lane #{lane}: #{exception.message}",
+  #   success: false
+  # )
+end

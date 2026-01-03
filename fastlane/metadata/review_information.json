@@ -1,0 +1,9 @@
+{
+  "review_first_name": "YOUR_FIRST_NAME",
+  "review_last_name": "YOUR_LAST_NAME",
+  "review_phone_number": "+1 555-555-5555",
+  "review_email": "your-email@example.com",
+  "review_demo_user": "demo",
+  "review_demo_password": "DEMO_PASSWORD",
+  "review_notes": "Mediora requires a Jellyfin media server to function. We have provided a demo server for testing purposes with sample content.\n\nDemo Server: http://demo.jellyfin.org/stable\nUsername: demo\nPassword: (leave empty or check jellyfin.org for demo credentials)\n\nTo test the app:\n1. Open Mediora on Apple TV\n2. Navigate to Settings using the sidebar\n3. Enter the server URL above in the Jellyfin Server URL field\n4. Enter the demo credentials\n5. Tap Connect/Save\n6. Return to Home to browse the library\n7. Select any media item to view details\n8. Press Play to test playback\n\nNavigation:\n- Use the Siri Remote trackpad to navigate\n- Press Menu to go back\n- Use the sidebar on the left to switch between sections\n\nThe app does not collect any user data. All communication is directly between the app and the user's configured media servers."
+}
