@@ -9,6 +9,11 @@
           "glass" : true,
           "image-name" : "film-movie-svgrepo-com (2).svg",
           "name" : "film-movie-svgrepo-com (2)"
+        },
+        {
+          "glass" : false,
+          "image-name" : "film-movie-svgrepo-com (2).svg",
+          "name" : "background"
         }
       ],
       "shadow" : {

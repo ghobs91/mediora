@@ -162,15 +162,18 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
   const isConnected = !!settings?.accessToken;
 
   const handleUseDemoServer = () => {
-    const demoServerUrl = 'http://demo.jellyfin.org/stable';
+    const demoServerUrl = 'https://demo.jellyfin.org/stable';
     setServerUrl(demoServerUrl);
+    setUsername('demo');
+    setPassword('');
+    setLoginMethod('manual');
     setError(null);
     setTestResult(null);
     setDiscoveredServers([]);
     
     Alert.alert(
       'Demo Server Configured',
-      'Demo server URL has been set. Click "Test Connection" to verify.\n\nAuthentication:\n• Username: demo\n• Password: (leave empty)\n\nNote: The demo server may not support username/password authentication via the API. If manual login fails, try using Quick Connect instead.',
+      'Demo server URL and credentials have been set.\n\nClick "Test Connection" to verify, then click "Login" to connect.\n\n• Username: demo\n• Password: (leave empty)',
       [{ text: 'OK' }]
     );
   };
@@ -246,14 +249,32 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
       console.log('[Settings] Response status:', response.status);
       console.log('[Settings] Response headers:', JSON.stringify([...response.headers.entries()]));
       
+      // Check content type - if HTML is returned, server may be redirecting
+      const contentType = response.headers.get('content-type') || '';
+      
       if (response.ok) {
-        const data = await response.json();
-        console.log('[Settings] Server info:', data);
-        setTestResult(`✓ Connected to Jellyfin ${data.Version || 'server'}\nServer Name: ${data.ServerName || 'Unknown'}`);
+        const responseText = await response.text();
+        
+        // Check if we got HTML instead of JSON
+        if (contentType.includes('text/html') || responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+          setError('Server returned HTML instead of JSON.\n\nTry using HTTPS instead of HTTP.');
+          setTestResult('⚠ Server redirecting to HTML page');
+        } else {
+          const data = JSON.parse(responseText);
+          console.log('[Settings] Server info:', data);
+          setTestResult(`✓ Connected to Jellyfin ${data.Version || 'server'}\nServer Name: ${data.ServerName || 'Unknown'}`);
+        }
       } else {
         const text = await response.text();
         console.log('[Settings] Error response body:', text);
-        setTestResult(`⚠ Server responded with status ${response.status}`);
+        
+        // Check if error is HTML
+        if (contentType.includes('text/html') || text.includes('<!DOCTYPE') || text.includes('<html')) {
+          setError('Server returned HTML page. Try using HTTPS instead of HTTP.');
+          setTestResult('⚠ Server redirecting');
+        } else {
+          setTestResult(`⚠ Server responded with status ${response.status}`);
+        }
       }
     } catch (err) {
       console.error('[Settings] Test connection error details:', {
