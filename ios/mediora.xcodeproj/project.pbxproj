@@ -20,7 +20,7 @@
 		C84EECCD2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
 		C8CDF1832F0543E800EACBF9 /* AppIcon-tvOS.png in Resources */ = {isa = PBXBuildFile; fileRef = C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */; };
 		C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */; };
+		D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,7 +40,7 @@
 		B81C21D6CAEC9244E5C269B4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = MedioraIcon.icon; sourceTree = "<group>"; };
 		C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "AppIcon-tvOS.png"; sourceTree = "<group>"; };
-		CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
+		CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -73,7 +73,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
-				CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */,
+				CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */,
 				C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */,
 				C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */,
 			);
@@ -236,7 +236,7 @@
 				AD41AB8D379291D627F7CCCF /* Images.xcassets in Resources */,
 				C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */,
 				A5D3B02DCFCAC892858C4F3D /* PrivacyInfo.xcprivacy in Resources */,
-				D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */,
+				D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,13 +267,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -288,13 +284,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -308,13 +300,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -371,13 +359,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

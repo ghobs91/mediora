@@ -147,6 +147,9 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
   const [serverUrl, setServerUrl] = useState('');
   const [quickConnectCode, setQuickConnectCode] = useState<string | null>(null);
   const [_quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginMethod, setLoginMethod] = useState<'quickconnect' | 'manual'>('quickconnect');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -157,6 +160,20 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isConnected = !!settings?.accessToken;
+
+  const handleUseDemoServer = () => {
+    const demoServerUrl = 'http://demo.jellyfin.org/stable';
+    setServerUrl(demoServerUrl);
+    setError(null);
+    setTestResult(null);
+    setDiscoveredServers([]);
+    
+    Alert.alert(
+      'Demo Server Configured',
+      'Demo server URL has been set. Click "Test Connection" to verify.\n\nAuthentication:\n• Username: demo\n• Password: (leave empty)\n\nNote: The demo server may not support username/password authentication via the API. If manual login fails, try using Quick Connect instead.',
+      [{ text: 'OK' }]
+    );
+  };
 
   const handleDiscoverServers = async () => {
     setIsDiscovering(true);
@@ -339,6 +356,50 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
     }
   };
 
+  const handleManualLogin = async () => {
+    if (!serverUrl.trim()) {
+      setError('Please enter a server URL');
+      return;
+    }
+
+    if (!username.trim()) {
+      setError('Please enter a username');
+      return;
+    }
+
+    // Validate and normalize URL
+    let normalizedUrl = serverUrl.trim();
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = 'http://' + normalizedUrl;
+    }
+
+    setIsConnecting(true);
+    setError(null);
+    setTestResult(null);
+
+    try {
+      console.log('[Settings] Logging in with username/password to:', normalizedUrl);
+      const service = new JellyfinService(normalizedUrl);
+      const authResponse = await service.authenticateByName(username.trim(), password.trim());
+
+      await onUpdate({
+        serverUrl: normalizedUrl,
+        accessToken: authResponse.AccessToken,
+        userId: authResponse.User.Id,
+        serverId: authResponse.ServerId,
+        deviceId: service.getDeviceId(),
+      });
+
+      setIsConnecting(false);
+      setUsername('');
+      setPassword('');
+    } catch (err) {
+      console.error('[Settings] Login error:', err);
+      setIsConnecting(false);
+      setError(err instanceof Error ? err.message : 'Failed to login');
+    }
+  };
+
   const handleDisconnect = async () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
@@ -410,86 +471,103 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
 
   return (
     <View style={styles.sectionForm}>
-      <Text style={styles.sectionDescription}>
-        Connect to your Jellyfin server using Quick Connect
-      </Text>
-      <Text style={styles.helperText}>
-        Scan your local network or enter your server URL manually
-      </Text>
-      
-      {/* Server Discovery */}
-      <View style={styles.discoveryContainer}>
-        <FocusableButton
-          title="Scan Local Network"
-          onPress={handleDiscoverServers}
-          loading={isDiscovering}
-          disabled={isDiscovering || isConnecting || isTesting}
-          variant="secondary"
-          size="medium"
-          icon="scan"
+      {/* Section 1: Server Connection */}
+      <View style={styles.settingsSection}>
+        <View style={styles.sectionHeader}>
+          <Icon name="server-outline" size={24} color="rgba(10, 132, 255, 0.95)" />
+          <Text style={styles.sectionTitle}>Server Connection</Text>
+        </View>
+        <Text style={styles.sectionDescription}>
+          Choose how to connect to your Jellyfin server
+        </Text>
+
+        {/* Demo Server Button */}
+        <View style={styles.demoContainer}>
+          <FocusableButton
+            title="Use Demo Server"
+            onPress={handleUseDemoServer}
+            disabled={isConnecting || isTesting}
+            variant="secondary"
+            size="medium"
+            icon="flask"
+          />
+          <Text style={styles.demoHint}>
+            Configure the public Jellyfin demo server for testing
+          </Text>
+        </View>
+
+        {/* Server Discovery */}
+        <View style={styles.discoveryContainer}>
+          <FocusableButton
+            title="Scan Local Network"
+            onPress={handleDiscoverServers}
+            loading={isDiscovering}
+            disabled={isDiscovering || isConnecting || isTesting}
+            variant="secondary"
+            size="medium"
+            icon="scan"
+          />
+          {isDiscovering && (
+            <View>
+              <Text style={styles.discoveryText}>
+                Scanning network... {discoveryProgress.total > 0 && `(${discoveryProgress.current}/${discoveryProgress.total})`}
+              </Text>
+              <Text style={styles.discoveryHint}>
+                This may take 10-15 seconds
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Discovered Servers List */}
+        {discoveredServers.length > 0 && (
+          <View style={styles.discoveredServersContainer}>
+            <Text style={styles.discoveredServersTitle}>Found Servers:</Text>
+            {discoveredServers.map((server) => (
+              <FocusableButton
+                key={server.id}
+                title={
+                  <View style={styles.serverItemContent}>
+                    <Icon name="server" size={20} color="#fff" style={styles.serverIcon} />
+                    <View style={styles.serverInfo}>
+                      <Text style={styles.serverName}>{server.name}</Text>
+                      <Text style={styles.serverAddress}>{server.address}</Text>
+                    </View>
+                  </View>
+                }
+                onPress={() => handleSelectServer(server)}
+                variant="secondary"
+                size="medium"
+                style={styles.serverItem}
+              />
+            ))}
+          </View>
+        )}
+
+        <Text style={styles.orText}>or enter manually:</Text>
+
+        <FocusableInput
+          label="Server URL"
+          value={serverUrl}
+          onChangeText={setServerUrl}
+          placeholder="http://192.168.1.100:8096"
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={error || undefined}
         />
-        {isDiscovering && (
-          <View>
-            <Text style={styles.discoveryText}>
-              Scanning network... {discoveryProgress.total > 0 && `(${discoveryProgress.current}/${discoveryProgress.total})`}
-            </Text>
-            <Text style={styles.discoveryHint}>
-              This may take 10-15 seconds
+        {testResult && (
+          <View style={styles.testResultContainer}>
+            <Icon
+              name={testResult.startsWith('✓') ? 'checkmark-circle' : testResult.startsWith('✗') ? 'close-circle' : 'warning'}
+              size={24}
+              color={testResult.startsWith('✓') ? '#30d158' : '#ff453a'}
+              style={styles.testResultIcon}
+            />
+            <Text style={[styles.testResult, testResult.startsWith('✓') ? styles.testSuccess : null]}>
+              {testResult.replace(/^[✓✗⚠]\s*/, '')}
             </Text>
           </View>
         )}
-      </View>
-
-      {/* Discovered Servers List */}
-      {discoveredServers.length > 0 && (
-        <View style={styles.discoveredServersContainer}>
-          <Text style={styles.discoveredServersTitle}>Found Servers:</Text>
-          {discoveredServers.map((server) => (
-            <FocusableButton
-              key={server.id}
-              title={
-                <View style={styles.serverItemContent}>
-                  <Icon name="server" size={20} color="#fff" style={styles.serverIcon} />
-                  <View style={styles.serverInfo}>
-                    <Text style={styles.serverName}>{server.name}</Text>
-                    <Text style={styles.serverAddress}>{server.address}</Text>
-                  </View>
-                </View>
-              }
-              onPress={() => handleSelectServer(server)}
-              variant="secondary"
-              size="medium"
-              style={styles.serverItem}
-            />
-          ))}
-        </View>
-      )}
-
-      <Text style={styles.orText}>or enter manually:</Text>
-      
-      <FocusableInput
-        label="Server URL"
-        value={serverUrl}
-        onChangeText={setServerUrl}
-        placeholder="http://192.168.1.100:8096"
-        autoCapitalize="none"
-        autoCorrect={false}
-        error={error || undefined}
-      />
-      {testResult && (
-        <View style={styles.testResultContainer}>
-          <Icon
-            name={testResult.startsWith('✓') ? 'checkmark-circle' : testResult.startsWith('✗') ? 'close-circle' : 'warning'}
-            size={24}
-            color={testResult.startsWith('✓') ? '#30d158' : '#ff453a'}
-            style={styles.testResultIcon}
-          />
-          <Text style={[styles.testResult, testResult.startsWith('✓') ? styles.testSuccess : null]}>
-            {testResult.replace(/^[✓✗⚠]\s*/, '')}
-          </Text>
-        </View>
-      )}
-      <View style={styles.buttonRow}>
         <FocusableButton
           title="Test Connection"
           onPress={handleTestConnection}
@@ -498,13 +576,91 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
           variant="secondary"
           size="medium"
         />
-        <FocusableButton
-          title="Connect with Quick Connect"
-          onPress={handleConnect}
-          loading={isConnecting}
-          disabled={isConnecting || isTesting}
-          size="medium"
-        />
+      </View>
+
+      {/* Section Divider */}
+      <View style={styles.sectionDivider} />
+
+      {/* Section 2: Login Credentials */}
+      <View style={styles.settingsSection}>
+        <View style={styles.sectionHeader}>
+          <Icon name="key-outline" size={24} color="rgba(10, 132, 255, 0.95)" />
+          <Text style={styles.sectionTitle}>Login Credentials</Text>
+        </View>
+        <Text style={styles.sectionDescription}>
+          Authenticate with your Jellyfin account
+        </Text>
+
+        {/* Login Method Selection */}
+        <View style={styles.loginMethodContainer}>
+          <Text style={styles.loginMethodLabel}>Choose authentication method:</Text>
+          <View style={styles.loginMethodButtons}>
+            <FocusableButton
+              title="Quick Connect"
+              onPress={() => setLoginMethod('quickconnect')}
+              variant={loginMethod === 'quickconnect' ? 'primary' : 'secondary'}
+              size="medium"
+              style={styles.loginMethodButton}
+            />
+            <FocusableButton
+              title="Username & Password"
+              onPress={() => setLoginMethod('manual')}
+              variant={loginMethod === 'manual' ? 'primary' : 'secondary'}
+              size="medium"
+              style={styles.loginMethodButton}
+            />
+          </View>
+        </View>
+
+        {/* Quick Connect Method */}
+        {loginMethod === 'quickconnect' && (
+          <View style={styles.loginMethodContent}>
+            <Text style={styles.loginMethodDescription}>
+              Use Quick Connect to authenticate without entering your password. 
+              You'll receive a code to enter in your Jellyfin dashboard.
+            </Text>
+            <FocusableButton
+              title="Connect with Quick Connect"
+              onPress={handleConnect}
+              loading={isConnecting}
+              disabled={isConnecting || isTesting || !serverUrl.trim()}
+              size="medium"
+            />
+          </View>
+        )}
+
+        {/* Manual Login Method */}
+        {loginMethod === 'manual' && (
+          <View style={styles.loginMethodContent}>
+            <Text style={styles.loginMethodDescription}>
+              Enter your Jellyfin username and password to authenticate.
+            </Text>
+            <FocusableInput
+              label="Username"
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Enter your username"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <FocusableInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+            />
+            <FocusableButton
+              title="Login"
+              onPress={handleManualLogin}
+              loading={isConnecting}
+              disabled={isConnecting || isTesting || !serverUrl.trim() || !username.trim()}
+              size="medium"
+            />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1106,6 +1262,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
+  demoContainer: {
+    marginBottom: 24,
+  },
+  demoHint: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   discoveredServersContainer: {
     marginBottom: 24,
     padding: 16,
@@ -1361,5 +1526,52 @@ const styles = StyleSheet.create({
   countryNameSelected: {
     color: '#fff',
     fontWeight: '600',
+  },
+  // New styles for clear UI separation
+  settingsSection: {
+    marginBottom: 32,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  sectionTitle: {
+    color: 'rgba(10, 132, 255, 0.95)',
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginVertical: 32,
+  },
+  loginMethodContainer: {
+    marginBottom: 24,
+  },
+  loginMethodLabel: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  loginMethodButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  loginMethodButton: {
+    flex: 1,
+  },
+  loginMethodContent: {
+    marginTop: 16,
+  },
+  loginMethodDescription: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 15,
+    marginBottom: 20,
+    lineHeight: 22,
+    fontStyle: 'italic',
   },
 });

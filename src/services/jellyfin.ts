@@ -174,6 +174,65 @@ export class JellyfinService {
     return data;
   }
 
+  async authenticateByName(
+    username: string,
+    password: string,
+  ): Promise<JellyfinAuthResponse> {
+    try {
+      console.log('[Jellyfin] Authenticating with username/password');
+      console.log('[Jellyfin] Username:', username);
+      console.log('[Jellyfin] Password length:', password.length);
+      
+      const requestBody = {
+        Username: username,
+        Pw: password || '',
+      };
+      
+      console.log('[Jellyfin] Request body:', JSON.stringify(requestBody));
+      
+      const response = await fetch(
+        `${this.serverUrl}/Users/AuthenticateByName`,
+        {
+          method: 'POST',
+          headers: getAuthHeader(undefined, this.deviceId),
+          body: JSON.stringify(requestBody),
+        },
+      );
+
+      console.log('[Jellyfin] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Jellyfin] Authentication error response:', errorText);
+        
+        let errorMessage = 'Invalid username or password';
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.Message) {
+            errorMessage = errorJson.Message;
+          }
+        } catch {
+          // If not JSON, use the text as-is
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        
+        throw new Error(`Failed to authenticate: ${errorMessage}`);
+      }
+
+      const data = await response.json();
+      this.accessToken = data.AccessToken;
+      this.userId = data.User.Id;
+
+      console.log('[Jellyfin] Authentication successful');
+      return data;
+    } catch (error) {
+      console.error('[Jellyfin] Authentication error:', error);
+      throw error;
+    }
+  }
+
   // Library browsing
   async getLibraries(): Promise<JellyfinLibrary[]> {
     if (!this.userId || !this.accessToken) {

@@ -39,7 +39,7 @@ export function LiveTVScreen() {
   const [focusedChannelId, setFocusedChannelId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [viewMode, setViewMode] = useState<ViewMode>('channels');
+  const [viewMode, setViewMode] = useState<ViewMode>('guide');
   const [epgData, setEpgData] = useState<EPGChannel[]>([]);
   const [isLoadingGuide, setIsLoadingGuide] = useState(false);
   const [epgLoadingMessage, setEpgLoadingMessage] = useState<string>('');
