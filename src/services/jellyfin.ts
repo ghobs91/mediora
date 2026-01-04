@@ -182,6 +182,7 @@ export class JellyfinService {
       console.log('[Jellyfin] Authenticating with username/password');
       console.log('[Jellyfin] Username:', username);
       console.log('[Jellyfin] Password length:', password.length);
+      console.log('[Jellyfin] Server URL:', this.serverUrl);
       
       const requestBody = {
         Username: username,
@@ -200,10 +201,19 @@ export class JellyfinService {
       );
 
       console.log('[Jellyfin] Response status:', response.status);
+      
+      // Get content type to check if server returned HTML instead of JSON
+      const contentType = response.headers.get('content-type') || '';
+      console.log('[Jellyfin] Response content-type:', contentType);
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[Jellyfin] Authentication error response:', errorText);
+        
+        // Check if server returned HTML (redirect to login page) - this happens with HTTP instead of HTTPS
+        if (contentType.includes('text/html') || errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
+          throw new Error('Server returned an HTML page instead of JSON. This usually means:\n\n• Try using HTTPS instead of HTTP\n• Check the server URL is correct\n• The server may be redirecting to a login page');
+        }
         
         let errorMessage = 'Invalid username or password';
         try {
@@ -214,11 +224,16 @@ export class JellyfinService {
         } catch {
           // If not JSON, use the text as-is
           if (errorText) {
-            errorMessage = errorText;
+            errorMessage = errorText.substring(0, 200); // Limit length
           }
         }
         
         throw new Error(`Failed to authenticate: ${errorMessage}`);
+      }
+      
+      // Also check successful responses for HTML (shouldn't happen but just in case)
+      if (contentType.includes('text/html')) {
+        throw new Error('Server returned HTML instead of JSON. Try using HTTPS instead of HTTP for the server URL.');
       }
 
       const data = await response.json();
@@ -562,10 +577,12 @@ export class JellyfinService {
             MaxStreamingBitrate: 120000000,
             MaxStaticBitrate: 100000000,
             MusicStreamingTranscodingBitrate: 192000,
+            // tvOS/iOS only supports mp4/m4v containers directly
+            // MKV must be transcoded/remuxed
             DirectPlayProfiles: [
-              { Container: 'mp4,m4v', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4', AudioCodec: 'aac,mp3,ac3,eac3' },
-              { Container: 'mkv', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4', AudioCodec: 'aac,mp3,ac3,eac3' },
-              { Container: 'm4v', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4', AudioCodec: 'aac,mp3,ac3,eac3' },
+              { Container: 'mp4', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
+              { Container: 'm4v', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
+              { Container: 'mov', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
             ],
             TranscodingProfiles: [
               {
@@ -576,6 +593,8 @@ export class JellyfinService {
                 Protocol: 'hls',
                 Context: 'Streaming',
                 MaxAudioChannels: '6',
+                BreakOnNonKeyFrames: true,
+                CopyTimestamps: false,
               },
               {
                 Container: 'mp4',
@@ -586,21 +605,21 @@ export class JellyfinService {
                 Context: 'Streaming',
               },
             ],
-            CodecProfiles: [
-              {
-                Type: 'Video',
-                Codec: 'h264',
-                Conditions: [
-                  { Condition: 'LessThanEqual', Property: 'Width', Value: '1920' },
-                  { Condition: 'LessThanEqual', Property: 'Height', Value: '1080' },
-                  { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '8' },
-                ],
-              },
-            ],
+            // Remove strict codec restrictions that can cause issues
+            CodecProfiles: [],
             SubtitleProfiles: [
               { Format: 'srt', Method: 'External' },
               { Format: 'sub', Method: 'External' },
               { Format: 'vtt', Method: 'External' },
+              { Format: 'ass', Method: 'External' },
+              { Format: 'ssa', Method: 'External' },
+            ],
+            ResponseProfiles: [
+              {
+                Type: 'Video',
+                Container: 'ts',
+                MimeType: 'video/mp2t',
+              },
             ],
           },
         }),
@@ -616,88 +635,73 @@ export class JellyfinService {
   }
 
   getStreamUrl(itemId: string, mediaSourceId?: string): string {
-    // Use basic stream endpoint - let Jellyfin handle container/codec decisions
+    // Direct stream with container conversion to mp4 for Apple compatibility
+    // This remuxes MKV to MP4 without re-encoding the video/audio
     const queryString = buildQueryString({
       mediaSourceId: mediaSourceId,
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       playSessionId: this.playSessionId,
-      // Let Jellyfin auto-detect and remux/transcode as needed
+      // Output in mp4 container for Apple compatibility
+      container: 'mp4',
+      // Copy streams when possible (no transcoding, just remux)
+      videoCodec: 'h264',
+      audioCodec: 'aac',
       enableAutoStreamCopy: true,
       allowVideoStreamCopy: true,
       allowAudioStreamCopy: true,
     });
 
-    return `${this.serverUrl}/Videos/${itemId}/stream?${queryString}`;
+    return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
   }
 
   getHlsStreamUrl(itemId: string, mediaSourceId: string): string {
-    // Primary HLS stream using main.m3u8 - most compatible
-    // API docs: segmentLength, minSegments, videoBitRate, etc. are integers
+    // Use master.m3u8 which provides absolute URLs for segments
     const queryString = buildQueryString({
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      // HLS segment configuration - integers per API spec
-      segmentContainer: 'ts',
-      segmentLength: 6,
-      minSegments: 2,
-      // Request H.264/AAC for tvOS compatibility
+      // H.264/AAC for Apple compatibility
       videoCodec: 'h264',
       audioCodec: 'aac',
-      // Allow stream copy when possible for better quality/performance
-      enableAutoStreamCopy: true,
-      allowVideoStreamCopy: true,
-      allowAudioStreamCopy: true,
-      // Set reasonable limits - integers per API spec
+      // Transcoding settings
       maxWidth: 1920,
       maxHeight: 1080,
-      videoBitRate: 20000000,
+      videoBitRate: 8000000,
       audioBitRate: 192000,
-      maxAudioChannels: 6,
-      // Streaming context
-      context: 'Streaming',
-      // Don't break on non-keyframes
-      breakOnNonKeyFrames: false,
+      // Segment settings
+      segmentContainer: 'ts',
+      minSegments: 1,
+      breakOnNonKeyFrames: true,
     });
 
-    return `${this.serverUrl}/Videos/${itemId}/main.m3u8?${queryString}`;
+    return `${this.serverUrl}/Videos/${itemId}/master.m3u8?${queryString}`;
   }
 
   getTranscodedStreamUrl(itemId: string, mediaSourceId: string): string {
-    // Fallback: Force full transcoding with lower bitrate
-    // API docs: all numeric params should be integers
+    // Fallback: Progressive MP4 stream with full transcoding
     const queryString = buildQueryString({
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      // HLS segment configuration
-      segmentContainer: 'ts',
-      segmentLength: 6,
-      minSegments: 2,
-      // Force transcoding - no stream copy
+      // Output container
+      container: 'mp4',
+      // Force H.264/AAC transcoding at lower quality
       videoCodec: 'h264',
       audioCodec: 'aac',
-      videoBitRate: 4000000,
-      audioBitRate: 128000,
       maxWidth: 1280,
       maxHeight: 720,
-      maxAudioChannels: 2,
-      transcodingMaxAudioChannels: 2,
-      profile: 'main',
-      level: '4.0',
+      videoBitRate: 4000000,
+      audioBitRate: 128000,
+      // Force transcoding
       enableAutoStreamCopy: false,
       allowVideoStreamCopy: false,
       allowAudioStreamCopy: false,
-      breakOnNonKeyFrames: false,
-      context: 'Streaming',
-      // Deinterlace if needed
-      deInterlace: true,
     });
 
-    return `${this.serverUrl}/Videos/${itemId}/main.m3u8?${queryString}`;
+    return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
   }
 
   getImageUrl(

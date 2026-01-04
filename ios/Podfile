@@ -102,8 +102,19 @@ OBJC
     puts "Patching RCTRefreshControl.m for Catalyst Mac idiom support"
     content = File.read(legacy_path)
     # Guard the init method to avoid creating UIRefreshControl on Mac idiom
+    mac_idiom_init_check = <<-OBJC
+  BOOL isMacIdiom = NO;
+#if TARGET_OS_MACCATALYST
+  if (@available(macCatalyst 13.0, *)) {
+    isMacIdiom = [UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomMac;
+  }
+#endif
+  if (isMacIdiom) {
+    return nil;
+  }
+OBJC
     unless content.include?("isMacIdiom")
-      content.gsub!(/- \(instancetype\)init\n\{/, "- (instancetype)init\n{\n#{mac_idiom_check}")
+      content.gsub!(/- \(instancetype\)init\n\{/, "- (instancetype)init\n{\n#{mac_idiom_init_check}")
       File.write(legacy_path, content)
     end
   end

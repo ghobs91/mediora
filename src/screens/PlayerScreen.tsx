@@ -36,7 +36,7 @@ export function PlayerScreen() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [streamAttempt, setStreamAttempt] = useState<'hls' | 'transcoded'>('hls');
+  const [streamAttempt, setStreamAttempt] = useState<'direct' | 'hls' | 'transcoded'>('direct');
   const [isRetrying, setIsRetrying] = useState(false);
   const [progressBarWidth, setProgressBarWidth] = useState(0);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -82,6 +82,20 @@ export function PlayerScreen() {
       setItem(itemDetails);
       setIsFavorite(itemDetails.UserData?.IsFavorite || false);
 
+      // Determine best initial stream method based on container format
+      if (info.MediaSources.length > 0) {
+        const container = info.MediaSources[0].Container?.toLowerCase();
+        const directPlayContainers = ['mp4', 'm4v', 'mov'];
+        
+        if (directPlayContainers.includes(container)) {
+          console.log('[PlayerScreen] Container is directly playable:', container);
+          setStreamAttempt('direct');
+        } else {
+          console.log('[PlayerScreen] Container requires transcoding:', container);
+          setStreamAttempt('hls');
+        }
+      }
+
       // If it's an episode, fetch all episodes in the season for exploration
       if (itemDetails.Type === 'Episode' && itemDetails.SeriesId) {
         const seasonEpisodes = await jellyfin.getEpisodes(
@@ -93,12 +107,12 @@ export function PlayerScreen() {
 
 
       if (info.MediaSources.length > 0) {
-        // Report as Transcode since we're using HLS
+        // Report playback start - will update play method when stream starts
         await jellyfin.reportPlaybackStart(
           itemId,
           info.MediaSources[0].Id,
           0,
-          'Transcode',
+          'DirectStream', // Start with DirectStream, will be updated based on actual method
         );
       }
     } catch (err) {
@@ -139,10 +153,23 @@ export function PlayerScreen() {
   useEffect(() => {
     if (jellyfin && playbackInfo?.MediaSources[0]) {
       const mediaSourceId = playbackInfo.MediaSources[0].Id;
-      const streamType = streamAttempt === 'hls' ? 'HLS (main.m3u8)' : 'Transcoded (720p)';
-      const url = streamAttempt === 'hls'
-        ? jellyfin.getHlsStreamUrl(itemId, mediaSourceId)
-        : jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+      let streamType: string;
+      let url: string;
+      
+      switch (streamAttempt) {
+        case 'direct':
+          streamType = 'Direct Stream';
+          url = jellyfin.getStreamUrl(itemId, mediaSourceId);
+          break;
+        case 'hls':
+          streamType = 'HLS (master.m3u8)';
+          url = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
+          break;
+        case 'transcoded':
+          streamType = 'Transcoded (720p)';
+          url = jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+          break;
+      }
 
       console.log('[PlayerScreen] Stream type:', streamType);
       console.log('[PlayerScreen] Stream URL:', url);
@@ -157,7 +184,7 @@ export function PlayerScreen() {
     setIsRetrying(true);
     setError(null);
     setIsLoading(true);
-    setStreamAttempt('hls');
+    setStreamAttempt('direct');
     await loadPlaybackInfo();
     setIsRetrying(false);
   };
@@ -190,12 +217,13 @@ export function PlayerScreen() {
 
     // Report progress every 10 seconds
     if (jellyfin && playbackInfo?.MediaSources[0] && Math.floor(data.currentTime) % 10 === 0) {
+      const playMethod = streamAttempt === 'direct' ? 'DirectStream' : 'Transcode';
       jellyfin.reportPlaybackProgress(
         itemId,
         playbackInfo.MediaSources[0].Id,
         Math.floor(data.currentTime * 10000000),
         !isPlaying,
-        'Transcode', // We're using HLS which is transcoded
+        playMethod,
       );
     }
   };
@@ -373,11 +401,33 @@ export function PlayerScreen() {
   // Generate stream URLs
   const mediaSourceId = playbackInfo.MediaSources[0].Id;
 
-  const videoUrl = streamAttempt === 'hls'
-    ? jellyfin.getHlsStreamUrl(itemId, mediaSourceId)
-    : jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
-
-  const streamType = streamAttempt === 'hls' ? 'HLS (main.m3u8)' : 'Transcoded (720p)';
+  let videoUrl: string;
+  let streamType: string;
+  
+  // DEBUG: Test with a known working public HLS stream
+  const useTestStream = false; // Set to true to test with public HLS
+  const testStreamUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'; // Big Buck Bunny
+  
+  if (useTestStream) {
+    videoUrl = testStreamUrl;
+    streamType = 'Test HLS Stream';
+    console.log('[PlayerScreen] Using test stream for debugging');
+  } else {
+    switch (streamAttempt) {
+      case 'direct':
+        videoUrl = jellyfin.getStreamUrl(itemId, mediaSourceId);
+        streamType = 'Direct Stream';
+        break;
+      case 'hls':
+        videoUrl = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
+        streamType = 'HLS (main.m3u8)';
+        break;
+      case 'transcoded':
+        videoUrl = jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+        streamType = 'Transcoded (720p)';
+        break;
+    }
+  }
 
   return (
     <TouchableOpacity
@@ -391,25 +441,15 @@ export function PlayerScreen() {
         key={videoUrl}
         source={{
           uri: videoUrl,
-          // Add headers for better compatibility
-          headers: {
-            'Accept': '*/*',
-          },
         }}
         style={styles.video}
         resizeMode="contain"
         paused={!isPlaying}
         volume={volume}
         rate={playbackRate}
-        textTracks={textTracks}
-        selectedTextTrack={
-          subtitlesEnabled && selectedSubtitleTrack !== undefined 
-            ? { type: SelectedTrackType.INDEX, value: subtitleTracks.findIndex(t => t.Index === selectedSubtitleTrack) } 
-            : { type: SelectedTrackType.DISABLED }
-        }
         onProgress={handleProgress}
         onLoadStart={() => {
-          console.log('[PlayerScreen] Video load started');
+          console.log('[PlayerScreen] Video load started, URL:', videoUrl);
           setIsBuffering(true);
         }}
         onLoad={(data) => {
@@ -439,6 +479,8 @@ export function PlayerScreen() {
         repeat={false}
         playInBackground={false}
         playWhenInactive={false}
+        automaticallyWaitsToMinimizeStalling={true}
+        preferredForwardBufferDuration={10}
         bufferConfig={{
           minBufferMs: 15000,
           maxBufferMs: 50000,
@@ -456,7 +498,13 @@ export function PlayerScreen() {
           console.log('[PlayerScreen] Error domain:', errorDomain, 'Code:', errorCode);
           console.log('[PlayerScreen] Current stream attempt:', streamAttempt);
 
-          // Try fallback: hls -> transcoded
+          // Try fallback chain: direct -> hls -> transcoded
+          if (streamAttempt === 'direct') {
+            console.log('[PlayerScreen] Direct stream failed, trying HLS...');
+            setStreamAttempt('hls');
+            return;
+          }
+          
           if (streamAttempt === 'hls') {
             console.log('[PlayerScreen] HLS failed, trying forced transcoding...');
             setStreamAttempt('transcoded');
@@ -472,6 +520,8 @@ export function PlayerScreen() {
             errorMessage = 'Video format not supported on all streaming methods. Your Jellyfin server may need transcoding enabled or configured.';
           } else if (errorCode === -12660) {
             errorMessage = 'Cannot decode video. The codec may not be supported on this device.';
+          } else if (errorCode === -12174) {
+            errorMessage = 'Stream could not be loaded. The server may not support transcoding or the media format is incompatible.';
           } else {
             errorMessage = err.error?.errorString ||
               err.error?.localizedDescription ||
