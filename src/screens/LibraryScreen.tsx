@@ -74,7 +74,12 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
 
       setDownloadProgress(progressMap);
     } catch (error) {
-      console.error('Failed to load Sonarr queue:', error);
+      // Silently log network errors - queue data is optional and shouldn't block the UI
+      if (error instanceof Error && error.message.includes('Cannot connect to Sonarr')) {
+        console.log('[LibraryScreen] Sonarr queue unavailable - skipping download progress');
+      } else {
+        console.error('[LibraryScreen] Failed to load Sonarr queue:', error);
+      }
     }
   }, [sonarr, isSonarrConnected]);
 

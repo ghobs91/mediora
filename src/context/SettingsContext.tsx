@@ -13,11 +13,22 @@ import { iCloudService } from '../services/icloud';
 
 const SETTINGS_STORAGE_KEY = '@mediora/settings';
 
+// TEMPORARY: Hardcoded settings for App Store screenshots
 const DEFAULT_SETTINGS: AppSettings = {
   jellyfin: null,
   tmdb: null,
-  sonarr: null,
-  radarr: null,
+  sonarr: {
+    serverUrl: 'http://100.121.105.34:8989',
+    apiKey: '6f44fe8b240547fcb116234394486060',
+    rootFolderPath: '/tv',
+    qualityProfileId: 1,
+  },
+  radarr: {
+    serverUrl: 'http://100.121.105.34:7878',
+    apiKey: 'f142c8ab86c74ffd851dc63dbf538aa5',
+    rootFolderPath: '/movies',
+    qualityProfileId: 1,
+  },
   iptv: null,
 };
 
@@ -49,6 +60,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const loadSettings = async () => {
     try {
+      // TEMPORARY: Force hardcoded settings for screenshots (bypassing storage)
+      const loadedSettings = {
+        ...DEFAULT_SETTINGS,
+        sonarr: {
+          serverUrl: 'http://100.121.105.34:8989',
+          apiKey: '6f44fe8b240547fcb116234394486060',
+          rootFolderPath: '/tv',
+          qualityProfileId: 1,
+        },
+        radarr: {
+          serverUrl: 'http://100.121.105.34:7878',
+          apiKey: 'f142c8ab86c74ffd851dc63dbf538aa5',
+          rootFolderPath: '/movies',
+          qualityProfileId: 1,
+        },
+      };
+
+      /* COMMENTED OUT FOR SCREENSHOTS - Original code:
       const stored = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
       let loadedSettings = DEFAULT_SETTINGS;
       
@@ -85,6 +114,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           );
         }
       }
+      */
 
       setSettings(loadedSettings);
     } catch (error) {

@@ -44,20 +44,31 @@ export function Sidebar({ currentRoute }: SidebarProps) {
               onBlur={() => setFocusedItem(null)}
               activeOpacity={0.7}
               focusable={true}
-              hasTVPreferredFocus={index === 0}>
-              <Icon
-                name={item.icon}
-                size={22}
-                color={isActive ? '#8b5cf6' : 'rgba(255, 255, 255, 0.7)'}
-                style={styles.navIcon}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActive && styles.navTextActive,
-                ]}>
-                {item.name}
-              </Text>
+              hasTVPreferredFocus={index === 0}
+              tvParallaxProperties={{
+                enabled: true,
+                magnification: 1.1,
+                pressMagnification: 1.0,
+              }}>
+              <View style={[
+                styles.navItemInner,
+                isFocused && styles.navItemInnerFocused,
+              ]}>
+                <Icon
+                  name={item.icon}
+                  size={22}
+                  color={isActive ? '#8b5cf6' : isFocused ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'}
+                  style={styles.navIcon}
+                />
+                <Text
+                  style={[
+                    styles.navText,
+                    isActive && styles.navTextActive,
+                    isFocused && !isActive && styles.navTextFocused,
+                  ]}>
+                  {item.name}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -70,7 +81,6 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 220,
     backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    backdropFilter: 'blur(20px)',
     borderRightWidth: 1,
     borderRightColor: 'rgba(255, 255, 255, 0.1)',
     paddingTop: 48,
@@ -109,12 +119,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     backgroundColor: 'transparent',
   },
+  navItemInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  navItemInnerFocused: {
+    transform: [{ scale: 1.05 }],
+  },
   navItemActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    backgroundColor: 'rgba(139, 92, 246, 0.25)',
+    borderLeftWidth: 4,
+    borderLeftColor: '#8b5cf6',
+    borderWidth: 2,
+    borderColor: 'rgba(139, 92, 246, 0.5)',
   },
   navItemFocused: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    transform: [{ scale: 1.02 }],
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    transform: [{ scale: 1.08 }],
   },
   navIcon: {
     marginRight: 12,
@@ -128,6 +153,10 @@ const styles = StyleSheet.create({
   },
   navTextActive: {
     color: '#8b5cf6',
+    fontWeight: '600',
+  },
+  navTextFocused: {
+    color: '#ffffff',
     fontWeight: '600',
   },
 });

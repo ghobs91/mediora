@@ -97,15 +97,24 @@ export class SonarrService {
 
   // Series
   async getAllSeries(): Promise<SonarrSeries[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/series`, {
-      headers: this.getHeaders(),
-    });
+    try {
+      const response = await fetch(`${this.serverUrl}/api/v3/series`, {
+        headers: this.getHeaders(),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Failed to get series: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get series: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('[Sonarr] Failed to get series:', error);
+      if (error instanceof Error && error.message.includes('Network request failed')) {
+        console.error('[Sonarr] Network error - server may not be reachable');
+        throw new Error('Cannot connect to Sonarr server. Please check your network connection and server settings.');
+      }
+      throw error;
     }
-
-    return response.json();
   }
 
   async getSeriesById(id: number): Promise<SonarrSeries> {
@@ -273,18 +282,27 @@ export class SonarrService {
 
   // Queue (for download progress)
   async getQueue(): Promise<{ records: SonarrQueueItem[]; totalRecords: number }> {
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/queue?includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
-      {
-        headers: this.getHeaders(),
-      },
-    );
+    try {
+      const response = await fetch(
+        `${this.serverUrl}/api/v3/queue?includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
+        {
+          headers: this.getHeaders(),
+        },
+      );
 
-    if (!response.ok) {
-      throw new Error(`Failed to get queue: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get queue: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('[Sonarr] Failed to get queue:', error);
+      if (error instanceof Error && error.message.includes('Network request failed')) {
+        console.error('[Sonarr] Network error - server may not be reachable');
+        throw new Error('Cannot connect to Sonarr server. Please check your network connection and server settings.');
+      }
+      throw error;
     }
-
-    return response.json();
   }
 
   async getQueueBySeriesId(seriesId: number): Promise<SonarrQueueItem[]> {
