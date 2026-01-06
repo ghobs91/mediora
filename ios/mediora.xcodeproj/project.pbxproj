@@ -20,7 +20,7 @@
 		C84EECCD2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
 		C8CDF1832F0543E800EACBF9 /* AppIcon-tvOS.png in Resources */ = {isa = PBXBuildFile; fileRef = C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */; };
 		C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */; };
+		D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,7 +40,7 @@
 		B81C21D6CAEC9244E5C269B4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = MedioraIcon.icon; sourceTree = "<group>"; };
 		C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "AppIcon-tvOS.png"; sourceTree = "<group>"; };
-		CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
+		CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -73,7 +73,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
-				CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */,
+				CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */,
 				C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */,
 				C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */,
 			);
@@ -236,7 +236,7 @@
 				AD41AB8D379291D627F7CCCF /* Images.xcassets in Resources */,
 				C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */,
 				A5D3B02DCFCAC892858C4F3D /* PrivacyInfo.xcprivacy in Resources */,
-				D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */,
+				D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -267,9 +267,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -284,9 +288,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -300,9 +308,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -359,9 +371,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -474,6 +490,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = mediora/mediora.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
@@ -497,7 +514,7 @@
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.mediora-mobile";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.ghobs.mediora;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.mediora.app.Mediora;
 				PRODUCT_NAME = mediora;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
@@ -616,6 +633,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
@@ -660,6 +678,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = MedioraIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = mediora/mediora.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
