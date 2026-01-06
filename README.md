@@ -34,6 +34,24 @@ If you run a self-hosted media stack and use Apple TV, Mediora is built for you.
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="fastlane/screenshots/en-US/Apple TV-01-Home.png" width="45%" alt="Home Screen" />
+  <img src="fastlane/screenshots/en-US/Apple TV-05-Detail-View.png" width="45%" alt="Detail View" />
+</p>
+
+<p align="center">
+  <img src="fastlane/screenshots/en-US/Apple TV-02-TV-Shows.png" width="45%" alt="TV Shows" />
+  <img src="fastlane/screenshots/en-US/Apple TV-03-Movies.png" width="45%" alt="Movies" />
+</p>
+
+<p align="center">
+  <img src="fastlane/screenshots/en-US/Apple TV-04-Search.png" width="45%" alt="Search" />
+</p>
+
+---
+
 ## Supported Services
 
 - **Jellyfin** – Media streaming and library management  
