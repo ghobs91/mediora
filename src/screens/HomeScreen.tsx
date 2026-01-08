@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaRow, LoadingScreen } from '../components';
 import { JellyfinItem } from '../types';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 export function HomeScreen() {
   const navigation = useNavigation();
@@ -159,6 +160,30 @@ export function HomeScreen() {
     }
   };
 
+  const handleToggleFavorite = async (item: JellyfinItem, isFavorite: boolean) => {
+    if (!jellyfin) return;
+
+    try {
+      const success = await jellyfin.toggleFavorite(item.Id, isFavorite);
+      if (success) {
+        // Update the item in all lists
+        const updateItem = (i: JellyfinItem) => {
+          if (i.Id === item.Id && i.UserData) {
+            return { ...i, UserData: { ...i.UserData, IsFavorite: isFavorite } };
+          }
+          return i;
+        };
+        
+        setResumeItems(prev => prev.map(updateItem));
+        setNextUpItems(prev => prev.map(updateItem));
+        setLatestMovies(prev => prev.map(updateItem));
+        setLatestShows(prev => prev.map(updateItem));
+      }
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
+  };
+
 
   if (!isJellyfinConnected) {
     return (
@@ -218,6 +243,7 @@ export function HomeScreen() {
         onItemPress={handleItemPress}
         onItemRemove={handleRemoveFromContinueWatching}
         onItemMarkWatched={handleMarkAsWatched}
+        onItemToggleFavorite={handleToggleFavorite}
         getImageUrl={getImageUrl}
       />
 
@@ -225,6 +251,7 @@ export function HomeScreen() {
         title="New Episodes"
         items={latestShows}
         onItemPress={handleItemPress}
+        onItemToggleFavorite={handleToggleFavorite}
         getImageUrl={getImageUrl}
       />
 
@@ -232,6 +259,7 @@ export function HomeScreen() {
         title="New Movies"
         items={latestMovies}
         onItemPress={handleItemPress}
+        onItemToggleFavorite={handleToggleFavorite}
         getImageUrl={getImageUrl}
       />
 
@@ -246,37 +274,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   contentContainer: {
-    paddingTop: 48,
+    paddingTop: scaleSize(52),
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 48,
+    padding: scaleSize(52),
     backgroundColor: '#000',
-    minHeight: 600,
+    minHeight: scaleSize(640),
   },
   emptyContentContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 48,
-    minHeight: 400,
+    padding: scaleSize(52),
+    minHeight: scaleSize(440),
   },
   emptyTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 42,
+    fontSize: scaleFontSize(48),
     fontWeight: '700',
-    marginBottom: 20,
-    letterSpacing: 0.5,
+    marginBottom: scaleSize(24),
+    letterSpacing: 0.6,
   },
   emptyText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 20,
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: scaleFontSize(22),
     textAlign: 'center',
     fontWeight: '500',
-    lineHeight: 28,
+    lineHeight: scaleSize(32),
   },
   bottomPadding: {
-    height: 60,
+    height: scaleSize(64),
   },
 });

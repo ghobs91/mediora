@@ -10,6 +10,8 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  TVEventHandler,
+  useTVEventHandler,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { OnProgressData, VideoRef, SelectedTrackType } from 'react-native-video';
@@ -58,8 +60,6 @@ export function PlayerScreen() {
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
-
-
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
 
@@ -82,18 +82,11 @@ export function PlayerScreen() {
       setItem(itemDetails);
       setIsFavorite(itemDetails.UserData?.IsFavorite || false);
 
-      // Determine best initial stream method based on container format
+      // Use HLS by default for tvOS to avoid direct stream configuration issues
       if (info.MediaSources.length > 0) {
         const container = info.MediaSources[0].Container?.toLowerCase();
-        const directPlayContainers = ['mp4', 'm4v', 'mov'];
-        
-        if (directPlayContainers.includes(container)) {
-          console.log('[PlayerScreen] Container is directly playable:', container);
-          setStreamAttempt('direct');
-        } else {
-          console.log('[PlayerScreen] Container requires transcoding:', container);
-          setStreamAttempt('hls');
-        }
+        console.log('[PlayerScreen] Starting with HLS for container:', container);
+        setStreamAttempt('hls');
       }
 
       // If it's an episode, fetch all episodes in the season for exploration
@@ -148,6 +141,75 @@ export function PlayerScreen() {
       }
     };
   }, [itemId]); // Reload when itemId changes
+
+  // Set up TV remote event handler using hook (must be called unconditionally)
+  useTVEventHandler((evt: any) => {
+    if (!Platform.isTV || !evt || !evt.eventType) return;
+    
+    const { eventType } = evt;
+    console.log('[PlayerScreen] TV Remote Event:', eventType);
+
+    switch (eventType) {
+      case 'playPause':
+        console.log('[PlayerScreen] Play/Pause button pressed');
+        setIsPlaying(prev => {
+          console.log('[PlayerScreen] Toggling play state from:', prev, 'to:', !prev);
+          return !prev;
+        });
+        showControlsWithTimeout();
+        break;
+      case 'play':
+        console.log('[PlayerScreen] Play button pressed');
+        setIsPlaying(true);
+        showControlsWithTimeout();
+        break;
+      case 'pause':
+        console.log('[PlayerScreen] Pause button pressed');
+        setIsPlaying(false);
+        showControlsWithTimeout();
+        break;
+      case 'rewind':
+      case 'left':
+        console.log('[PlayerScreen] Rewind/Left button pressed, current time:', currentTime);
+        if (videoRef.current) {
+          const newTime = Math.max(0, currentTime - 10);
+          videoRef.current.seek(newTime);
+          setCurrentTime(newTime);
+        }
+        showControlsWithTimeout();
+        break;
+      case 'fastForward':
+      case 'right':
+        console.log('[PlayerScreen] Fast Forward/Right button pressed, current time:', currentTime);
+        if (videoRef.current) {
+          const newTime = Math.min(duration, currentTime + 10);
+          videoRef.current.seek(newTime);
+          setCurrentTime(newTime);
+        }
+        showControlsWithTimeout();
+        break;
+      case 'select':
+        console.log('[PlayerScreen] Select button pressed');
+        setIsPlaying(prev => !prev);
+        showControlsWithTimeout();
+        break;
+      case 'up':
+      case 'down':
+        console.log('[PlayerScreen] Up/Down button pressed');
+        showControlsWithTimeout();
+        break;
+      case 'menu':
+        console.log('[PlayerScreen] Menu button pressed');
+        navigation.goBack();
+        break;
+      default:
+        console.log('[PlayerScreen] Unhandled event type:', eventType);
+    }
+  });
+
+  useEffect(() => {
+    console.log('[PlayerScreen] Component mounted, Platform.isTV:', Platform.isTV, 'Platform.OS:', Platform.OS);
+  }, []);
 
   // Log stream attempt changes
   useEffect(() => {

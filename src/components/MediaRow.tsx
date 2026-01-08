@@ -3,6 +3,7 @@ import { FlatList, Text, StyleSheet, View, Platform } from 'react-native';
 import { MediaCard } from './MediaCard';
 import { useResponsiveColumns } from '../hooks';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 interface JellyfinMediaRowProps {
   title: string;
@@ -10,6 +11,7 @@ interface JellyfinMediaRowProps {
   onItemPress: (item: JellyfinItem) => void;
   onItemRemove?: (item: JellyfinItem) => void;
   onItemMarkWatched?: (item: JellyfinItem) => void;
+  onItemToggleFavorite?: (item: JellyfinItem, isFavorite: boolean) => void;
   getImageUrl?: (item: JellyfinItem) => string | null;
   tmdbItems?: never;
 }
@@ -28,11 +30,11 @@ export function MediaRow(props: MediaRowProps) {
   const { title } = props;
   const { spacing } = useResponsiveColumns();
   
-  // Sidebar is 220px wide, use consistent padding for content
-  const horizontalPadding = 48;
+  // Sidebar is 240px wide (scaled), use consistent padding for content
+  const horizontalPadding = scaleSize(52);
 
   if ('items' in props && props.items) {
-    const { items, onItemPress, onItemRemove, onItemMarkWatched, getImageUrl } = props;
+    const { items, onItemPress, onItemRemove, onItemMarkWatched, onItemToggleFavorite, getImageUrl } = props;
 
     if (items.length === 0) {
       return null;
@@ -52,10 +54,11 @@ export function MediaRow(props: MediaRowProps) {
               onPress={() => onItemPress(item)}
               onRemove={onItemRemove ? () => onItemRemove(item) : undefined}
               onMarkWatched={onItemMarkWatched ? () => onItemMarkWatched(item) : undefined}
+              onToggleFavorite={onItemToggleFavorite ? (isFavorite) => onItemToggleFavorite(item, isFavorite) : undefined}
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - 8, paddingRight: 40 }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - scaleSize(10), paddingRight: scaleSize(44) }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -84,7 +87,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - 8, paddingRight: 40 }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - scaleSize(10), paddingRight: scaleSize(44) }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -97,18 +100,18 @@ export function MediaRow(props: MediaRowProps) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 32,
-    marginTop: 8,
+    marginBottom: scaleSize(36),
+    marginTop: scaleSize(10),
   },
   title: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 28,
+    fontSize: scaleFontSize(32),
     fontWeight: '700',
-    marginBottom: 18,
-    marginLeft: 48,
-    letterSpacing: 0.4,
+    marginBottom: scaleSize(20),
+    marginLeft: scaleSize(52),
+    letterSpacing: 0.5,
   },
   listContent: {
-    paddingHorizontal: 40,
+    paddingHorizontal: scaleSize(44),
   },
 });

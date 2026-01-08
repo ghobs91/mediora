@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   ScrollView,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { LoadingScreen } from '../components';
 import { LiveTVChannel, EPGChannel } from '../types';
 import { fetchChannelsFromCountries } from '../services/iptvManager';
 import { epgService } from '../services/epg';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 const CHANNELS_PER_PAGE = 50;
 const GUIDE_CHANNELS_PER_PAGE = 30;
@@ -46,6 +48,8 @@ export function LiveTVScreen() {
   const [epgError, setEpgError] = useState<string | null>(null);
   const [guideCurrentPage, setGuideCurrentPage] = useState(1);
   const [favoriteChannelIds, setFavoriteChannelIds] = useState<Set<string>>(new Set());
+  const [showFavoriteModal, setShowFavoriteModal] = useState(false);
+  const [selectedChannelForFavorite, setSelectedChannelForFavorite] = useState<EPGChannel | null>(null);
 
   // Load favorites from storage
   const loadFavorites = useCallback(async () => {
@@ -251,7 +255,7 @@ export function LiveTVScreen() {
             />
           ) : (
             <View style={styles.placeholderLogo}>
-              <Icon name="tv" size={40} color="rgba(255, 255, 255, 0.4)" />
+              <Icon name="tv" size={scaleSize(56)} color="rgba(255, 255, 255, 0.4)" />
             </View>
           )}
           <TouchableOpacity
@@ -262,7 +266,7 @@ export function LiveTVScreen() {
             }}>
             <Icon 
               name={isFavorite ? "heart" : "heart-outline"} 
-              size={24} 
+              size={scaleSize(32)} 
               color={isFavorite ? "#e50914" : "rgba(255, 255, 255, 0.7)"} 
             />
           </TouchableOpacity>
@@ -288,7 +292,7 @@ export function LiveTVScreen() {
   if (error) {
     return (
       <View style={styles.emptyContainer}>
-        <Icon name="alert-circle-outline" size={64} color="rgba(255, 255, 255, 0.3)" />
+        <Icon name="alert-circle-outline" size={scaleSize(88)} color="rgba(255, 255, 255, 0.3)" />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity onPress={loadChannels} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
@@ -300,7 +304,7 @@ export function LiveTVScreen() {
   if (allChannels.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Icon name="tv-outline" size={64} color="rgba(255, 255, 255, 0.3)" />
+        <Icon name="tv-outline" size={scaleSize(88)} color="rgba(255, 255, 255, 0.3)" />
         <Text style={styles.emptyTitle}>No Live TV Channels</Text>
         <Text style={styles.emptyText}>
           {isJellyfinConnected
@@ -317,7 +321,7 @@ export function LiveTVScreen() {
       <View style={styles.header}>
         <View style={styles.controls}>
           <View style={styles.searchContainer}>
-            <Icon name="search" size={20} color="rgba(255, 255, 255, 0.5)" style={styles.searchIcon} />
+            <Icon name="search" size={scaleSize(28)} color="rgba(255, 255, 255, 0.5)" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search channels..."
@@ -329,7 +333,7 @@ export function LiveTVScreen() {
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Icon name="close-circle" size={20} color="rgba(255, 255, 255, 0.5)" />
+                <Icon name="close-circle" size={scaleSize(28)} color="rgba(255, 255, 255, 0.5)" />
               </TouchableOpacity>
             )}
           </View>
@@ -346,7 +350,7 @@ export function LiveTVScreen() {
             <TouchableOpacity
               style={[styles.toggleButton, viewMode === 'channels' && styles.toggleButtonActive]}
               onPress={() => setViewMode('channels')}>
-              <Icon name="grid" size={18} color={viewMode === 'channels' ? '#fff' : 'rgba(255,255,255,0.6)'} />
+              <Icon name="grid" size={scaleSize(24)} color={viewMode === 'channels' ? '#fff' : 'rgba(255,255,255,0.6)'} />
               <Text style={[styles.toggleText, viewMode === 'channels' && styles.toggleTextActive]}>
                 Channels
               </Text>
@@ -354,11 +358,19 @@ export function LiveTVScreen() {
             <TouchableOpacity
               style={[styles.toggleButton, viewMode === 'guide' && styles.toggleButtonActive]}
               onPress={() => setViewMode('guide')}>
-              <Icon name="list" size={18} color={viewMode === 'guide' ? '#fff' : 'rgba(255,255,255,0.6)'} />
+              <Icon name="list" size={scaleSize(24)} color={viewMode === 'guide' ? '#fff' : 'rgba(255,255,255,0.6)'} />
               <Text style={[styles.toggleText, viewMode === 'guide' && styles.toggleTextActive]}>
                 Guide
               </Text>
             </TouchableOpacity>
+            {viewMode === 'guide' && (
+              <TouchableOpacity
+                style={styles.refreshGuideButton}
+                onPress={() => loadProgramGuide(true)}
+                disabled={isLoadingGuide}>
+                <Icon name="refresh" size={scaleSize(28)} color={isLoadingGuide ? '#666' : '#fff'} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -399,7 +411,7 @@ export function LiveTVScreen() {
                 style={[styles.pageButton, currentPage === 1 && styles.pageButtonDisabled]}
                 onPress={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}>
-                <Icon name="chevron-back" size={20} color={currentPage === 1 ? '#666' : '#fff'} />
+                <Icon name="chevron-back" size={scaleSize(28)} color={currentPage === 1 ? '#666' : '#fff'} />
               </TouchableOpacity>
               
               <View style={styles.pageInfo}>
@@ -412,30 +424,13 @@ export function LiveTVScreen() {
                 style={[styles.pageButton, currentPage === totalPages && styles.pageButtonDisabled]}
                 onPress={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}>
-                <Icon name="chevron-forward" size={20} color={currentPage === totalPages ? '#666' : '#fff'} />
+                <Icon name="chevron-forward" size={scaleSize(28)} color={currentPage === totalPages ? '#666' : '#fff'} />
               </TouchableOpacity>
             </View>
           )}
         </>
       ) : (
         <View style={styles.guideContainer}>
-          {/* Day Selector - Only Today for now since we filter to 12 hours */}
-          <View style={styles.daySelector}>
-            <TouchableOpacity
-              style={[styles.dayTab, styles.dayTabActive]}
-              disabled>
-              <Text style={[styles.dayTabText, styles.dayTabTextActive]}>
-                Today (Next 12 Hours)
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.refreshGuideButton}
-              onPress={() => loadProgramGuide(true)}
-              disabled={isLoadingGuide}>
-              <Icon name="refresh" size={20} color={isLoadingGuide ? '#666' : '#fff'} />
-            </TouchableOpacity>
-          </View>
-
           {isLoadingGuide ? (
             <View style={styles.guideLoading}>
               <Icon name="hourglass-outline" size={48} color="rgba(255,255,255,0.5)" />
@@ -493,12 +488,17 @@ export function LiveTVScreen() {
                       if (originalChannel) {
                         handleChannelPress(originalChannel);
                       }
-                    }}>
+                    }}
+                    onLongPress={() => {
+                      setSelectedChannelForFavorite(channel);
+                      setShowFavoriteModal(true);
+                    }}
+                    delayLongPress={500}>
                     {channel.icon ? (
                       <Image source={{ uri: channel.icon }} style={styles.guideChannelLogo} />
                     ) : (
                       <View style={styles.guideChannelLogoPlaceholder}>
-                        <Icon name="tv-outline" size={16} color="#666" />
+                        <Icon name="tv-outline" size={scaleSize(24)} color="#666" />
                       </View>
                     )}
                     <Text style={styles.guideChannelName} numberOfLines={1}>
@@ -512,7 +512,7 @@ export function LiveTVScreen() {
                       }}>
                       <Icon 
                         name={favoriteChannelIds.has(channel.id) ? "heart" : "heart-outline"} 
-                        size={20} 
+                        size={scaleSize(28)} 
                         color={favoriteChannelIds.has(channel.id) ? "#e50914" : "rgba(255, 255, 255, 0.5)"} 
                       />
                     </TouchableOpacity>
@@ -595,7 +595,7 @@ export function LiveTVScreen() {
                       style={[styles.pageButton, guideCurrentPage === 1 && styles.pageButtonDisabled]}
                       onPress={() => setGuideCurrentPage(guideCurrentPage - 1)}
                       disabled={guideCurrentPage === 1}>
-                      <Icon name="chevron-back" size={20} color={guideCurrentPage === 1 ? '#666' : '#fff'} />
+                      <Icon name="chevron-back" size={scaleSize(28)} color={guideCurrentPage === 1 ? '#666' : '#fff'} />
                     </TouchableOpacity>
                     
                     <View style={styles.pageInfo}>
@@ -614,7 +614,7 @@ export function LiveTVScreen() {
                       style={[styles.pageButton, guideCurrentPage === totalGuidePages && styles.pageButtonDisabled]}
                       onPress={() => setGuideCurrentPage(guideCurrentPage + 1)}
                       disabled={guideCurrentPage === totalGuidePages}>
-                      <Icon name="chevron-forward" size={20} color={guideCurrentPage === totalGuidePages ? '#666' : '#fff'} />
+                      <Icon name="chevron-forward" size={scaleSize(28)} color={guideCurrentPage === totalGuidePages ? '#666' : '#fff'} />
                     </TouchableOpacity>
                   </View>
                 ) : null;
@@ -623,6 +623,52 @@ export function LiveTVScreen() {
           )}
         </View>
       )}
+
+      {/* Favorite Modal */}
+      <Modal
+        visible={showFavoriteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFavoriteModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedChannelForFavorite?.displayName}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                if (selectedChannelForFavorite) {
+                  toggleFavorite(selectedChannelForFavorite.id);
+                  setShowFavoriteModal(false);
+                }
+              }}
+              hasTVPreferredFocus={true}
+              focusable={true}
+              activeOpacity={0.7}>
+              <Icon 
+                name={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? "heart" : "heart-outline"} 
+                size={scaleSize(28)} 
+                color={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? "#e50914" : "#fff"} 
+              />
+              <Text style={styles.modalButtonText}>
+                {selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) 
+                  ? 'Remove from Favorites' 
+                  : 'Add to Favorites'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonCancel]}
+              onPress={() => setShowFavoriteModal(false)}
+              focusable={true}
+              activeOpacity={0.7}>
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -634,14 +680,14 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    paddingTop: 48,
+    paddingTop: scaleSize(52),
   },
   controls: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 16,
+    padding: scaleSize(24),
+    gap: scaleSize(20),
     alignItems: 'center',
   },
   searchContainer: {
@@ -649,63 +695,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 44,
+    borderRadius: scaleSize(12),
+    paddingHorizontal: scaleSize(20),
+    height: scaleSize(60),
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: scaleSize(12),
   },
   searchInput: {
     flex: 1,
     color: '#fff',
-    fontSize: 16,
-    paddingVertical: 8,
+    fontSize: scaleFontSize(20),
+    paddingVertical: scaleSize(12),
   },
   clearButton: {
-    padding: 4,
+    padding: scaleSize(8),
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: scaleSize(24),
+    paddingBottom: scaleSize(16),
   },
   statsText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 13,
+    fontSize: scaleFontSize(18),
     fontWeight: '500',
   },
   // Channel Grid Styles
   grid: {
-    padding: 24,
+    padding: scaleSize(32),
   },
   row: {
     justifyContent: 'flex-start',
-    gap: 24,
-    marginBottom: 24,
+    gap: scaleSize(32),
+    marginBottom: scaleSize(32),
   },
   channelCard: {
-    width: 280,
+    width: scaleSize(340),
     backgroundColor: 'rgba(28, 28, 30, 0.72)',
-    borderRadius: 12,
+    borderRadius: scaleSize(16),
     overflow: 'hidden',
-    borderWidth: 3,
+    borderWidth: scaleSize(4),
     borderColor: 'transparent',
   },
   channelCardFocused: {
     borderColor: 'rgba(255, 255, 255, 0.9)',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    transform: [{ scale: 1.05 }],
     shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: scaleSize(6) },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowRadius: scaleSize(16),
   },
   channelImageContainer: {
     width: '100%',
-    height: 160,
+    height: scaleSize(190),
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -713,11 +758,11 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 8,
+    top: scaleSize(12),
+    right: scaleSize(12),
+    padding: scaleSize(10),
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 20,
+    borderRadius: scaleSize(24),
   },
   channelLogo: {
     width: '100%',
@@ -731,19 +776,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   channelInfo: {
-    padding: 16,
-    minHeight: 80,
+    padding: scaleSize(20),
+    minHeight: scaleSize(100),
   },
   channelName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFontSize(20),
     fontWeight: '600',
-    marginBottom: 4,
-    lineHeight: 22,
+    marginBottom: scaleSize(6),
+    lineHeight: scaleFontSize(28),
   },
   channelGroup: {
     color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 13,
+    fontSize: scaleFontSize(16),
     fontWeight: '500',
   },
   // Pagination
@@ -751,18 +796,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 24,
+    paddingVertical: scaleSize(28),
+    paddingHorizontal: scaleSize(32),
     backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderTopWidth: 1,
+    borderTopWidth: 2,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    gap: 16,
+    gap: scaleSize(24),
   },
   pageButton: {
-    padding: 12,
+    padding: scaleSize(16),
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    minWidth: 44,
+    borderRadius: scaleSize(12),
+    minWidth: scaleSize(60),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -770,72 +815,73 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   pageInfo: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scaleSize(28),
   },
   pageText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: scaleFontSize(20),
     fontWeight: '600',
   },
   pageSubtext: {
     color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: scaleFontSize(16),
+    marginTop: scaleSize(4),
   },
   // Empty/Error states
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 48,
+    padding: scaleSize(64),
     backgroundColor: '#000',
   },
   emptyTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 32,
+    fontSize: scaleFontSize(44),
     fontWeight: '700',
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: scaleSize(32),
+    marginBottom: scaleSize(16),
   },
   emptyText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 18,
+    fontSize: scaleFontSize(22),
     textAlign: 'center',
-    lineHeight: 26,
-    maxWidth: 500,
+    lineHeight: scaleFontSize(32),
+    maxWidth: scaleSize(600),
   },
   errorText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 18,
+    fontSize: scaleFontSize(22),
     textAlign: 'center',
-    marginTop: 24,
-    marginBottom: 24,
-    maxWidth: 500,
+    marginTop: scaleSize(32),
+    marginBottom: scaleSize(32),
+    maxWidth: scaleSize(600),
   },
   retryButton: {
     backgroundColor: '#e50914',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginTop: 8,
+    paddingHorizontal: scaleSize(44),
+    paddingVertical: scaleSize(18),
+    borderRadius: scaleSize(12),
+    marginTop: scaleSize(12),
   },
   retryButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFontSize(20),
     fontWeight: '600',
   },
   // View Toggle
   viewToggle: {
     flexDirection: 'row',
-    gap: 8,
+    gap: scaleSize(12),
+    alignItems: 'center',
   },
   toggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    gap: scaleSize(8),
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(12),
+    borderRadius: scaleSize(10),
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   toggleButtonActive: {
@@ -843,54 +889,23 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
+    fontSize: scaleFontSize(18),
     fontWeight: '600',
   },
   toggleTextActive: {
     color: '#fff',
   },
-  // Guide View
+  refreshGuideButton: {
+    padding: scaleSize(14),
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: scaleSize(10),
+    marginLeft: scaleSize(8),
+  },
   guideContainer: {
     flex: 1,
   },
   guideContent: {
     flex: 1,
-  },
-  daySelector: {
-    flexDirection: 'row',
-    padding: 12,
-    gap: 8,
-    backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  dayTab: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    alignItems: 'center',
-  },
-  dayTabActive: {
-    backgroundColor: '#e50914',
-  },
-  dayTabText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dayTabTextActive: {
-    color: '#fff',
-  },
-  loadingGuide: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingGuideText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 16,
   },
   guideList: {
     flex: 1,
@@ -909,27 +924,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   guideChannelLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
+    width: scaleSize(56),
+    height: scaleSize(56),
+    borderRadius: scaleSize(8),
   },
   guideChannelLogoPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
+    width: scaleSize(56),
+    height: scaleSize(56),
+    borderRadius: scaleSize(8),
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   guideChannelName: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: scaleFontSize(20),
     fontWeight: '600',
     flex: 1,
   },
   guideFavoriteButton: {
-    padding: 8,
-    marginLeft: 8,
+    padding: scaleSize(10),
+    marginLeft: scaleSize(12),
   },
   guideProgramList: {
     flex: 1,
@@ -942,61 +957,103 @@ const styles = StyleSheet.create({
   },
   guideProgramTime: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 13,
+    fontSize: scaleFontSize(16),
     fontWeight: '600',
-    width: 70,
+    width: scaleSize(90),
   },
   guideProgramTitle: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFontSize(18),
     flex: 1,
   },
   noGuideData: {
     color: 'rgba(255, 255, 255, 0.3)',
-    fontSize: 14,
+    fontSize: scaleFontSize(18),
     fontStyle: 'italic',
   },
   guideNotAvailable: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    gap: 16,
+    padding: scaleSize(44),
+    gap: scaleSize(20),
   },
   guideNotAvailableTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: scaleFontSize(28),
     fontWeight: '600',
     textAlign: 'center',
   },
   guideNotAvailableText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
+    fontSize: scaleFontSize(18),
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: scaleFontSize(28),
   },
-  // New guide styles
-  refreshGuideButton: {
-    padding: 10,
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'rgba(28, 28, 30, 0.98)',
+    borderRadius: scaleSize(16),
+    padding: scaleSize(32),
+    width: scaleSize(500),
+    borderWidth: 2,
+    borderColor: 'rgba(139, 92, 246, 0.4)',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: scaleSize(8) },
+    shadowOpacity: 0.6,
+    shadowRadius: scaleSize(20),
+    elevation: 20,
+  },
+  modalHeader: {
+    marginBottom: scaleSize(24),
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: scaleFontSize(24),
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: scaleSize(12),
+    backgroundColor: '#e50914',
+    paddingVertical: scaleSize(16),
+    paddingHorizontal: scaleSize(24),
+    borderRadius: scaleSize(10),
+    marginBottom: scaleSize(12),
+  },
+  modalButtonCancel: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    marginLeft: 'auto',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: scaleFontSize(20),
+    fontWeight: '600',
   },
   guideLoading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-    padding: 32,
+    gap: scaleSize(20),
+    padding: scaleSize(44),
   },
   guideLoadingTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: scaleFontSize(24),
     fontWeight: '600',
   },
   guideLoadingText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
+    fontSize: scaleFontSize(18),
   },
   guideScrollView: {
     flex: 1,
@@ -1004,47 +1061,47 @@ const styles = StyleSheet.create({
   guideChannel: {
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: 12,
+    paddingVertical: scaleSize(16),
   },
   guideChannelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    gap: 10,
+    paddingHorizontal: scaleSize(24),
+    marginBottom: scaleSize(12),
+    gap: scaleSize(14),
   },
   guideProgramsRow: {
-    paddingHorizontal: 12,
+    paddingHorizontal: scaleSize(20),
   },
   guideProgram: {
-    width: 180,
+    width: scaleSize(240),
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    padding: 12,
-    marginHorizontal: 4,
+    borderRadius: scaleSize(10),
+    padding: scaleSize(16),
+    marginHorizontal: scaleSize(6),
   },
   guideProgramNow: {
     backgroundColor: 'rgba(229, 9, 20, 0.3)',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#e50914',
   },
   guideProgramCategory: {
     color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: scaleFontSize(14),
+    marginTop: scaleSize(6),
   },
   nowBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: scaleSize(6),
+    right: scaleSize(6),
     backgroundColor: '#e50914',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: scaleSize(8),
+    paddingVertical: scaleSize(4),
+    borderRadius: scaleSize(6),
   },
   nowBadgeText: {
     color: '#fff',
-    fontSize: 9,
+    fontSize: scaleFontSize(12),
     fontWeight: '700',
   },
 });

@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 interface SidebarProps {
   currentRoute: string;
@@ -9,7 +10,7 @@ interface SidebarProps {
 
 export function Sidebar({ currentRoute }: SidebarProps) {
   const navigation = useNavigation<any>();
-  const [focusedItem, setFocusedItem] = React.useState<string | null>(null);
+  const [focusedItem, setFocusedItem] = useState<string | null>(null);
 
   const navItems = [
     { name: 'Home', route: 'Home', icon: 'home-outline' },
@@ -19,6 +20,24 @@ export function Sidebar({ currentRoute }: SidebarProps) {
     { name: 'Search', route: 'Search', icon: 'search-outline' },
     { name: 'Settings', route: 'Settings', icon: 'settings-outline' },
   ];
+
+  const handleFocus = useCallback((route: string) => {
+    setFocusedItem(route);
+  }, []);
+
+  const handleBlur = useCallback((route: string) => {
+    // Use a small timeout to check if focus moved to another sidebar item
+    // If so, the new item's onFocus will have already updated the state
+    setTimeout(() => {
+      setFocusedItem(current => {
+        // Only clear if still set to this route (meaning focus left sidebar entirely)
+        if (current === route) {
+          return null;
+        }
+        return current;
+      });
+    }, 50);
+  }, []);
 
   return (
     <View style={styles.sidebar}>
@@ -37,34 +56,32 @@ export function Sidebar({ currentRoute }: SidebarProps) {
               style={[
                 styles.navItem,
                 isActive && styles.navItemActive,
-                isFocused && !isActive && styles.navItemFocused,
+                isFocused && styles.navItemFocused,
               ]}
               onPress={() => navigation.navigate(item.route)}
-              onFocus={() => setFocusedItem(item.route)}
-              onBlur={() => setFocusedItem(null)}
+              onFocus={() => handleFocus(item.route)}
+              onBlur={() => handleBlur(item.route)}
               activeOpacity={0.7}
               focusable={true}
               hasTVPreferredFocus={index === 0}
-              tvParallaxProperties={{
-                enabled: true,
-                magnification: 1.1,
-                pressMagnification: 1.0,
-              }}>
+              tvParallaxProperties={Platform.isTV ? {
+                enabled: false,
+              } : undefined}>
               <View style={[
                 styles.navItemInner,
                 isFocused && styles.navItemInnerFocused,
               ]}>
                 <Icon
                   name={item.icon}
-                  size={22}
-                  color={isActive ? '#8b5cf6' : isFocused ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'}
+                  size={scaleSize(26)}
+                  color={isActive && !isFocused ? '#a78bfa' : isFocused ? '#ffffff' : 'rgba(255, 255, 255, 0.7)'}
                   style={styles.navIcon}
                 />
                 <Text
                   style={[
                     styles.navText,
-                    isActive && styles.navTextActive,
-                    isFocused && !isActive && styles.navTextFocused,
+                    isActive && !isFocused && styles.navTextActive,
+                    isFocused && styles.navTextFocused,
                   ]}>
                   {item.name}
                 </Text>
@@ -79,44 +96,44 @@ export function Sidebar({ currentRoute }: SidebarProps) {
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: 220,
-    backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255, 255, 255, 0.1)',
-    paddingTop: 48,
-    shadowColor: '#000',
+    width: scaleSize(240),
+    backgroundColor: 'rgba(18, 18, 20, 0.98)',
+    borderRightWidth: 2,
+    borderRightColor: 'rgba(139, 92, 246, 0.3)',
+    paddingTop: scaleSize(48),
+    shadowColor: '#8b5cf6',
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    marginBottom: 16,
+    paddingHorizontal: scaleSize(24),
+    paddingBottom: scaleSize(28),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(139, 92, 246, 0.4)',
+    marginBottom: scaleSize(20),
   },
   logo: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.8,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    fontSize: scaleFontSize(32),
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 1.2,
+    textShadowColor: 'rgba(139, 92, 246, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   navContainer: {
     flex: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: scaleSize(16),
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 4,
+    paddingVertical: scaleSize(16),
+    paddingHorizontal: scaleSize(20),
+    borderRadius: scaleSize(12),
+    marginBottom: scaleSize(8),
     backgroundColor: 'transparent',
   },
   navItemInner: {
@@ -127,36 +144,46 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   navItemActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.25)',
-    borderLeftWidth: 4,
-    borderLeftColor: '#8b5cf6',
-    borderWidth: 2,
-    borderColor: 'rgba(139, 92, 246, 0.5)',
+    backgroundColor: 'rgba(139, 92, 246, 0.35)',
+    borderLeftWidth: scaleSize(6),
+    borderLeftColor: '#a78bfa',
+    borderWidth: 3,
+    borderColor: 'rgba(167, 139, 250, 0.7)',
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
   },
   navItemFocused: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderLeftWidth: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderLeftWidth: scaleSize(6),
     borderLeftColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-    transform: [{ scale: 1.08 }],
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    transform: [{ scale: 1.1 }],
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
   },
   navIcon: {
-    marginRight: 12,
-    width: 22,
+    marginRight: scaleSize(16),
+    width: scaleSize(28),
   },
   navText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '500',
-    letterSpacing: 0.2,
+    fontSize: scaleFontSize(19),
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   navTextActive: {
-    color: '#8b5cf6',
-    fontWeight: '600',
+    color: '#e9d5ff',
+    fontWeight: '700',
+    fontSize: scaleFontSize(20),
   },
   navTextFocused: {
     color: '#ffffff',
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: scaleFontSize(20),
   },
 });
