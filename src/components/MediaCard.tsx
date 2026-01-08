@@ -1,17 +1,17 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   TouchableOpacity,
   Image,
   Text,
   StyleSheet,
   View,
-  Animated,
   Platform,
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { TMDBService } from '../services';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 interface MediaCardProps {
   item?: JellyfinItem;
@@ -22,6 +22,7 @@ interface MediaCardProps {
   onPress: () => void;
   onRemove?: () => void;
   onMarkWatched?: () => void;
+  onToggleFavorite?: (isFavorite: boolean) => void;
   size?: 'small' | 'medium' | 'large' | 'xlarge';
   width?: number;
   height?: number;
@@ -39,6 +40,7 @@ export function MediaCard({
   onPress,
   onRemove,
   onMarkWatched,
+  onToggleFavorite,
   size = 'medium',
   width: customWidth,
   height: customHeight,
@@ -46,63 +48,66 @@ export function MediaCard({
   isDownloading,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
-  const scaleValue = useRef(new Animated.Value(1)).current;
+  const [showOptions, setShowOptions] = useState(false);
 
   const handleFocus = () => {
     setIsFocused(true);
-    Animated.spring(scaleValue, {
-      toValue: 1.12,
-      useNativeDriver: true,
-      friction: 7,
-      tension: 100,
-    }).start();
   };
 
   const handleBlur = () => {
     setIsFocused(false);
-    Animated.spring(scaleValue, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 7,
-      tension: 100,
-    }).start();
   };
 
   const handleContextMenu = () => {
-    if (!onMarkWatched && !onRemove) return;
+    if (!onMarkWatched && !onRemove && !onToggleFavorite) return;
 
     const options = [];
+    if (item?.UserData?.IsFavorite !== undefined && onToggleFavorite) {
+      options.push(item.UserData.IsFavorite ? 'Remove from Favorites' : 'Add to Favorites');
+    }
     if (onMarkWatched) options.push('Mark as Watched');
     if (onRemove) options.push('Remove from Continue Watching');
     options.push('Cancel');
 
+    const buttons = [
+      ...(item?.UserData?.IsFavorite !== undefined && onToggleFavorite ? [{
+        text: item.UserData.IsFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+        onPress: () => onToggleFavorite(!item.UserData.IsFavorite),
+      }] : []),
+      ...(onMarkWatched ? [{
+        text: 'Mark as Watched',
+        onPress: onMarkWatched,
+      }] : []),
+      ...(onRemove ? [{
+        text: 'Remove from Continue Watching',
+        onPress: onRemove,
+        style: 'destructive' as const,
+      }] : []),
+      {
+        text: 'Cancel',
+        style: 'cancel' as const,
+      },
+    ];
+
     Alert.alert(
       'Options',
       'Choose an action',
-      [
-        ...(onMarkWatched ? [{
-          text: 'Mark as Watched',
-          onPress: onMarkWatched,
-        }] : []),
-        ...(onRemove ? [{
-          text: 'Remove from Continue Watching',
-          onPress: onRemove,
-          style: 'destructive' as const,
-        }] : []),
-        {
-          text: 'Cancel',
-          style: 'cancel' as const,
-        },
-      ],
+      buttons,
       { cancelable: true }
     );
   };
 
+  const handleToggleFavorite = () => {
+    if (item && onToggleFavorite) {
+      onToggleFavorite(!item.UserData?.IsFavorite);
+    }
+  };
+
   const dimensions = {
-    small: { width: Platform.isTV ? 120 : 100, height: Platform.isTV ? 180 : 150 },
-    medium: { width: Platform.isTV ? 160 : 140, height: Platform.isTV ? 240 : 210 },
-    large: { width: Platform.isTV ? 200 : 180, height: Platform.isTV ? 300 : 270 },
-    xlarge: { width: Platform.isTV ? 320 : 280, height: Platform.isTV ? 480 : 420 },
+    small: { width: scaleSize(Platform.isTV ? 140 : 100), height: scaleSize(Platform.isTV ? 210 : 150) },
+    medium: { width: scaleSize(Platform.isTV ? 180 : 140), height: scaleSize(Platform.isTV ? 270 : 210) },
+    large: { width: scaleSize(Platform.isTV ? 220 : 180), height: scaleSize(Platform.isTV ? 330 : 270) },
+    xlarge: { width: scaleSize(Platform.isTV ? 360 : 280), height: scaleSize(Platform.isTV ? 540 : 420) },
   };
 
   const width = customWidth || dimensions[size].width;
@@ -133,14 +138,13 @@ export function MediaCard({
       onFocus={handleFocus}
       onBlur={handleBlur}
       onPress={onPress}
-      onLongPress={(onMarkWatched || onRemove) ? handleContextMenu : undefined}
+      onLongPress={(onMarkWatched || onRemove || onToggleFavorite) ? handleContextMenu : undefined}
       delayLongPress={500}
       style={styles.container}>
-      <Animated.View
+      <View
         style={[
           styles.cardContainer,
           { width, height },
-          { transform: [{ scale: scaleValue }] },
           isFocused && styles.focused,
         ]}>
         {displayImageUrl ? (
@@ -184,7 +188,7 @@ export function MediaCard({
               />
             </View>
             <View style={styles.downloadBadge}>
-              <Icon name="arrow-down-circle" size={12} color="#fff" />
+              <Icon name="arrow-down-circle" size={scaleSize(14)} color="#fff" />
               <Text style={styles.downloadText}>
                 {Math.round(downloadProgress * 100)}%
               </Text>
@@ -205,11 +209,41 @@ export function MediaCard({
             activeOpacity={0.7}
           >
             <View style={styles.removeButtonInner}>
-              <Icon name="close" size={20} color="#fff" />
+              <Icon name="close" size={scaleSize(22)} color="#fff" />
             </View>
           </TouchableOpacity>
         )}
-      </Animated.View>
+        {isFocused && (onToggleFavorite || (onMarkWatched && onRemove)) && (
+          <View style={styles.actionButtons}>
+            {onToggleFavorite && item && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleToggleFavorite}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.actionButtonInner, item.UserData?.IsFavorite && styles.actionButtonFavorite]}>
+                  <Icon 
+                    name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
+                    size={scaleSize(20)} 
+                    color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
+            {(onMarkWatched || onRemove) && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleContextMenu}
+                activeOpacity={0.7}
+              >
+                <View style={styles.actionButtonInner}>
+                  <Icon name="ellipsis-horizontal" size={scaleSize(20)} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
       <View style={[styles.textContainer, { width }]}>
         <Text style={styles.title} numberOfLines={1}>
           {displayTitle}
@@ -226,25 +260,26 @@ export function MediaCard({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
-    marginHorizontal: 4,
+    marginVertical: scaleSize(14),
+    marginHorizontal: scaleSize(6),
   },
   cardContainer: {
-    borderRadius: 16,
+    borderRadius: scaleSize(18),
     overflow: 'hidden',
     backgroundColor: 'rgba(42, 42, 42, 0.6)',
   },
   focused: {
     shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.8,
-    shadowRadius: 24,
-    borderWidth: 4,
-    borderColor: 'rgba(255, 255, 255, 0.95)',
-    elevation: 16,
+    shadowOffset: { width: 0, height: scaleSize(20) },
+    shadowOpacity: 1.0,
+    shadowRadius: scaleSize(40),
+    borderWidth: scaleSize(6),
+    borderColor: '#ffffff',
+    elevation: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   image: {
-    borderRadius: 16,
+    borderRadius: scaleSize(18),
   },
   placeholder: {
     justifyContent: 'center',
@@ -252,24 +287,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(58, 58, 58, 0.4)',
   },
   placeholderText: {
-    fontSize: 48,
+    fontSize: scaleFontSize(56),
     color: 'rgba(102, 102, 102, 0.6)',
     fontWeight: 'bold',
   },
   textContainer: {
-    marginTop: 12,
-    paddingHorizontal: 4,
+    marginTop: scaleSize(14),
+    paddingHorizontal: scaleSize(6),
   },
   title: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    fontSize: scaleFontSize(17),
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 13,
-    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: scaleFontSize(15),
+    marginTop: scaleSize(5),
     fontWeight: '500',
   },
   progressContainer: {
@@ -277,59 +312,84 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    height: scaleSize(6),
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     flexDirection: 'row',
   },
   progressBar: {
-    height: 5,
-    backgroundColor: 'rgba(10, 132, 255, 0.9)',
-    borderRadius: 5,
+    height: scaleSize(6),
+    backgroundColor: 'rgba(10, 132, 255, 0.95)',
+    borderRadius: scaleSize(6),
   },
   downloadProgressContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: scaleSize(10),
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
   downloadProgressBackground: {
-    height: 6,
+    height: scaleSize(7),
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 3,
+    borderRadius: scaleSize(4),
     overflow: 'hidden',
   },
   downloadProgressBar: {
-    height: 6,
+    height: scaleSize(7),
     backgroundColor: '#4caf50',
-    borderRadius: 3,
+    borderRadius: scaleSize(4),
   },
   downloadBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
+    marginTop: scaleSize(5),
+    gap: scaleSize(5),
   },
   downloadText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: scaleFontSize(12),
     fontWeight: '600',
   },
   removeButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: scaleSize(10),
+    right: scaleSize(10),
     zIndex: 10,
   },
   removeButtonInner: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    width: scaleSize(32),
+    height: scaleSize(32),
+    borderRadius: scaleSize(16),
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  actionButtons: {
+    position: 'absolute',
+    bottom: scaleSize(10),
+    right: scaleSize(10),
+    flexDirection: 'row',
+    gap: scaleSize(8),
+    zIndex: 10,
+  },
+  actionButton: {
+    // Wrapper for focus handling
+  },
+  actionButtonInner: {
+    width: scaleSize(36),
+    height: scaleSize(36),
+    borderRadius: scaleSize(18),
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  actionButtonFavorite: {
+    borderColor: '#e50914',
+    backgroundColor: 'rgba(229, 9, 20, 0.2)',
   },
 });

@@ -171,7 +171,11 @@ export function LivePlayerScreen() {
           const errorCode = err.error?.code;
           let errorMessage = 'Failed to load stream.';
           
-          if (errorCode === -11822) {
+          if (errorCode === -1200) {
+            errorMessage = 'SSL/TLS connection failed. This channel may be blocked by your DNS provider (NextDNS, AdGuard, etc.). Try whitelisting the domain or temporarily disabling your DNS blocker.';
+          } else if (errorCode === -1022) {
+            errorMessage = 'Secure connection required. Please rebuild the app to apply security updates.';
+          } else if (errorCode === -11822) {
             errorMessage = 'Authentication failed. Please check your connection.';
           } else if (errorCode === -12889 || errorCode === -12847) {
             errorMessage = 'Stream format not supported.';

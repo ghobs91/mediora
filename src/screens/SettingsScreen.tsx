@@ -1112,9 +1112,8 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
     new Set(settings?.selectedCountries || [])
   );
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
 
-  const toggleCountry = (code: string) => {
+  const toggleCountry = async (code: string) => {
     const newSelected = new Set(selectedCountries);
     if (newSelected.has(code)) {
       newSelected.delete(code);
@@ -1122,33 +1121,19 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
       newSelected.add(code);
     }
     setSelectedCountries(newSelected);
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
+    
+    // Auto-save when country selection changes
     try {
-      const countries = Array.from(selectedCountries);
-      
-      // Save to local settings
-      // IPTV channels will be loaded client-side from M3U playlists
-      console.log(`[Settings] Saving ${countries.length} IPTV countries: ${countries.join(', ')}`);
+      const countries = Array.from(newSelected);
+      console.log(`[Settings] Auto-saving ${countries.length} IPTV countries: ${countries.join(', ')}`);
       
       if (countries.length > 0) {
         await onUpdate({ selectedCountries: countries });
       } else {
         await onUpdate(null);
       }
-      
-      Alert.alert(
-        'Saved',
-        `${countries.length} countries selected. Go to Live TV to see channels.`,
-        [{ text: 'OK' }]
-      );
     } catch (error) {
-      console.error('Failed to save IPTV settings:', error);
-      Alert.alert('Error', 'Failed to save IPTV settings', [{ text: 'OK' }]);
-    } finally {
-      setIsSaving(false);
+      console.error('Failed to auto-save IPTV settings:', error);
     }
   };
 
@@ -1161,21 +1146,44 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
     ),
   })).filter(region => region.countries.length > 0);
 
-  const selectAllInRegion = (regionName: string) => {
+  const selectAllInRegion = async (regionName: string) => {
     const region = IPTV_REGIONS.find(r => r.name === regionName);
     if (region) {
       const newSelected = new Set(selectedCountries);
       region.countries.forEach(c => newSelected.add(c.code));
       setSelectedCountries(newSelected);
+      
+      // Auto-save when region is selected
+      try {
+        const countries = Array.from(newSelected);
+        console.log(`[Settings] Auto-saving ${countries.length} IPTV countries after selecting region ${regionName}`);
+        await onUpdate({ selectedCountries: countries });
+      } catch (error) {
+        console.error('Failed to auto-save IPTV settings:', error);
+      }
     }
   };
 
-  const clearAllInRegion = (regionName: string) => {
+  const clearAllInRegion = async (regionName: string) => {
     const region = IPTV_REGIONS.find(r => r.name === regionName);
     if (region) {
       const newSelected = new Set(selectedCountries);
       region.countries.forEach(c => newSelected.delete(c.code));
       setSelectedCountries(newSelected);
+      
+      // Auto-save when region is cleared
+      try {
+        const countries = Array.from(newSelected);
+        console.log(`[Settings] Auto-saving ${countries.length} IPTV countries after clearing region ${regionName}`);
+        
+        if (countries.length > 0) {
+          await onUpdate({ selectedCountries: countries });
+        } else {
+          await onUpdate(null);
+        }
+      } catch (error) {
+        console.error('Failed to auto-save IPTV settings:', error);
+      }
     }
   };
 
@@ -1248,13 +1256,11 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
         ))}
       </View>
 
-      <View style={styles.buttonRow}>
-        <FocusableButton
-          title={`Save (${selectedCountries.size} selected)`}
-          onPress={handleSave}
-          loading={isSaving}
-          size="medium"
-        />
+      <View style={styles.autoSaveInfo}>
+        <Icon name="checkmark-circle" size={20} color="#30d158" style={styles.autoSaveIcon} />
+        <Text style={styles.autoSaveText}>
+          Changes are saved automatically
+        </Text>
       </View>
     </View>
   );
@@ -1547,6 +1553,26 @@ const styles = StyleSheet.create({
   countryNameSelected: {
     color: '#fff',
     fontWeight: '600',
+  },
+  autoSaveInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(48, 209, 88, 0.1)',
+    borderRadius: 8,
+    gap: 8,
+  },
+  autoSaveIcon: {
+    marginRight: 4,
+  },
+  autoSaveText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    fontWeight: '500',
   },
   // New styles for clear UI separation
   settingsSection: {
