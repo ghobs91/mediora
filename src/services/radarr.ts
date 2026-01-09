@@ -2,6 +2,7 @@ import {
   RadarrMovie,
   RadarrRootFolder,
   RadarrQualityProfile,
+  RadarrQueueItem,
 } from '../types';
 
 export class RadarrService {
@@ -209,5 +210,35 @@ export class RadarrService {
   async checkMovieExists(tmdbId: number): Promise<RadarrMovie | null> {
     const allMovies = await this.getAllMovies();
     return allMovies.find(m => m.tmdbId === tmdbId) || null;
+  }
+
+  // Queue (for download progress)
+  async getQueue(): Promise<{ records: RadarrQueueItem[]; totalRecords: number }> {
+    try {
+      const response = await fetch(
+        `${this.serverUrl}/api/v3/queue?includeUnknownMovieItems=false&includeMovie=true`,
+        {
+          headers: this.getHeaders(),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to get queue: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('[Radarr] Failed to get queue:', error);
+      if (error instanceof Error && error.message.includes('Network request failed')) {
+        console.error('[Radarr] Network error - server may not be reachable');
+        throw new Error('Cannot connect to Radarr server. Please check your network connection and server settings.');
+      }
+      throw error;
+    }
+  }
+
+  async getQueueByMovieId(movieId: number): Promise<RadarrQueueItem[]> {
+    const queueData = await this.getQueue();
+    return queueData.records.filter(item => item.movieId === movieId);
   }
 }

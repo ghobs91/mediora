@@ -235,6 +235,92 @@ export class TMDBService {
     };
   }
 
+  // Genres
+  async getMovieGenres(): Promise<{ genres: { id: number; name: string }[] }> {
+    const params = this.addApiKey(new URLSearchParams());
+
+    const response = await fetch(`${BASE_URL}/genre/movie/list?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get movie genres: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getTVGenres(): Promise<{ genres: { id: number; name: string }[] }> {
+    const params = this.addApiKey(new URLSearchParams());
+
+    const response = await fetch(`${BASE_URL}/genre/tv/list?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get TV genres: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // Discover
+  async discoverMovies(
+    genreId?: number,
+    page: number = 1,
+  ): Promise<TMDBSearchResult> {
+    const params = this.addApiKey(new URLSearchParams({
+      page: String(page),
+      sort_by: 'popularity.desc',
+      include_adult: 'false',
+    }));
+
+    if (genreId) {
+      params.append('with_genres', String(genreId));
+    }
+
+    const response = await fetch(`${BASE_URL}/discover/movie?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to discover movies: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBMovie) => ({
+        ...item,
+        media_type: 'movie' as const,
+      })),
+    };
+  }
+
+  async discoverTV(
+    genreId?: number,
+    page: number = 1,
+  ): Promise<TMDBSearchResult> {
+    const params = this.addApiKey(new URLSearchParams({
+      page: String(page),
+      sort_by: 'popularity.desc',
+      include_adult: 'false',
+    }));
+
+    if (genreId) {
+      params.append('with_genres', String(genreId));
+    }
+
+    const response = await fetch(`${BASE_URL}/discover/tv?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to discover TV shows: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      ...data,
+      results: data.results.map((item: TMDBTVShow) => ({
+        ...item,
+        media_type: 'tv' as const,
+      })),
+    };
+  }
+
   // Image URLs
   static getPosterUrl(
     posterPath: string | null,

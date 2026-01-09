@@ -127,6 +127,11 @@ export interface JellyfinPlaybackInfo {
 }
 
 // TMDB Types
+export interface TMDBGenre {
+  id: number;
+  name: string;
+}
+
 export interface TMDBSearchResult {
   page: number;
   results: (TMDBMovie | TMDBTVShow)[];
@@ -443,6 +448,25 @@ export interface RadarrMovie {
   ratings: { votes: number; value: number };
   hasFile?: boolean;
   sizeOnDisk?: number;
+}
+
+export interface RadarrQueueItem {
+  id: number;
+  movieId: number;
+  title: string;
+  size: number;
+  sizeleft: number;
+  timeleft: string;
+  estimatedCompletionTime: string;
+  status: string;
+  trackedDownloadStatus: string;
+  trackedDownloadState: string;
+  downloadId: string;
+  protocol: string;
+  downloadClient: string;
+  indexer: string;
+  outputPath: string;
+  movie: RadarrMovie;
 }
 
 // App Settings Types

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Text, Image, useWindowDimensions, TouchableOpacity, FlatList, Alert, ImageBackground, Platform } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -60,6 +60,7 @@ export function ItemDetailsScreen() {
   const [sonarrEpisodes, setSonarrEpisodes] = useState<SonarrEpisode[]>([]);
   const [sonarrSeriesId, setSonarrSeriesId] = useState<number | null>(null);
   const [sonarrQueue, setSonarrQueue] = useState<SonarrQueueItem[]>([]);
+  const currentSeasonRef = useRef<number | null>(null);
 
   const isMovie = initialItem.Type === 'Movie';
   const isSeriesOrEpisode = initialItem.Type === 'Series' || initialItem.Type === 'Episode';
@@ -253,7 +254,7 @@ export function ItemDetailsScreen() {
     }
   }, [isLoading, selectedSeason, initialItem]);
 
-  const loadSeasonEpisodes = async (season: EnrichedSeason, tmdbId: number, jfEpisodes: JellyfinItem[]) => {
+  const loadSeasonEpisodes = useCallback(async (season: EnrichedSeason, tmdbId: number, jfEpisodes: JellyfinItem[]) => {
     if (!tmdb) return;
 
     try {
@@ -273,6 +274,25 @@ export function ItemDetailsScreen() {
         const queueItem = sonarrQueue.find(
           q => q.episodeId === sonarrEp?.id
         );
+
+        // Calculate download progress safely
+        const downloadProgress = queueItem && queueItem.size > 0
+          ? Math.max(0, Math.min(1, (queueItem.size - queueItem.sizeleft) / queueItem.size))
+          : undefined;
+
+        // Debug logging
+        if (queueItem) {
+          console.log(`[ItemDetails] Episode S${season.seasonNumber}E${tmdbEp.episode_number} is downloading:`, {
+            title: tmdbEp.name,
+            progress: downloadProgress,
+            progressPercent: downloadProgress ? (downloadProgress * 100).toFixed(1) + '%' : 'N/A',
+            status: queueItem?.status,
+            size: queueItem.size,
+            sizeLeft: queueItem.sizeleft,
+            episodeId: sonarrEp?.id,
+            queueEpisodeId: queueItem.episodeId,
+          });
+        }
         
         return {
           ...tmdbEp,
@@ -281,7 +301,7 @@ export function ItemDetailsScreen() {
           sonarrEpisode: sonarrEp,
           hasFile: sonarrEp?.hasFile || false,
           isDownloading: !!queueItem,
-          downloadProgress: queueItem ? (queueItem.size - queueItem.sizeleft) / queueItem.size : undefined,
+          downloadProgress: downloadProgress,
         };
       });
 
@@ -297,12 +317,13 @@ export function ItemDetailsScreen() {
     } catch (e) {
       console.error("Failed to load season details", e);
     }
-  };
+  }, [tmdb, sonarrEpisodes, sonarrQueue]);
 
   const handleSeasonSelect = async (season: EnrichedSeason) => {
     setSelectedSeason(season);
 
-    if (season.episodes.length === 0) {
+    // Always reload season to get fresh Sonarr download status
+    if (season.episodes.length === 0 || sonarrEpisodes.length > 0) {
       if (tmdbDetails?.id) {
         await loadSeasonEpisodes(season, tmdbDetails.id, jellyfinEpisodes);
       } else if (seriesItem?.ProviderIds?.Tmdb) {
@@ -546,11 +567,32 @@ export function ItemDetailsScreen() {
     let interval: NodeJS.Timeout;
     
     const loadSonarrData = async () => {
-      if (!sonarr || !isSonarrConnected || !seriesItem?.ProviderIds?.Tvdb) return;
+      // Get TVDB ID from either Jellyfin or TMDB
+      const tvdbId = seriesItem?.ProviderIds?.Tvdb 
+        ? parseInt(seriesItem.ProviderIds.Tvdb)
+        : tmdbDetails?.external_ids?.tvdb_id;
+      
+      console.log('[ItemDetails] loadSonarrData called:', {
+        hasSonarr: !!sonarr,
+        isSonarrConnected,
+        hasSeriesItem: !!seriesItem,
+        hasTmdbDetails: !!tmdbDetails,
+        tvdbIdFromJellyfin: seriesItem?.ProviderIds?.Tvdb,
+        tvdbIdFromTMDB: tmdbDetails?.external_ids?.tvdb_id,
+        tvdbId,
+        seriesName: seriesItem?.Name,
+      });
+      
+      if (!sonarr || !isSonarrConnected || !tvdbId) {
+        console.log('[ItemDetails] Skipping Sonarr data load - missing requirements');
+        return;
+      }
 
       try {
-        const tvdbId = parseInt(seriesItem.ProviderIds.Tvdb);
+        console.log('[ItemDetails] Looking up Sonarr series with TVDB ID:', tvdbId);
         const sonarrSeries = await sonarr.checkSeriesExists(tvdbId);
+        
+        console.log('[ItemDetails] Sonarr series lookup result:', sonarrSeries ? `Found: ${sonarrSeries.title}` : 'Not found');
         
         if (sonarrSeries?.id) {
           setSonarrSeriesId(sonarrSeries.id);
@@ -558,10 +600,43 @@ export function ItemDetailsScreen() {
           // Fetch episodes
           const episodes = await sonarr.getEpisodesBySeriesId(sonarrSeries.id);
           setSonarrEpisodes(episodes);
+          console.log(`[ItemDetails] Loaded ${episodes.length} Sonarr episodes for series ${sonarrSeries.title}`);
           
           // Fetch queue
+          console.log(`[ItemDetails] Fetching queue for series ID ${sonarrSeries.id}...`);
           const queue = await sonarr.getQueueBySeriesId(sonarrSeries.id);
           setSonarrQueue(queue);
+          console.log(`[ItemDetails] Loaded ${queue.length} queue items for series ${sonarrSeries.title}`);
+          
+          if (queue.length > 0) {
+            queue.forEach(q => {
+              console.log(`[ItemDetails] Queue item:`, {
+                episodeId: q.episodeId,
+                seriesId: q.seriesId,
+                title: q.title,
+                status: q.status,
+                progress: ((q.size - q.sizeleft) / q.size * 100).toFixed(1) + '%',
+                timeLeft: q.timeleft,
+              });
+            });
+          } else {
+            // Check if there are ANY queue items at all
+            const fullQueue = await sonarr.getQueue();
+            console.log(`[ItemDetails] Full queue has ${fullQueue.totalRecords} items total`);
+            if (fullQueue.totalRecords > 0) {
+              console.log(`[ItemDetails] All queue series IDs:`, fullQueue.records.map(q => q.seriesId));
+              console.log(`[ItemDetails] Looking for series ID: ${sonarrSeries.id}`);
+              console.log(`[ItemDetails] First 3 queue items:`, 
+                fullQueue.records.slice(0, 3).map(q => ({
+                  id: q.id,
+                  seriesId: q.seriesId,
+                  episodeId: q.episodeId,
+                  title: q.title,
+                  seriesTitle: q.series?.title,
+                }))
+              );
+            }
+          }
 
           // Aggregate progress for the overall series
           if (queue.length > 0) {
@@ -584,22 +659,41 @@ export function ItemDetailsScreen() {
       }
     };
 
-    if (sonarr && isSonarrConnected && seriesItem) {
+    console.log('[ItemDetails] Sonarr useEffect triggered:', {
+      hasSonarr: !!sonarr,
+      isSonarrConnected,
+      hasSeriesItem: !!seriesItem,
+      hasTmdbDetails: !!tmdbDetails,
+    });
+
+    if (sonarr && isSonarrConnected && (seriesItem || tmdbDetails)) {
       loadSonarrData();
       interval = setInterval(loadSonarrData, 10000); // Refresh every 10 seconds
+    } else {
+      console.log('[ItemDetails] Not loading Sonarr data - conditions not met');
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [sonarr, isSonarrConnected, seriesItem]);
+  }, [sonarr, isSonarrConnected, seriesItem, tmdbDetails]);
+  
+  // Track selected season number
+  useEffect(() => {
+    if (selectedSeason) {
+      currentSeasonRef.current = selectedSeason.seasonNumber;
+    }
+  }, [selectedSeason]);
   
   // Reload season episodes when Sonarr data changes
   useEffect(() => {
-    if (selectedSeason && tmdbDetails?.id && sonarrEpisodes.length > 0) {
+    // Only reload if we have a selected season with episodes AND we have loaded Sonarr data
+    const seasonNum = currentSeasonRef.current;
+    if (seasonNum && tmdbDetails?.id && sonarrEpisodes.length > 0 && selectedSeason) {
+      console.log(`[ItemDetails] Reloading season ${seasonNum} with updated Sonarr data`);
       loadSeasonEpisodes(selectedSeason, tmdbDetails.id, jellyfinEpisodes);
     }
-  }, [sonarrEpisodes, sonarrQueue]);
+  }, [sonarrEpisodes, sonarrQueue, loadSeasonEpisodes, tmdbDetails, jellyfinEpisodes]);
 
   // ... (Init logic remains similar, mostly UI changes)
 
@@ -616,6 +710,18 @@ export function ItemDetailsScreen() {
     const hasFileInSonarr = item.hasFile && !inJellyfin;
     const isDownloading = item.isDownloading;
     const canPlay = inJellyfin || hasFileInSonarr;
+
+    // Debug: Log episode status
+    if (isDownloading || hasFileInSonarr || (item.sonarrEpisode && !item.sonarrEpisode.hasFile)) {
+      console.log(`[ItemDetails] Episode ${item.episode_number} - ${item.name}:`, {
+        isDownloading,
+        downloadProgress: item.downloadProgress,
+        hasFileInSonarr,
+        inJellyfin,
+        hasSonarrEpisode: !!item.sonarrEpisode,
+        sonarrHasFile: item.sonarrEpisode?.hasFile,
+      });
+    }
 
     return (
       <TouchableOpacity
@@ -940,13 +1046,11 @@ export function ItemDetailsScreen() {
             </View>
           )}
 
-          {downloadProgress && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${downloadProgress.percent}%` }]} />
-              </View>
-              <Text style={styles.progressText}>
-                {downloadProgress.status} ({Math.round(downloadProgress.percent)}%) • {downloadProgress.timeLeft} remaining
+          {/* Debug: Show Sonarr data status for TV shows */}
+          {isSeriesOrEpisode && isSonarrConnected && (
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>
+                📊 Sonarr: {sonarrEpisodes.length} eps, {sonarrQueue.length} downloading
               </Text>
             </View>
           )}
@@ -1158,5 +1262,18 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontSize: 15,
     flex: 1,
+  },
+  debugContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.4)',
+  },
+  debugText: {
+    color: '#4caf50',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

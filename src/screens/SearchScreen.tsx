@@ -13,42 +13,101 @@ import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaRow, MediaCard } from '../components';
 import { useResponsiveColumns } from '../hooks';
-import { TMDBMovie, TMDBTVShow } from '../types';
+import { TMDBMovie, TMDBTVShow, TMDBGenre } from '../types';
 
-type SearchMode = 'all' | 'movies' | 'tv';
+type ContentMode = 'movies' | 'tv';
 
 export function SearchScreen() {
   const navigation = useNavigation();
   const { tmdb, isTMDBConnected } = useServices();
   const [query, setQuery] = useState('');
-  const [searchMode, setSearchMode] = useState<SearchMode>('all');
+  const [contentMode, setContentMode] = useState<ContentMode>('movies');
   const [results, setResults] = useState<(TMDBMovie | TMDBTVShow)[]>([]);
+  const [movieGenres, setMovieGenres] = useState<TMDBGenre[]>([]);
+  const [tvGenres, setTVGenres] = useState<TMDBGenre[]>([]);
+  const [genreContent, setGenreContent] = useState<Record<number, (TMDBMovie | TMDBTVShow)[]>>({});
   const [trendingMovies, setTrendingMovies] = useState<TMDBMovie[]>([]);
   const [trendingTV, setTrendingTV] = useState<TMDBTVShow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const { numColumns, itemWidth, spacing } = useResponsiveColumns();
 
-  const loadTrending = useCallback(async () => {
+  const loadGenres = useCallback(async () => {
     if (!tmdb) return;
 
     try {
-      const [movies, tv] = await Promise.all([
-        tmdb.getPopularMovies(),
-        tmdb.getPopularTV(),
+      const [movieGenresData, tvGenresData] = await Promise.all([
+        tmdb.getMovieGenres(),
+        tmdb.getTVGenres(),
       ]);
-      setTrendingMovies(movies.results as TMDBMovie[]);
-      setTrendingTV(tv.results as TMDBTVShow[]);
+      setMovieGenres(movieGenresData.genres);
+      setTVGenres(tvGenresData.genres);
+    } catch (error) {
+      console.error('Failed to load genres:', error);
+    }
+  }, [tmdb]);
+
+  const loadTrending = useCallback(async (mode: ContentMode) => {
+    if (!tmdb) return;
+
+    try {
+      const result = await tmdb.getTrending(
+        mode === 'movies' ? 'movie' : 'tv',
+        'week',
+        1
+      );
+      
+      if (mode === 'movies') {
+        setTrendingMovies(result.results as TMDBMovie[]);
+      } else {
+        setTrendingTV(result.results as TMDBTVShow[]);
+      }
     } catch (error) {
       console.error('Failed to load trending:', error);
     }
   }, [tmdb]);
 
+  const loadGenreContent = useCallback(async (mode: ContentMode) => {
+    if (!tmdb) return;
+
+    try {
+      const genres = mode === 'movies' ? movieGenres : tvGenres;
+      const contentMap: Record<number, (TMDBMovie | TMDBTVShow)[]> = {};
+
+      // Load popular content for each genre (limit to top 6 genres to avoid too many requests)
+      const topGenres = genres.slice(0, 6);
+      
+      await Promise.all(
+        topGenres.map(async (genre) => {
+          try {
+            const result = mode === 'movies' 
+              ? await tmdb.discoverMovies(genre.id, 1)
+              : await tmdb.discoverTV(genre.id, 1);
+            contentMap[genre.id] = result.results;
+          } catch (error) {
+            console.error(`Failed to load content for genre ${genre.name}:`, error);
+          }
+        })
+      );
+
+      setGenreContent(contentMap);
+    } catch (error) {
+      console.error('Failed to load genre content:', error);
+    }
+  }, [tmdb, movieGenres, tvGenres]);
+
   React.useEffect(() => {
     if (isTMDBConnected) {
-      loadTrending();
+      loadGenres();
     }
-  }, [isTMDBConnected, loadTrending]);
+  }, [isTMDBConnected, loadGenres]);
+
+  React.useEffect(() => {
+    if (isTMDBConnected && (movieGenres.length > 0 || tvGenres.length > 0)) {
+      loadTrending(contentMode);
+      loadGenreContent(contentMode);
+    }
+  }, [isTMDBConnected, contentMode, movieGenres, tvGenres, loadTrending, loadGenreContent]);
 
   const handleSearch = async () => {
     if (!tmdb || !query.trim()) return;
@@ -57,17 +116,9 @@ export function SearchScreen() {
     setHasSearched(true);
 
     try {
-      let searchResults;
-      switch (searchMode) {
-        case 'movies':
-          searchResults = await tmdb.searchMovies(query);
-          break;
-        case 'tv':
-          searchResults = await tmdb.searchTV(query);
-          break;
-        default:
-          searchResults = await tmdb.searchMulti(query);
-      }
+      const searchResults = contentMode === 'movies'
+        ? await tmdb.searchMovies(query)
+        : await tmdb.searchTV(query);
       setResults(searchResults.results);
     } catch (error) {
       console.error('Failed to search:', error);
@@ -102,29 +153,34 @@ export function SearchScreen() {
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search movies and TV shows..."
+          placeholder={`Search ${contentMode === 'movies' ? 'movies' : 'TV shows'}...`}
           placeholderTextColor="#666"
           onSubmitEditing={handleSearch}
           returnKeyType="search"
         />
       </View>
 
-      {/* Search Mode Tabs */}
+      {/* Content Mode Toggle */}
       <View style={styles.modeContainer}>
-        <SearchModeTab
-          title="All"
-          isSelected={searchMode === 'all'}
-          onPress={() => setSearchMode('all')}
-        />
-        <SearchModeTab
+        <ContentModeTab
           title="Movies"
-          isSelected={searchMode === 'movies'}
-          onPress={() => setSearchMode('movies')}
+          isSelected={contentMode === 'movies'}
+          onPress={() => {
+            setContentMode('movies');
+            setQuery('');
+            setHasSearched(false);
+            setResults([]);
+          }}
         />
-        <SearchModeTab
+        <ContentModeTab
           title="TV Shows"
-          isSelected={searchMode === 'tv'}
-          onPress={() => setSearchMode('tv')}
+          isSelected={contentMode === 'tv'}
+          onPress={() => {
+            setContentMode('tv');
+            setQuery('');
+            setHasSearched(false);
+            setResults([]);
+          }}
         />
       </View>
 
@@ -156,16 +212,35 @@ export function SearchScreen() {
         )
       ) : (
         <>
-          <MediaRow
-            title="Popular Movies"
-            tmdbItems={trendingMovies}
-            onItemPress={handleItemPress}
-          />
-          <MediaRow
-            title="Popular TV Shows"
-            tmdbItems={trendingTV}
-            onItemPress={handleItemPress}
-          />
+          {/* Trending Section */}
+          {contentMode === 'movies' && trendingMovies.length > 0 && (
+            <MediaRow
+              title="Trending Movies This Week"
+              tmdbItems={trendingMovies}
+              onItemPress={handleItemPress}
+            />
+          )}
+          {contentMode === 'tv' && trendingTV.length > 0 && (
+            <MediaRow
+              title="Trending TV Shows This Week"
+              tmdbItems={trendingTV}
+              onItemPress={handleItemPress}
+            />
+          )}
+
+          {/* Popular Content by Genre */}
+          {(contentMode === 'movies' ? movieGenres : tvGenres)
+            .slice(0, 6)
+            .map((genre) => (
+              genreContent[genre.id] && genreContent[genre.id].length > 0 && (
+                <MediaRow
+                  key={`genre-${genre.id}`}
+                  title={`Popular ${genre.name}`}
+                  tmdbItems={genreContent[genre.id]}
+                  onItemPress={handleItemPress}
+                />
+              )
+            ))}
         </>
       )}
 
@@ -174,13 +249,13 @@ export function SearchScreen() {
   );
 }
 
-interface SearchModeTabProps {
+interface ContentModeTabProps {
   title: string;
   isSelected: boolean;
   onPress: () => void;
 }
 
-function SearchModeTab({ title, isSelected, onPress }: SearchModeTabProps) {
+function ContentModeTab({ title, isSelected, onPress }: ContentModeTabProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = React.useRef(new Animated.Value(1)).current;
 
