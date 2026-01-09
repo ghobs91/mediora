@@ -283,8 +283,9 @@ export class SonarrService {
   // Queue (for download progress)
   async getQueue(): Promise<{ records: SonarrQueueItem[]; totalRecords: number }> {
     try {
+      // Request up to 1000 items to ensure we get all queue items
       const response = await fetch(
-        `${this.serverUrl}/api/v3/queue?includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
+        `${this.serverUrl}/api/v3/queue?pageSize=1000&includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
         {
           headers: this.getHeaders(),
         },

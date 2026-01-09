@@ -19,6 +19,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
 import { RootStackParamList, JellyfinPlaybackInfo } from '../types';
+import { playbackPositionService } from '../services/playbackPosition';
 
 type PlayerScreenRouteProp = RouteProp<RootStackParamList, 'Player'>;
 
@@ -62,6 +63,8 @@ export function PlayerScreen() {
   const videoRef = useRef<VideoRef>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
+  const hasRestoredPosition = useRef(false);
+  const savedPositionToRestore = useRef<number>(0);
 
   const loadPlaybackInfo = useCallback(async () => {
     if (!jellyfin) return;
@@ -108,6 +111,18 @@ export function PlayerScreen() {
           'DirectStream', // Start with DirectStream, will be updated based on actual method
         );
       }
+
+      // Check for saved playback position
+      const savedPosition = await playbackPositionService.getPosition(itemId);
+      if (savedPosition && savedPosition.positionSeconds > 30) {
+        // Store the saved position to restore after video loads
+        console.log(`[PlayerScreen] Found saved position: ${Math.floor(savedPosition.positionSeconds)}s`);
+        savedPositionToRestore.current = savedPosition.positionSeconds;
+        hasRestoredPosition.current = false;
+      } else {
+        savedPositionToRestore.current = 0;
+        hasRestoredPosition.current = true; // No position to restore
+      }
     } catch (err) {
       console.error('[PlayerScreen] Failed to load playback info:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load playback info';
@@ -129,6 +144,19 @@ export function PlayerScreen() {
     loadPlaybackInfo();
 
     return () => {
+      // Save playback position before leaving
+      if (item && currentTime > 0 && duration > 0) {
+        playbackPositionService.savePosition({
+          itemId: item.Id,
+          positionTicks: Math.floor(currentTime * 10000000),
+          positionSeconds: currentTime,
+          durationSeconds: duration,
+          timestamp: Date.now(),
+          title: item.Name,
+          type: item.Type,
+        });
+      }
+
       // Report playback stopped and stop encoding when leaving
       if (jellyfin && playbackInfo?.MediaSources[0]) {
         jellyfin.reportPlaybackStopped(
@@ -241,6 +269,21 @@ export function PlayerScreen() {
       });
     }
   }, [streamAttempt, playbackInfo, jellyfin, itemId]);
+
+  // Restore saved position when video is ready
+  useEffect(() => {
+    if (!hasRestoredPosition.current && 
+        savedPositionToRestore.current > 0 && 
+        !isBuffering && 
+        duration > 0 &&
+        videoRef.current) {
+      const positionToSeek = savedPositionToRestore.current;
+      console.log('[PlayerScreen] Restoring playback position:', Math.floor(positionToSeek), 's');
+      videoRef.current.seek(positionToSeek);
+      hasRestoredPosition.current = true;
+      savedPositionToRestore.current = 0;
+    }
+  }, [isBuffering, duration]);
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -534,6 +577,10 @@ export function PlayerScreen() {
         onEnd={() => {
           console.log('[PlayerScreen] Video ended');
           setIsPlaying(false);
+          // Clear saved position when video completes
+          if (item) {
+            playbackPositionService.removePosition(item.Id);
+          }
         }}
         onPlaybackRateChange={(data) => {
           console.log('[PlayerScreen] Playback rate:', data.playbackRate);

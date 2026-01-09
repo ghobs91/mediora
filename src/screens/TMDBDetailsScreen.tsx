@@ -14,8 +14,8 @@ import {
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
-import { FocusableButton } from '../components';
-import { RootStackParamList, TMDBMovie, TMDBTVShow, TMDBMovieDetails, TMDBTVDetails, TMDBSeasonDetails, TMDBEpisode, TMDBCast } from '../types';
+import { FocusableButton, QualityProfileSelector } from '../components';
+import { RootStackParamList, TMDBMovie, TMDBTVShow, TMDBMovieDetails, TMDBTVDetails, TMDBSeasonDetails, TMDBEpisode, TMDBCast, SonarrQualityProfile, RadarrQualityProfile, SonarrQueueItem, RadarrQueueItem } from '../types';
 import { TMDBService } from '../services';
 
 type TMDBDetailsRouteProp = RouteProp<RootStackParamList, 'TMDBDetails'>;
@@ -44,6 +44,17 @@ export function TMDBDetailsScreen() {
   const [loadingSeasons, setLoadingSeasons] = useState(false);
   const [requestingSeasons, setRequestingSeasons] = useState<Set<number>>(new Set());
   const [selectedSeasonsToRequest, setSelectedSeasonsToRequest] = useState<Set<number>>(new Set());
+
+  // Quality profile selection
+  const [showQualityProfileModal, setShowQualityProfileModal] = useState(false);
+  const [qualityProfiles, setQualityProfiles] = useState<SonarrQualityProfile[] | RadarrQualityProfile[]>([]);
+  const [selectedQualityProfileId, setSelectedQualityProfileId] = useState<number | undefined>(undefined);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [requestingSeasonNumber, setRequestingSeasonNumber] = useState<number | null>(null);
+
+  // Download progress tracking
+  const [queueItems, setQueueItems] = useState<SonarrQueueItem[] | RadarrQueueItem[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(false);
 
   useEffect(() => {
     loadDetails();
@@ -93,6 +104,40 @@ export function TMDBDetailsScreen() {
       loadSeasonDetails(selectedSeasonNumber);
     }
   }, [selectedSeasonNumber, details]);
+
+  // Fetch queue data for download progress
+  useEffect(() => {
+    if (!alreadyExists) return;
+
+    const fetchQueue = async () => {
+      try {
+        if (mediaType === 'movie' && radarr) {
+          const existingMovie = await radarr.checkMovieExists(item.id);
+          if (existingMovie?.id) {
+            const queue = await radarr.getQueueByMovieId(existingMovie.id);
+            setQueueItems(queue);
+          }
+        } else if (mediaType === 'tv' && sonarr) {
+          const tvDetails = details as TMDBTVDetails;
+          if (tvDetails?.external_ids?.tvdb_id) {
+            const existingSeries = await sonarr.checkSeriesExists(tvDetails.external_ids.tvdb_id);
+            if (existingSeries?.id) {
+              const queue = await sonarr.getQueueBySeriesId(existingSeries.id);
+              setQueueItems(queue);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[TMDBDetailsScreen] Failed to fetch queue:', error);
+      }
+    };
+
+    fetchQueue();
+    // Poll for updates every 10 seconds
+    const interval = setInterval(fetchQueue, 10000);
+
+    return () => clearInterval(interval);
+  }, [alreadyExists, mediaType, item.id, details, radarr, sonarr]);
 
   const loadDetails = async () => {
     if (!tmdb) return;
@@ -182,16 +227,39 @@ export function TMDBDetailsScreen() {
       return;
     }
 
+    // Load quality profiles
+    setLoadingProfiles(true);
+    try {
+      const profiles = await radarr.getQualityProfiles();
+      setQualityProfiles(profiles);
+      
+      // Set default to the configured one or first available
+      const defaultProfile = profiles.find(p => p.id === settings.radarr?.qualityProfileId) || profiles[0];
+      setSelectedQualityProfileId(defaultProfile?.id);
+      
+      // Show quality profile selector
+      setShowQualityProfileModal(true);
+    } catch (error) {
+      console.error('Failed to load quality profiles:', error);
+      Alert.alert('Error', 'Failed to load quality profiles. Check your Radarr connection.');
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  const confirmRequestMovie = async (qualityProfileId: number) => {
+    if (!radarr || !settings.radarr) return;
+
     setIsRequesting(true);
 
     try {
       // Look up the movie in Radarr
       const radarrMovie = await radarr.lookupMovieByTmdbId(item.id);
 
-      // Add the movie
+      // Add the movie with selected quality profile
       await radarr.addMovie(radarrMovie, {
         rootFolderPath: settings.radarr.rootFolderPath,
-        qualityProfileId: settings.radarr.qualityProfileId,
+        qualityProfileId: qualityProfileId,
         searchForMovie: true,
       });
 
@@ -217,6 +285,32 @@ export function TMDBDetailsScreen() {
       return;
     }
 
+    // Load quality profiles
+    setLoadingProfiles(true);
+    try {
+      const profiles = await sonarr.getQualityProfiles();
+      setQualityProfiles(profiles);
+      
+      // Set default to the configured one or first available
+      const defaultProfile = profiles.find(p => p.id === settings.sonarr?.qualityProfileId) || profiles[0];
+      setSelectedQualityProfileId(defaultProfile?.id);
+      
+      // Show quality profile selector
+      setShowQualityProfileModal(true);
+    } catch (error) {
+      console.error('Failed to load quality profiles:', error);
+      Alert.alert('Error', 'Failed to load quality profiles. Check your Sonarr connection.');
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  const confirmRequestTV = async (qualityProfileId: number) => {
+    if (!sonarr || !settings.sonarr) return;
+
+    const tvDetails = details as TMDBTVDetails;
+    if (!tvDetails?.external_ids?.tvdb_id) return;
+
     setIsRequesting(true);
 
     try {
@@ -224,7 +318,7 @@ export function TMDBDetailsScreen() {
         serverUrl: settings.sonarr.serverUrl,
         apiKey: settings.sonarr.apiKey.substring(0, 8) + '...',
         rootFolderPath: settings.sonarr.rootFolderPath,
-        qualityProfileId: settings.sonarr.qualityProfileId,
+        qualityProfileId: qualityProfileId,
       });
       console.log('[TMDBDetailsScreen] Looking up series with TVDB ID:', tvDetails.external_ids.tvdb_id);
 
@@ -245,7 +339,7 @@ export function TMDBDetailsScreen() {
 
       await sonarr.addSeriesWithSeasons(sonarrResults[0], {
         rootFolderPath: settings.sonarr.rootFolderPath,
-        qualityProfileId: settings.sonarr.qualityProfileId,
+        qualityProfileId: qualityProfileId,
         searchForMissingEpisodes: true,
         monitoredSeasons: seasonsToMonitor,
       });
@@ -289,6 +383,34 @@ export function TMDBDetailsScreen() {
       return;
     }
 
+    // Load quality profiles
+    setLoadingProfiles(true);
+    setRequestingSeasonNumber(seasonNumber);
+    try {
+      const profiles = await sonarr.getQualityProfiles();
+      setQualityProfiles(profiles);
+      
+      // Set default to the configured one or first available
+      const defaultProfile = profiles.find(p => p.id === settings.sonarr?.qualityProfileId) || profiles[0];
+      setSelectedQualityProfileId(defaultProfile?.id);
+      
+      // Show quality profile selector
+      setShowQualityProfileModal(true);
+    } catch (error) {
+      console.error('Failed to load quality profiles:', error);
+      Alert.alert('Error', 'Failed to load quality profiles. Check your Sonarr connection.');
+      setRequestingSeasonNumber(null);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  const confirmRequestSeason = async (seasonNumber: number, qualityProfileId: number) => {
+    if (!sonarr || !settings.sonarr) return;
+
+    const tvDetails = details as TMDBTVDetails;
+    if (!tvDetails?.external_ids?.tvdb_id) return;
+
     setRequestingSeasons(prev => new Set(prev).add(seasonNumber));
 
     try {
@@ -310,7 +432,7 @@ export function TMDBDetailsScreen() {
 
         await sonarr.addSeriesWithSeasons(sonarrResults[0], {
           rootFolderPath: settings.sonarr.rootFolderPath,
-          qualityProfileId: settings.sonarr.qualityProfileId,
+          qualityProfileId: qualityProfileId,
           searchForMissingEpisodes: true,
           monitoredSeasons: [seasonNumber],
         });
@@ -327,6 +449,7 @@ export function TMDBDetailsScreen() {
         newSet.delete(seasonNumber);
         return newSet;
       });
+      setRequestingSeasonNumber(null);
     }
   };
 
@@ -340,6 +463,39 @@ export function TMDBDetailsScreen() {
       }
       return newSet;
     });
+  };
+
+  // Helper to get download progress for an episode
+  const getEpisodeProgress = (episodeNumber: number, seasonNumber: number): SonarrQueueItem | null => {
+    if (!queueItems.length || mediaType !== 'tv') return null;
+    const sonarrQueue = queueItems as SonarrQueueItem[];
+    return sonarrQueue.find(qi => 
+      qi.episode?.episodeNumber === episodeNumber && 
+      qi.episode?.seasonNumber === seasonNumber
+    ) || null;
+  };
+
+  // Helper to get movie download progress
+  const getMovieProgress = (): RadarrQueueItem | null => {
+    if (!queueItems.length || mediaType !== 'movie') return null;
+    return (queueItems as RadarrQueueItem[])[0] || null;
+  };
+
+  // Helper to calculate progress percentage
+  const calculateProgress = (queueItem: SonarrQueueItem | RadarrQueueItem): number => {
+    if (!queueItem.size || queueItem.size === 0) return 0;
+    const downloaded = queueItem.size - queueItem.sizeleft;
+    return Math.round((downloaded / queueItem.size) * 100);
+  };
+
+  // Helper to get season overall progress
+  const getSeasonProgress = (seasonNumber: number): { downloading: number; total: number; percentage: number } => {
+    if (!seasonDetails || mediaType !== 'tv') return { downloading: 0, total: 0, percentage: 0 };
+    const sonarrQueue = queueItems as SonarrQueueItem[];
+    const downloadingEpisodes = sonarrQueue.filter(qi => qi.episode?.seasonNumber === seasonNumber);
+    const totalEpisodes = seasonDetails.episodes?.length || 0;
+    const percentage = totalEpisodes > 0 ? Math.round((downloadingEpisodes.length / totalEpisodes) * 100) : 0;
+    return { downloading: downloadingEpisodes.length, total: totalEpisodes, percentage };
   };
 
   const title = 'title' in item ? item.title : item.name;
@@ -373,6 +529,8 @@ export function TMDBDetailsScreen() {
 
   const renderEpisode = ({ item: episode }: { item: TMDBEpisode }) => {
     const stillUrl = TMDBService.getStillUrl(episode.still_path);
+    const episodeProgress = getEpisodeProgress(episode.episode_number, episode.season_number);
+    const progress = episodeProgress ? calculateProgress(episodeProgress) : null;
 
     return (
       <TouchableOpacity style={styles.episodeCard}>
@@ -390,9 +548,20 @@ export function TMDBDetailsScreen() {
           {episode.runtime && (
             <Text style={styles.episodeRuntime}>{episode.runtime}m</Text>
           )}
-          <Text style={styles.episodeOverview} numberOfLines={2}>
-            {episode.overview}
-          </Text>
+          {episodeProgress ? (
+            <View style={styles.downloadProgress}>
+              <Text style={styles.downloadProgressText}>
+                Downloading: {progress}% • {episodeProgress.timeleft || 'calculating...'}
+              </Text>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.episodeOverview} numberOfLines={2}>
+              {episode.overview}
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -486,12 +655,34 @@ export function TMDBDetailsScreen() {
                   onPress={
                     mediaType === 'movie' ? handleRequestMovie : handleRequestTV
                   }
-                  disabled={alreadyExists || isRequesting}
-                  loading={isRequesting}
+                  disabled={alreadyExists || isRequesting || loadingProfiles}
+                  loading={isRequesting || loadingProfiles}
                   size="large"
                   variant={jellyfinItem ? 'secondary' : (alreadyExists ? 'secondary' : 'primary')}
                 />
               )}
+              {/* Show movie download progress */}
+              {mediaType === 'movie' && alreadyExists && (() => {
+                const movieProgress = getMovieProgress();
+                if (movieProgress) {
+                  const progress = calculateProgress(movieProgress);
+                  return (
+                    <View style={styles.downloadProgressContainer}>
+                      <Text style={styles.downloadProgressTitle}>Downloading Movie</Text>
+                      <Text style={styles.downloadProgressDetails}>
+                        {progress}% • {movieProgress.timeleft || 'calculating...'}
+                      </Text>
+                      <View style={styles.progressBar}>
+                        <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                      </View>
+                      <Text style={styles.downloadProgressStatus}>
+                        {movieProgress.status} • {movieProgress.downloadClient}
+                      </Text>
+                    </View>
+                  );
+                }
+                return null;
+              })()}
               {!canRequest && !jellyfinItem && (
                 <View>
                   <Text style={styles.configureText}>
@@ -531,6 +722,21 @@ export function TMDBDetailsScreen() {
                 </Text>
               </View>
             )}
+
+            {/* Show season download progress summary */}
+            {alreadyExists && selectedSeasonNumber && (() => {
+              const seasonProgress = getSeasonProgress(selectedSeasonNumber);
+              if (seasonProgress.downloading > 0) {
+                return (
+                  <View style={styles.seasonProgressContainer}>
+                    <Text style={styles.seasonProgressText}>
+                      Season {selectedSeasonNumber}: Downloading {seasonProgress.downloading} of {seasonProgress.total} episodes
+                    </Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
 
             {/* Season Tabs */}
             <ScrollView
@@ -597,6 +803,30 @@ export function TMDBDetailsScreen() {
           </View>
         )}
       </View>
+
+      {/* Quality Profile Selector Modal */}
+      <QualityProfileSelector
+        visible={showQualityProfileModal}
+        onClose={() => {
+          setShowQualityProfileModal(false);
+          setRequestingSeasonNumber(null);
+        }}
+        onSelect={(profileId) => {
+          setSelectedQualityProfileId(profileId);
+          // Execute the request with the selected profile
+          if (requestingSeasonNumber !== null) {
+            // Requesting a specific season
+            confirmRequestSeason(requestingSeasonNumber, profileId);
+          } else if (mediaType === 'movie') {
+            confirmRequestMovie(profileId);
+          } else {
+            confirmRequestTV(profileId);
+          }
+        }}
+        profiles={qualityProfiles}
+        title={`Select Quality Profile for ${requestingSeasonNumber !== null ? `Season ${requestingSeasonNumber}` : mediaType === 'movie' ? 'Movie' : 'TV Show'}`}
+        selectedProfileId={selectedQualityProfileId}
+      />
     </ScrollView>
   );
 }
@@ -823,5 +1053,60 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 14,
     lineHeight: 20,
+  },
+  downloadProgressContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#2196f3',
+  },
+  downloadProgressTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  downloadProgressDetails: {
+    fontSize: 14,
+    color: '#aaa',
+    marginBottom: 8,
+  },
+  downloadProgressStatus: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  downloadProgress: {
+    marginTop: 4,
+  },
+  downloadProgressText: {
+    fontSize: 12,
+    color: '#2196f3',
+    marginBottom: 4,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#2196f3',
+    borderRadius: 2,
+  },
+  seasonProgressContainer: {
+    marginVertical: 8,
+    padding: 12,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    borderRadius: 8,
+  },
+  seasonProgressText: {
+    fontSize: 14,
+    color: '#2196f3',
+    fontWeight: '500',
   },
 });
