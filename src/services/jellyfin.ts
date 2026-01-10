@@ -665,15 +665,18 @@ export class JellyfinService {
       // H.264/AAC for Apple compatibility
       videoCodec: 'h264',
       audioCodec: 'aac',
-      // Transcoding settings
+      // Transcoding settings - reduced bitrate for better streaming
       maxWidth: 1920,
       maxHeight: 1080,
-      videoBitRate: 8000000,
-      audioBitRate: 192000,
-      // Segment settings
+      videoBitRate: 4000000,
+      audioBitRate: 128000,
+      // Segment settings for better buffering
       segmentContainer: 'ts',
-      minSegments: 1,
+      minSegments: 2,
+      segmentLength: 6,
       breakOnNonKeyFrames: true,
+      // Enable adaptive streaming
+      enableAdaptiveBitrateStreaming: true,
     });
 
     return `${this.serverUrl}/Videos/${itemId}/master.m3u8?${queryString}`;

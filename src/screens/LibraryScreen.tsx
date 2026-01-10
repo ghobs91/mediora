@@ -5,7 +5,9 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
@@ -58,7 +60,8 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const { numColumns, itemWidth } = useResponsiveColumns();
+  const { numColumns, itemWidth, isMobile, contentPadding } = useResponsiveColumns();
+  const insets = useSafeAreaInsets();
 
   const loadSonarrDownloadProgress = useCallback(async () => {
     if (!sonarr || !isSonarrConnected) return;
@@ -490,12 +493,74 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     }
   };
 
+  // Dynamic styles based on device
+  const dynamicStyles = {
+    container: {
+      paddingTop: isMobile ? insets.top + 60 : 0, // Account for hamburger menu on mobile
+    },
+    controlBar: {
+      paddingHorizontal: contentPadding,
+      paddingVertical: isMobile ? 12 : scaleSize(20),
+    },
+    controlButton: {
+      paddingHorizontal: isMobile ? 12 : scaleSize(20),
+      paddingVertical: isMobile ? 8 : scaleSize(12),
+      gap: isMobile ? 6 : scaleSize(10),
+    },
+    controlButtonText: {
+      fontSize: isMobile ? 14 : scaleFontSize(16),
+    },
+    itemCount: {
+      fontSize: isMobile ? 12 : scaleFontSize(16),
+    },
+    dropdownMenu: {
+      left: contentPadding,
+      minWidth: isMobile ? 220 : scaleSize(280),
+      maxHeight: isMobile ? 400 : scaleSize(600),
+    },
+    dropdownSectionTitle: {
+      fontSize: isMobile ? 11 : scaleFontSize(14),
+      paddingHorizontal: isMobile ? 14 : scaleSize(20),
+      paddingVertical: isMobile ? 8 : scaleSize(12),
+    },
+    dropdownItem: {
+      paddingHorizontal: isMobile ? 14 : scaleSize(20),
+      paddingVertical: isMobile ? 12 : scaleSize(16),
+    },
+    dropdownItemText: {
+      fontSize: isMobile ? 14 : scaleFontSize(16),
+    },
+    gridContent: {
+      paddingLeft: contentPadding,
+      paddingRight: contentPadding,
+      paddingTop: isMobile ? 12 : scaleSize(20),
+      paddingBottom: isMobile ? insets.bottom + 20 : scaleSize(52),
+    },
+    emptyContainer: {
+      padding: contentPadding,
+      paddingTop: isMobile ? insets.top + 80 : scaleSize(52),
+    },
+    emptyTitle: {
+      fontSize: isMobile ? 24 : scaleFontSize(40),
+      marginBottom: isMobile ? 12 : scaleSize(18),
+    },
+    emptyText: {
+      fontSize: isMobile ? 14 : scaleFontSize(20),
+    },
+    emptyList: {
+      paddingTop: isMobile ? 60 : scaleSize(120),
+    },
+    iconSize: isMobile ? 18 : scaleSize(22),
+    chevronSize: isMobile ? 14 : scaleSize(18),
+    checkmarkSize: isMobile ? 16 : scaleSize(20),
+  };
+
   if (!isJellyfinConnected && !isSonarrConnected && !isRadarrConnected) {
     const title = filterType === 'movies' ? 'Movies' : filterType === 'tvshows' ? 'TV Shows' : 'Library';
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>{title}</Text>
-        <Text style={styles.emptyText}>
+      <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
+        <Text style={[styles.emptyTitle, dynamicStyles.emptyTitle]}>{title}</Text>
+        <Text style={[styles.emptyText, dynamicStyles.emptyText]}>
           Connect to Jellyfin, Sonarr, or Radarr in Settings to browse your library
         </Text>
       </View>
@@ -507,53 +572,58 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, dynamicStyles.container]}>
       {/* Filter and Sort Bar */}
-      <View style={styles.controlBar}>
+      <View style={[styles.controlBar, dynamicStyles.controlBar]}>
         <View style={styles.controlGroup}>
           <TouchableOpacity 
-            style={styles.controlButton}
+            style={[styles.controlButton, dynamicStyles.controlButton]}
             onPress={() => {
               setShowSortMenu(!showSortMenu);
               setShowFilterMenu(false);
             }}>
-            <Icon name="funnel-outline" size={scaleSize(22)} color="#fff" />
-            <Text style={styles.controlButtonText}>Sort</Text>
-            <Icon name={showSortMenu ? "chevron-up" : "chevron-down"} size={scaleSize(18)} color="#fff" />
+            <Icon name="funnel-outline" size={dynamicStyles.iconSize} color="#fff" />
+            <Text style={[styles.controlButtonText, dynamicStyles.controlButtonText]}>Sort</Text>
+            <Icon name={showSortMenu ? "chevron-up" : "chevron-down"} size={dynamicStyles.chevronSize} color="#fff" />
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.controlButton}
+            style={[styles.controlButton, dynamicStyles.controlButton]}
             onPress={() => {
               setShowFilterMenu(!showFilterMenu);
               setShowSortMenu(false);
             }}>
-            <Icon name="filter-outline" size={scaleSize(22)} color="#fff" />
-            <Text style={styles.controlButtonText}>Filter: {filterBy}</Text>
-            <Icon name={showFilterMenu ? "chevron-up" : "chevron-down"} size={scaleSize(18)} color="#fff" />
+            <Icon name="filter-outline" size={dynamicStyles.iconSize} color="#fff" />
+            <Text style={[styles.controlButtonText, dynamicStyles.controlButtonText]}>Filter: {filterBy}</Text>
+            <Icon name={showFilterMenu ? "chevron-up" : "chevron-down"} size={dynamicStyles.chevronSize} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.itemCount}>
+        <Text style={[styles.itemCount, dynamicStyles.itemCount]}>
           {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'item' : 'items'}
         </Text>
       </View>
 
       {/* Sort Menu Dropdown */}
       {showSortMenu && (
-        <View style={styles.dropdownMenu}>
+        <>
+          <TouchableWithoutFeedback onPress={() => setShowSortMenu(false)}>
+            <View style={styles.backdrop} />
+          </TouchableWithoutFeedback>
+          <View style={[styles.dropdownMenu, dynamicStyles.dropdownMenu]}>
           <View style={styles.dropdownSection}>
-            <Text style={styles.dropdownSectionTitle}>Sort By</Text>
+            <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort By</Text>
             {filterType === 'tvshows' ? (
               // TV Show sort options
               (['name', 'random', 'communityRating', 'dateShowAdded', 'dateEpisodeAdded', 'datePlayed', 'parentalRating', 'releaseDate'] as TVShowSortOption[]).map((option) => (
                 <TouchableOpacity
                   key={option}
-                  style={[styles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
+                  style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
                   onPress={() => {
                     setSortBy(option);
+                    setShowSortMenu(false);
                   }}>
-                  <Text style={[styles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
+                  <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
                     {option === 'name' ? 'Name' :
                      option === 'random' ? 'Random' :
                      option === 'communityRating' ? 'Community Rating' :
@@ -563,7 +633,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
                      option === 'parentalRating' ? 'Parental Rating' :
                      'Release Date'}
                   </Text>
-                  {sortBy === option && <Icon name="radio-button-on" size={scaleSize(20)} color="#8b5cf6" />}
+                  {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
                 </TouchableOpacity>
               ))
             ) : (
@@ -571,11 +641,12 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
               (['name', 'random', 'communityRating', 'criticsRating', 'dateAdded', 'datePlayed', 'parentalRating', 'playCount', 'releaseDate', 'runtime'] as MovieSortOption[]).map((option) => (
                 <TouchableOpacity
                   key={option}
-                  style={[styles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
+                  style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
                   onPress={() => {
                     setSortBy(option);
+                    setShowSortMenu(false);
                   }}>
-                  <Text style={[styles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
+                  <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
                     {option === 'name' ? 'Name' :
                      option === 'random' ? 'Random' :
                      option === 'communityRating' ? 'Community Rating' :
@@ -587,50 +658,62 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
                      option === 'releaseDate' ? 'Release Date' :
                      'Runtime'}
                   </Text>
-                  {sortBy === option && <Icon name="radio-button-on" size={scaleSize(20)} color="#8b5cf6" />}
+                  {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
                 </TouchableOpacity>
               ))
             )}
           </View>
           <View style={styles.dropdownDivider} />
           <View style={styles.dropdownSection}>
-            <Text style={styles.dropdownSectionTitle}>Sort Order</Text>
+            <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort Order</Text>
             <TouchableOpacity
-              style={[styles.dropdownItem, sortOrder === 'ascending' && styles.dropdownItemActive]}
-              onPress={() => setSortOrder('ascending')}>
-              <Text style={[styles.dropdownItemText, sortOrder === 'ascending' && styles.dropdownItemTextActive]}>Ascending</Text>
-              {sortOrder === 'ascending' && <Icon name="radio-button-on" size={scaleSize(20)} color="#8b5cf6" />}
+              style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'ascending' && styles.dropdownItemActive]}
+              onPress={() => {
+                setSortOrder('ascending');
+                setShowSortMenu(false);
+              }}>
+              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'ascending' && styles.dropdownItemTextActive]}>Ascending</Text>
+              {sortOrder === 'ascending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.dropdownItem, sortOrder === 'descending' && styles.dropdownItemActive]}
-              onPress={() => setSortOrder('descending')}>
-              <Text style={[styles.dropdownItemText, sortOrder === 'descending' && styles.dropdownItemTextActive]}>Descending</Text>
-              {sortOrder === 'descending' && <Icon name="radio-button-on" size={scaleSize(20)} color="#8b5cf6" />}
+              style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'descending' && styles.dropdownItemActive]}
+              onPress={() => {
+                setSortOrder('descending');
+                setShowSortMenu(false);
+              }}>
+              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'descending' && styles.dropdownItemTextActive]}>Descending</Text>
+              {sortOrder === 'descending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
             </TouchableOpacity>
           </View>
         </View>
+        </>
       )}
 
       {/* Filter Menu Dropdown */}
       {showFilterMenu && (
-        <View style={styles.dropdownMenu}>
+        <>
+          <TouchableWithoutFeedback onPress={() => setShowFilterMenu(false)}>
+            <View style={styles.backdrop} />
+          </TouchableWithoutFeedback>
+          <View style={[styles.dropdownMenu, dynamicStyles.dropdownMenu]}>
           {(['all', 'unwatched', 'watched', 'favorites'] as FilterOption[]).map((option) => (
             <TouchableOpacity
               key={option}
-              style={[styles.dropdownItem, filterBy === option && styles.dropdownItemActive]}
+              style={[styles.dropdownItem, dynamicStyles.dropdownItem, filterBy === option && styles.dropdownItemActive]}
               onPress={() => {
                 setFilterBy(option);
                 setShowFilterMenu(false);
               }}>
-              <Text style={[styles.dropdownItemText, filterBy === option && styles.dropdownItemTextActive]}>
+              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, filterBy === option && styles.dropdownItemTextActive]}>
                 {option === 'all' ? 'All Items' : 
                  option === 'unwatched' ? 'Unwatched' : 
                  option === 'watched' ? 'Watched' : 'Favorites'}
               </Text>
-              {filterBy === option && <Icon name="checkmark" size={scaleSize(20)} color="#8b5cf6" />}
+              {filterBy === option && <Icon name="checkmark" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
             </TouchableOpacity>
           ))}
         </View>
+        </>
       )}
 
       {/* Library Content */}
@@ -657,14 +740,14 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           )}
           contentContainerStyle={[
             styles.gridContent,
-            { paddingLeft: scaleSize(52), paddingRight: scaleSize(52), paddingTop: scaleSize(20) }
+            dynamicStyles.gridContent
           ]}
           columnWrapperStyle={styles.gridRow}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
           ListEmptyComponent={
-            <View style={styles.emptyList}>
-              <Text style={styles.emptyText}>No items match your filters</Text>
+            <View style={[styles.emptyList, dynamicStyles.emptyList]}>
+              <Text style={[styles.emptyText, dynamicStyles.emptyText]}>No items match your filters</Text>
             </View>
           }
         />
@@ -677,6 +760,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 9998,
   },
   controlBar: {
     flexDirection: 'row',
