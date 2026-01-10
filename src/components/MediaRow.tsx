@@ -1,9 +1,11 @@
 import React from 'react';
-import { FlatList, Text, StyleSheet, View, Platform } from 'react-native';
+import { FlatList, Text, StyleSheet, View, Platform, Dimensions } from 'react-native';
 import { MediaCard } from './MediaCard';
 import { useResponsiveColumns } from '../hooks';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
+
+const MOBILE_BREAKPOINT = 768;
 
 interface JellyfinMediaRowProps {
   title: string;
@@ -28,10 +30,10 @@ type MediaRowProps = JellyfinMediaRowProps | TMDBMediaRowProps;
 
 export function MediaRow(props: MediaRowProps) {
   const { title } = props;
-  const { spacing } = useResponsiveColumns();
+  const { spacing, isMobile } = useResponsiveColumns();
   
-  // Sidebar is 240px wide (scaled), use consistent padding for content
-  const horizontalPadding = scaleSize(52);
+  // Responsive horizontal padding
+  const horizontalPadding = isMobile ? 16 : scaleSize(52);
 
   if ('items' in props && props.items) {
     const { items, onItemPress, onItemRemove, onItemMarkWatched, onItemToggleFavorite, getImageUrl } = props;
@@ -41,8 +43,8 @@ export function MediaRow(props: MediaRowProps) {
     }
 
     return (
-      <View style={styles.container}>
-        <Text style={[styles.title, { marginLeft: horizontalPadding }]}>{title}</Text>
+      <View style={[styles.container, isMobile && styles.containerMobile]}>
+        <Text style={[styles.title, isMobile && styles.titleMobile, { marginLeft: horizontalPadding }]}>{title}</Text>
         <FlatList
           horizontal
           data={items}
@@ -58,7 +60,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - scaleSize(10), paddingRight: scaleSize(44) }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - (isMobile ? 4 : scaleSize(10)), paddingRight: isMobile ? 16 : scaleSize(44) }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -74,8 +76,8 @@ export function MediaRow(props: MediaRowProps) {
     }
 
     return (
-      <View style={styles.container}>
-        <Text style={[styles.title, { marginLeft: horizontalPadding }]}>{title}</Text>
+      <View style={[styles.container, isMobile && styles.containerMobile]}>
+        <Text style={[styles.title, isMobile && styles.titleMobile, { marginLeft: horizontalPadding }]}>{title}</Text>
         <FlatList
           horizontal
           data={tmdbItems}
@@ -87,7 +89,7 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - scaleSize(10), paddingRight: scaleSize(44) }]}
+          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - (isMobile ? 4 : scaleSize(10)), paddingRight: isMobile ? 16 : scaleSize(44) }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -103,6 +105,10 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(36),
     marginTop: scaleSize(10),
   },
+  containerMobile: {
+    marginBottom: 24,
+    marginTop: 8,
+  },
   title: {
     color: 'rgba(255, 255, 255, 0.95)',
     fontSize: scaleFontSize(32),
@@ -110,6 +116,10 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(20),
     marginLeft: scaleSize(52),
     letterSpacing: 0.5,
+  },
+  titleMobile: {
+    fontSize: 20,
+    marginBottom: 12,
   },
   listContent: {
     paddingHorizontal: scaleSize(44),

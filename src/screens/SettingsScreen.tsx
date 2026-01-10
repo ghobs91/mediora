@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService, IPTV_REGIONS, IPTVCountry } from '../services';
+import { useDeviceType } from '../hooks/useResponsive';
 
 type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv';
 
@@ -26,43 +28,65 @@ export function SettingsScreen() {
   } = useSettings();
   const { isJellyfinConnected, isSonarrConnected, isRadarrConnected } =
     useServices();
+  const { isMobile } = useDeviceType();
+  const insets = useSafeAreaInsets();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('jellyfin');
 
   const hasIPTVCountries = (settings.iptv?.selectedCountries?.length ?? 0) > 0;
 
+  const dynamicStyles = {
+    contentContainer: {
+      paddingTop: isMobile ? insets.top + 60 : 48, // Account for hamburger menu on mobile
+      paddingBottom: isMobile ? insets.bottom + 24 : 48,
+    },
+    tabsContainer: {
+      paddingHorizontal: isMobile ? 16 : 48,
+      flexWrap: isMobile ? 'wrap' as const : 'nowrap' as const,
+      gap: isMobile ? 8 : 0,
+    },
+    sectionContent: {
+      paddingHorizontal: isMobile ? 16 : 48,
+      paddingBottom: isMobile ? 24 : 48,
+    },
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={dynamicStyles.contentContainer}>
       {/* Section Tabs */}
-      <View style={styles.tabsContainer}>
+      <View style={[styles.tabsContainer, dynamicStyles.tabsContainer]}>
         <SettingsTab
           title="Jellyfin"
           isSelected={activeSection === 'jellyfin'}
           isConnected={isJellyfinConnected}
           onPress={() => setActiveSection('jellyfin')}
+          isMobile={isMobile}
         />
         <SettingsTab
           title="Sonarr"
           isSelected={activeSection === 'sonarr'}
           isConnected={isSonarrConnected}
           onPress={() => setActiveSection('sonarr')}
+          isMobile={isMobile}
         />
         <SettingsTab
           title="Radarr"
           isSelected={activeSection === 'radarr'}
           isConnected={isRadarrConnected}
           onPress={() => setActiveSection('radarr')}
+          isMobile={isMobile}
         />
         <SettingsTab
           title="Live TV"
           isSelected={activeSection === 'livetv'}
           isConnected={hasIPTVCountries}
           onPress={() => setActiveSection('livetv')}
+          isMobile={isMobile}
         />
       </View>
 
       {/* Section Content */}
-      <View style={styles.sectionContent}>
+      <View style={[styles.sectionContent, dynamicStyles.sectionContent]}>
         {activeSection === 'jellyfin' && (
           <JellyfinSettings
             settings={settings.jellyfin}
@@ -98,6 +122,7 @@ interface SettingsTabProps {
   isSelected: boolean;
   isConnected: boolean;
   onPress: () => void;
+  isMobile?: boolean;
 }
 
 function SettingsTab({
@@ -105,11 +130,12 @@ function SettingsTab({
   isSelected,
   isConnected,
   onPress,
+  isMobile = false,
 }: SettingsTabProps) {
   const titleContent = isConnected ? (
     <View style={styles.tabTitleContainer}>
-      <Text style={styles.tabTitleText}>{title}</Text>
-      <Icon name="checkmark-circle" size={18} color="#30d158" style={styles.tabCheckIcon} />
+      <Text style={[styles.tabTitleText, isMobile && styles.tabTitleTextMobile]}>{title}</Text>
+      <Icon name="checkmark-circle" size={isMobile ? 14 : 18} color="#30d158" style={styles.tabCheckIcon} />
     </View>
   ) : title;
 
@@ -118,8 +144,8 @@ function SettingsTab({
       title={titleContent}
       onPress={onPress}
       variant={isSelected ? 'primary' : 'secondary'}
-      size="medium"
-      style={styles.tab}
+      size={isMobile ? 'small' : 'medium'}
+      style={isMobile ? styles.tabMobile : styles.tab}
     />
   );
 }
@@ -1347,10 +1373,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 48,
     paddingTop: 0,
-    marginBottom: 36,
+    marginBottom: 24,
   },
   tab: {
-    marginRight: 18,
+    marginRight: 12,
+  },
+  tabMobile: {
+    marginRight: 0,
+    marginBottom: 8,
+    minWidth: 80,
   },
   tabTitleContainer: {
     flexDirection: 'row',
@@ -1361,6 +1392,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  tabTitleTextMobile: {
+    fontSize: 14,
   },
   tabCheckIcon: {
     marginLeft: 6,
@@ -1382,13 +1416,14 @@ const styles = StyleSheet.create({
     paddingBottom: 48,
   },
   sectionForm: {
+    width: '100%',
     maxWidth: 600,
   },
   sectionDescription: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 18,
-    marginBottom: 28,
-    lineHeight: 26,
+    fontSize: 16,
+    marginBottom: 24,
+    lineHeight: 24,
     fontWeight: '500',
   },
   helperText: {
@@ -1400,12 +1435,13 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 18,
-    marginTop: 20,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 16,
   },
   testResult: {
-    fontSize: 17,
-    marginBottom: 18,
+    fontSize: 15,
+    marginBottom: 16,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
@@ -1416,10 +1452,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 69, 58, 0.95)',
   },
   connectedInfo: {
-    marginBottom: 28,
-    padding: 24,
+    marginBottom: 24,
+    padding: 16,
     backgroundColor: 'rgba(26, 26, 26, 0.6)',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(48, 209, 88, 0.3)',
     shadowColor: 'rgba(48, 209, 88, 0.5)',
@@ -1429,31 +1465,31 @@ const styles = StyleSheet.create({
   },
   connectedLabel: {
     color: 'rgba(48, 209, 88, 0.95)',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 8,
     letterSpacing: 0.3,
   },
   connectedValue: {
     color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '500',
   },
   quickConnectTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     letterSpacing: 0.5,
   },
   quickConnectCode: {
     color: '#fff',
-    fontSize: 72,
+    fontSize: 48,
     fontWeight: 'bold',
     textAlign: 'center',
-    letterSpacing: 20,
-    marginBottom: 28,
+    letterSpacing: 12,
+    marginBottom: 20,
     fontFamily: 'monospace',
     textShadowColor: 'rgba(10, 132, 255, 0.5)',
     textShadowOffset: { width: 0, height: 4 },
@@ -1461,10 +1497,10 @@ const styles = StyleSheet.create({
   },
   quickConnectInstructions: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 17,
+    fontSize: 15,
     textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 36,
+    lineHeight: 22,
+    marginBottom: 28,
     fontWeight: '500',
   },
   spinner: {
@@ -1472,15 +1508,15 @@ const styles = StyleSheet.create({
   },
   waitingText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 17,
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
     fontWeight: '500',
   },
   // Live TV / IPTV Settings styles
   selectedCount: {
     color: 'rgba(10, 132, 255, 0.95)',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 16,
   },
@@ -1499,54 +1535,59 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   regionTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   regionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   regionButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   regionButtonText: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
   countriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   countryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 2,
     borderColor: 'transparent',
-    minWidth: 160,
+    minWidth: 120,
+    flexGrow: 1,
+    flexBasis: '45%',
+    maxWidth: '100%',
   },
   countryItemSelected: {
     backgroundColor: 'rgba(48, 209, 88, 0.15)',
     borderColor: 'rgba(48, 209, 88, 0.5)',
   },
   countryFlag: {
-    fontSize: 20,
+    fontSize: 18,
   },
   countryName: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     flex: 1,
   },
@@ -1558,67 +1599,69 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 16,
     marginBottom: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: 'rgba(48, 209, 88, 0.1)',
     borderRadius: 8,
-    gap: 8,
+    gap: 6,
   },
   autoSaveIcon: {
     marginRight: 4,
   },
   autoSaveText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   // New styles for clear UI separation
   settingsSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 10,
+    marginBottom: 10,
+    gap: 8,
   },
   sectionTitle: {
     color: 'rgba(10, 132, 255, 0.95)',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
   sectionDivider: {
     height: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginVertical: 32,
+    marginVertical: 24,
   },
   loginMethodContainer: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   loginMethodLabel: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   loginMethodButtons: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 10,
   },
   loginMethodButton: {
     flex: 1,
+    minWidth: 140,
   },
   loginMethodContent: {
-    marginTop: 16,
+    marginTop: 14,
   },
   loginMethodDescription: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 15,
-    marginBottom: 20,
-    lineHeight: 22,
+    fontSize: 14,
+    marginBottom: 16,
+    lineHeight: 20,
     fontStyle: 'italic',
   },
 });

@@ -13,6 +13,7 @@ import {
   TVEventHandler,
   useTVEventHandler,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { OnProgressData, VideoRef, SelectedTrackType } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
@@ -28,6 +29,7 @@ export function PlayerScreen() {
   const navigation = useNavigation();
   const { jellyfin } = useServices();
   const { itemId } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [playbackInfo, setPlaybackInfo] = useState<JellyfinPlaybackInfo | null>(
     null,
@@ -102,26 +104,29 @@ export function PlayerScreen() {
       }
 
 
-      if (info.MediaSources.length > 0) {
-        // Report playback start - will update play method when stream starts
-        await jellyfin.reportPlaybackStart(
-          itemId,
-          info.MediaSources[0].Id,
-          0,
-          'DirectStream', // Start with DirectStream, will be updated based on actual method
-        );
-      }
-
-      // Check for saved playback position
+      // Check for saved playback position FIRST
       const savedPosition = await playbackPositionService.getPosition(itemId);
+      let startPositionTicks = 0;
+      
       if (savedPosition && savedPosition.positionSeconds > 30) {
         // Store the saved position to restore after video loads
         console.log(`[PlayerScreen] Found saved position: ${Math.floor(savedPosition.positionSeconds)}s`);
         savedPositionToRestore.current = savedPosition.positionSeconds;
         hasRestoredPosition.current = false;
+        startPositionTicks = savedPosition.positionTicks;
       } else {
         savedPositionToRestore.current = 0;
         hasRestoredPosition.current = true; // No position to restore
+      }
+
+      if (info.MediaSources.length > 0) {
+        // Report playback start with the correct position
+        await jellyfin.reportPlaybackStart(
+          itemId,
+          info.MediaSources[0].Id,
+          startPositionTicks,
+          'DirectStream', // Start with DirectStream, will be updated based on actual method
+        );
       }
     } catch (err) {
       console.error('[PlayerScreen] Failed to load playback info:', err);
@@ -589,12 +594,12 @@ export function PlayerScreen() {
         playInBackground={false}
         playWhenInactive={false}
         automaticallyWaitsToMinimizeStalling={true}
-        preferredForwardBufferDuration={10}
+        preferredForwardBufferDuration={30}
         bufferConfig={{
-          minBufferMs: 15000,
-          maxBufferMs: 50000,
-          bufferForPlaybackMs: 2500,
-          bufferForPlaybackAfterRebufferMs: 5000,
+          minBufferMs: 30000,
+          maxBufferMs: 120000,
+          bufferForPlaybackMs: 5000,
+          bufferForPlaybackAfterRebufferMs: 10000,
         }}
         onError={(err) => {
           console.error('[PlayerScreen] Video error:', err);
@@ -653,7 +658,7 @@ export function PlayerScreen() {
         <Animated.View
           style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
           {/* Top Bar */}
-          <View style={styles.topBar}>
+          <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 20), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
             <View style={styles.topBarLeft}>
               <TouchableOpacity onPress={handleBack} style={styles.topIconButton}>
                 <Icon name="arrow-back" size={24} color="#fff" />
@@ -673,7 +678,7 @@ export function PlayerScreen() {
           </View>
 
           {/* Bottom Container */}
-          <View style={styles.bottomContainer}>
+          <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 24), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
             {/* Control Row */}
             <View style={styles.controlRow}>
               <View style={styles.controlGroupLeft}>
@@ -1013,8 +1018,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   video: {
-    width,
-    height,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
   },
   bufferingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1038,7 +1046,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: 40,
     paddingHorizontal: 24,
   },
   topBarLeft: {
@@ -1061,7 +1069,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   bottomContainer: {
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    paddingBottom: 24,
     paddingHorizontal: 24,
   },
   controlRow: {

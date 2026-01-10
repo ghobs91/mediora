@@ -7,21 +7,36 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaRow, LoadingScreen } from '../components';
 import { JellyfinItem } from '../types';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
+import { useDeviceType } from '../hooks/useResponsive';
 
 export function HomeScreen() {
   const navigation = useNavigation();
   const { jellyfin, isJellyfinConnected } = useServices();
+  const { isMobile } = useDeviceType();
+  const insets = useSafeAreaInsets();
   const [resumeItems, setResumeItems] = useState<JellyfinItem[]>([]);
   const [nextUpItems, setNextUpItems] = useState<JellyfinItem[]>([]);
   const [latestMovies, setLatestMovies] = useState<JellyfinItem[]>([]);
   const [latestShows, setLatestShows] = useState<JellyfinItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const dynamicStyles = {
+    contentContainer: {
+      paddingTop: isMobile ? insets.top + 60 : scaleSize(52),
+      paddingBottom: isMobile ? insets.bottom + 16 : scaleSize(64),
+    },
+    emptyContainer: {
+      paddingTop: isMobile ? insets.top + 60 : scaleSize(52),
+      padding: isMobile ? 24 : scaleSize(52),
+    },
+  };
 
   const loadData = useCallback(async () => {
     if (!jellyfin) return;
@@ -187,9 +202,9 @@ export function HomeScreen() {
 
   if (!isJellyfinConnected) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>Welcome to Mediora</Text>
-        <Text style={styles.emptyText}>
+      <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
+        <Text style={[styles.emptyTitle, isMobile && styles.emptyTitleMobile]}>Welcome to Mediora</Text>
+        <Text style={[styles.emptyText, isMobile && styles.emptyTextMobile]}>
           Connect to your Jellyfin server in Settings to get started
         </Text>
       </View>
@@ -210,7 +225,7 @@ export function HomeScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={dynamicStyles.contentContainer}
       refreshControl={
         Platform.select({
           ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
@@ -231,7 +246,7 @@ export function HomeScreen() {
       }>
       {!hasContent && (
         <View style={styles.emptyContentContainer}>
-          <Text style={styles.emptyText}>
+          <Text style={[styles.emptyText, isMobile && styles.emptyTextMobile]}>
             No media found. Add some content to your Jellyfin server.
           </Text>
         </View>
@@ -262,8 +277,6 @@ export function HomeScreen() {
         onItemToggleFavorite={handleToggleFavorite}
         getImageUrl={getImageUrl}
       />
-
-      <View style={styles.bottomPadding} />
     </ScrollView>
   );
 }
@@ -296,6 +309,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: scaleSize(24),
     letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  emptyTitleMobile: {
+    fontSize: 28,
+    marginBottom: 16,
   },
   emptyText: {
     color: 'rgba(255, 255, 255, 0.65)',
@@ -304,7 +322,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: scaleSize(32),
   },
-  bottomPadding: {
-    height: scaleSize(64),
+  emptyTextMobile: {
+    fontSize: 16,
+    lineHeight: 24,
   },
 });

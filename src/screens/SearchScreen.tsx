@@ -9,10 +9,11 @@ import {
   Animated,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
 import { MediaRow, MediaCard } from '../components';
-import { useResponsiveColumns } from '../hooks';
+import { useResponsiveColumns, useDeviceType } from '../hooks';
 import { TMDBMovie, TMDBTVShow, TMDBGenre } from '../types';
 
 type ContentMode = 'movies' | 'tv';
@@ -30,7 +31,22 @@ export function SearchScreen() {
   const [trendingTV, setTrendingTV] = useState<TMDBTVShow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const { numColumns, itemWidth, spacing } = useResponsiveColumns();
+  const { numColumns, itemWidth, spacing, isMobile } = useResponsiveColumns();
+  const insets = useSafeAreaInsets();
+
+  const dynamicStyles = {
+    contentContainer: {
+      paddingTop: isMobile ? insets.top + 60 : 48,
+      paddingBottom: isMobile ? insets.bottom + 16 : 48,
+    },
+    searchContainer: {
+      paddingHorizontal: isMobile ? 16 : 48,
+      paddingTop: isMobile ? 16 : 24,
+    },
+    modeContainer: {
+      paddingHorizontal: isMobile ? 16 : 48,
+    },
+  };
 
   const loadGenres = useCallback(async () => {
     if (!tmdb) return;
@@ -135,9 +151,9 @@ export function SearchScreen() {
 
   if (!isTMDBConnected) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>Search</Text>
-        <Text style={styles.emptyText}>
+      <View style={[styles.emptyContainer, { paddingTop: isMobile ? insets.top + 60 : 48 }]}>
+        <Text style={[styles.emptyTitle, isMobile && styles.emptyTitleMobile]}>Search</Text>
+        <Text style={[styles.emptyText, isMobile && styles.emptyTextMobile]}>
           Configure your TMDB API key in Settings to search for movies and TV
           shows
         </Text>
@@ -146,11 +162,11 @@ export function SearchScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={dynamicStyles.contentContainer}>
       {/* Search Input */}
-      <View style={styles.searchContainer}>
+      <View style={[styles.searchContainer, dynamicStyles.searchContainer]}>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, isMobile && styles.searchInputMobile]}
           value={query}
           onChangeText={setQuery}
           placeholder={`Search ${contentMode === 'movies' ? 'movies' : 'TV shows'}...`}
@@ -161,7 +177,7 @@ export function SearchScreen() {
       </View>
 
       {/* Content Mode Toggle */}
-      <View style={styles.modeContainer}>
+      <View style={[styles.modeContainer, dynamicStyles.modeContainer]}>
         <ContentModeTab
           title="Movies"
           isSelected={contentMode === 'movies'}
@@ -318,10 +334,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 8,
     padding: 16,
-    fontSize: 20,
+    fontSize: 18,
     color: '#fff',
     borderWidth: 2,
     borderColor: '#333',
+  },
+  searchInputMobile: {
+    padding: 12,
+    fontSize: 16,
   },
   modeContainer: {
     flexDirection: 'row',
@@ -388,11 +408,18 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     marginBottom: 16,
+    textAlign: 'center',
+  },
+  emptyTitleMobile: {
+    fontSize: 24,
   },
   emptyText: {
     color: '#888',
     fontSize: 18,
     textAlign: 'center',
+  },
+  emptyTextMobile: {
+    fontSize: 15,
   },
   bottomPadding: {
     height: 48,

@@ -7,11 +7,14 @@ import {
   View,
   Platform,
   Alert,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { TMDBService } from '../services';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
+
+const MOBILE_BREAKPOINT = 768;
 
 interface MediaCardProps {
   item?: JellyfinItem;
@@ -49,6 +52,8 @@ export function MediaCard({
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const windowWidth = Dimensions.get('window').width;
+  const isMobile = !Platform.isTV && windowWidth < MOBILE_BREAKPOINT;
 
   const handleFocus = () => {
     setIsFocused(true);
@@ -103,15 +108,34 @@ export function MediaCard({
     }
   };
 
-  const dimensions = {
-    small: { width: scaleSize(Platform.isTV ? 140 : 100), height: scaleSize(Platform.isTV ? 210 : 150) },
-    medium: { width: scaleSize(Platform.isTV ? 180 : 140), height: scaleSize(Platform.isTV ? 270 : 210) },
-    large: { width: scaleSize(Platform.isTV ? 220 : 180), height: scaleSize(Platform.isTV ? 330 : 270) },
-    xlarge: { width: scaleSize(Platform.isTV ? 360 : 280), height: scaleSize(Platform.isTV ? 540 : 420) },
+  // Responsive dimensions
+  const getDimensions = () => {
+    if (isMobile) {
+      // Mobile sizes - smaller and more compact
+      const mobileDimensions = {
+        small: { width: 90, height: 135 },
+        medium: { width: 120, height: 180 },
+        large: { width: 150, height: 225 },
+        xlarge: { width: 200, height: 300 },
+      };
+      return mobileDimensions[size];
+    }
+    // TV/Desktop sizes
+    return {
+      small: { width: scaleSize(Platform.isTV ? 140 : 100), height: scaleSize(Platform.isTV ? 210 : 150) },
+      medium: { width: scaleSize(Platform.isTV ? 180 : 140), height: scaleSize(Platform.isTV ? 270 : 210) },
+      large: { width: scaleSize(Platform.isTV ? 220 : 180), height: scaleSize(Platform.isTV ? 330 : 270) },
+      xlarge: { width: scaleSize(Platform.isTV ? 360 : 280), height: scaleSize(Platform.isTV ? 540 : 420) },
+    }[size];
   };
 
-  const width = customWidth || dimensions[size].width;
-  const height = customHeight || (customWidth ? customWidth * 1.5 : dimensions[size].height);
+  const dimensions = getDimensions();
+  const width = customWidth || dimensions.width;
+  const height = customHeight || (customWidth ? customWidth * 1.5 : dimensions.height);
+
+  // Responsive style values
+  const borderRadius = isMobile ? 10 : scaleSize(18);
+  const focusBorderWidth = isMobile ? 3 : scaleSize(6);
 
   let displayTitle = title;
   let displaySubtitle = subtitle;
@@ -140,22 +164,22 @@ export function MediaCard({
       onPress={onPress}
       onLongPress={(onMarkWatched || onRemove || onToggleFavorite) ? handleContextMenu : undefined}
       delayLongPress={500}
-      style={styles.container}>
+      style={[styles.container, isMobile && styles.containerMobile]}>
       <View
         style={[
           styles.cardContainer,
-          { width, height },
-          isFocused && styles.focused,
+          { width, height, borderRadius },
+          isFocused && [styles.focused, { borderWidth: focusBorderWidth }],
         ]}>
         {displayImageUrl ? (
           <Image
             source={{ uri: displayImageUrl }}
-            style={[styles.image, { width, height }]}
+            style={[styles.image, { width, height, borderRadius }]}
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.placeholder, { width, height }]}>
-            <Text style={styles.placeholderText}>
+          <View style={[styles.placeholder, { width, height, borderRadius }]}>
+            <Text style={[styles.placeholderText, isMobile && styles.placeholderTextMobile]}>
               {displayTitle?.charAt(0) || '?'}
             </Text>
           </View>
@@ -163,12 +187,13 @@ export function MediaCard({
         {item?.UserData?.PlaybackPositionTicks != null &&
           item?.RunTimeTicks != null &&
           item.RunTimeTicks > 0 ? (
-          <View style={styles.progressContainer}>
+          <View style={[styles.progressContainer, { height: isMobile ? 4 : scaleSize(6) }]}>
             <View
               style={[
                 styles.progressBar,
                 {
                   flex: item.UserData.PlaybackPositionTicks / item.RunTimeTicks,
+                  height: isMobile ? 4 : scaleSize(6),
                 },
               ]}
             />
@@ -188,8 +213,8 @@ export function MediaCard({
               />
             </View>
             <View style={styles.downloadBadge}>
-              <Icon name="arrow-down-circle" size={scaleSize(14)} color="#fff" />
-              <Text style={styles.downloadText}>
+              <Icon name="arrow-down-circle" size={isMobile ? 12 : scaleSize(14)} color="#fff" />
+              <Text style={[styles.downloadText, isMobile && { fontSize: 10 }]}>
                 {Math.round(downloadProgress * 100)}%
               </Text>
             </View>
@@ -199,17 +224,12 @@ export function MediaCard({
           <TouchableOpacity
             style={styles.removeButton}
             onPress={(e) => {
-              // Prevent selecting the card when removing
-              if (Platform.OS === 'ios' || Platform.OS === 'android') {
-                // In RN mobile, we might need stopPropagation if it was a nested button
-                // But here card itself is TouchableOpacity.
-              }
               onRemove();
             }}
             activeOpacity={0.7}
           >
-            <View style={styles.removeButtonInner}>
-              <Icon name="close" size={scaleSize(22)} color="#fff" />
+            <View style={[styles.removeButtonInner, isMobile && styles.removeButtonInnerMobile]}>
+              <Icon name="close" size={isMobile ? 16 : scaleSize(22)} color="#fff" />
             </View>
           </TouchableOpacity>
         )}
@@ -221,10 +241,10 @@ export function MediaCard({
                 onPress={handleToggleFavorite}
                 activeOpacity={0.7}
               >
-                <View style={[styles.actionButtonInner, item.UserData?.IsFavorite && styles.actionButtonFavorite]}>
+                <View style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile, item.UserData?.IsFavorite && styles.actionButtonFavorite]}>
                   <Icon 
                     name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
-                    size={scaleSize(20)} 
+                    size={isMobile ? 16 : scaleSize(20)} 
                     color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
                   />
                 </View>
@@ -236,20 +256,20 @@ export function MediaCard({
                 onPress={handleContextMenu}
                 activeOpacity={0.7}
               >
-                <View style={styles.actionButtonInner}>
-                  <Icon name="ellipsis-horizontal" size={scaleSize(20)} color="#fff" />
+                <View style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile]}>
+                  <Icon name="ellipsis-horizontal" size={isMobile ? 16 : scaleSize(20)} color="#fff" />
                 </View>
               </TouchableOpacity>
             )}
           </View>
         )}
       </View>
-      <View style={[styles.textContainer, { width }]}>
-        <Text style={styles.title} numberOfLines={1}>
+      <View style={[styles.textContainer, { width }, isMobile && styles.textContainerMobile]}>
+        <Text style={[styles.title, isMobile && styles.titleMobile]} numberOfLines={1}>
           {displayTitle}
         </Text>
         {displaySubtitle && (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={[styles.subtitle, isMobile && styles.subtitleMobile]} numberOfLines={1}>
             {displaySubtitle}
           </Text>
         )}
@@ -262,6 +282,10 @@ const styles = StyleSheet.create({
   container: {
     marginVertical: scaleSize(14),
     marginHorizontal: scaleSize(6),
+  },
+  containerMobile: {
+    marginVertical: 8,
+    marginHorizontal: 4,
   },
   cardContainer: {
     borderRadius: scaleSize(18),
@@ -291,9 +315,16 @@ const styles = StyleSheet.create({
     color: 'rgba(102, 102, 102, 0.6)',
     fontWeight: 'bold',
   },
+  placeholderTextMobile: {
+    fontSize: 32,
+  },
   textContainer: {
     marginTop: scaleSize(14),
     paddingHorizontal: scaleSize(6),
+  },
+  textContainerMobile: {
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
   title: {
     color: '#fff',
@@ -301,11 +332,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
+  titleMobile: {
+    fontSize: 13,
+  },
   subtitle: {
     color: 'rgba(255, 255, 255, 0.65)',
     fontSize: scaleFontSize(15),
     marginTop: scaleSize(5),
     fontWeight: '500',
+  },
+  subtitleMobile: {
+    fontSize: 11,
+    marginTop: 2,
   },
   progressContainer: {
     position: 'absolute',
@@ -367,6 +405,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
+  removeButtonInnerMobile: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
   actionButtons: {
     position: 'absolute',
     bottom: scaleSize(10),
@@ -387,6 +430,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  actionButtonInnerMobile: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
   },
   actionButtonFavorite: {
     borderColor: '#e50914',

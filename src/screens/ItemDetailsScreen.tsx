@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   metaText: { color: 'rgba(255,255,255,0.8)', fontSize: 18, fontWeight: '600', marginRight: 10 },
   overview: { color: 'rgba(255,255,255,0.7)', fontSize: 16, lineHeight: 24, maxWidth: 700, marginBottom: 30 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
   playButton: { minWidth: 160 },
   downloadingButton: { minWidth: 160, opacity: 0.8 },
   actionButton: { backgroundColor: 'rgba(255,255,255,0.1)' },
