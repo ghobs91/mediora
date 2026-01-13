@@ -183,14 +183,14 @@ export class JellyfinService {
       console.log('[Jellyfin] Username:', username);
       console.log('[Jellyfin] Password length:', password.length);
       console.log('[Jellyfin] Server URL:', this.serverUrl);
-      
+
       const requestBody = {
         Username: username,
         Pw: password || '',
       };
-      
+
       console.log('[Jellyfin] Request body:', JSON.stringify(requestBody));
-      
+
       const response = await fetch(
         `${this.serverUrl}/Users/AuthenticateByName`,
         {
@@ -201,7 +201,7 @@ export class JellyfinService {
       );
 
       console.log('[Jellyfin] Response status:', response.status);
-      
+
       // Get content type to check if server returned HTML instead of JSON
       const contentType = response.headers.get('content-type') || '';
       console.log('[Jellyfin] Response content-type:', contentType);
@@ -209,12 +209,12 @@ export class JellyfinService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[Jellyfin] Authentication error response:', errorText);
-        
+
         // Check if server returned HTML (redirect to login page) - this happens with HTTP instead of HTTPS
         if (contentType.includes('text/html') || errorText.includes('<!DOCTYPE') || errorText.includes('<html')) {
           throw new Error('Server returned an HTML page instead of JSON. This usually means:\n\n• Try using HTTPS instead of HTTP\n• Check the server URL is correct\n• The server may be redirecting to a login page');
         }
-        
+
         let errorMessage = 'Invalid username or password';
         try {
           const errorJson = JSON.parse(errorText);
@@ -227,10 +227,10 @@ export class JellyfinService {
             errorMessage = errorText.substring(0, 200); // Limit length
           }
         }
-        
+
         throw new Error(`Failed to authenticate: ${errorMessage}`);
       }
-      
+
       // Also check successful responses for HTML (shouldn't happen but just in case)
       if (contentType.includes('text/html')) {
         throw new Error('Server returned HTML instead of JSON. Try using HTTPS instead of HTTP for the server URL.');
@@ -655,7 +655,7 @@ export class JellyfinService {
     return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
   }
 
-  getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number): string {
+  getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number, startTimeTicks?: number): string {
     // Use master.m3u8 for HLS streaming with transcoding
     const params: Record<string, string | number | boolean | undefined> = {
       api_key: this.accessToken || '',
@@ -676,6 +676,12 @@ export class JellyfinService {
       segmentLength: 3,
       breakOnNonKeyFrames: false,
     };
+
+    // Add start position if provided - tells server to start stream from this position
+    if (startTimeTicks !== undefined && startTimeTicks > 0) {
+      params.StartTimeTicks = startTimeTicks;
+      console.log(`[Jellyfin] Starting HLS stream at ${Math.floor(startTimeTicks / 10000000)}s`);
+    }
 
     // Burn subtitles into video if selected
     if (subtitleStreamIndex !== undefined) {
@@ -736,7 +742,7 @@ export class JellyfinService {
     const queryString = buildQueryString({
       api_key: this.accessToken || '',
     });
-    
+
     return `${this.serverUrl}/Videos/${itemId}/${mediaSourceId}/Subtitles/${streamIndex}/Stream.${format}?${queryString}`;
   }
 
@@ -888,23 +894,23 @@ export class JellyfinService {
     id: string;
   }>> {
     const discoveredServers = new Map<string, { address: string; name: string; id: string }>();
-    
+
     // Common Jellyfin ports
     const commonPorts = [8096, 8920];
-    
+
     // Generate IPs to check - scan common ranges
     const ipsToCheck: string[] = ['localhost'];
-    
+
     // 192.168.1.x (most common home network)
     for (let i = 1; i <= 255; i++) {
       ipsToCheck.push(`192.168.1.${i}`);
     }
-    
+
     // 192.168.0.x (also common)
     for (let i = 1; i <= 100; i++) {
       ipsToCheck.push(`192.168.0.${i}`);
     }
-    
+
     // 10.0.0.x (some routers)
     for (let i = 1; i <= 20; i++) {
       ipsToCheck.push(`10.0.0.${i}`);
@@ -916,20 +922,20 @@ export class JellyfinService {
 
     let checksCompleted = 0;
     const totalChecks = ipsToCheck.length * commonPorts.length;
-    
+
     // Batch processing to avoid overwhelming the network
     const batchSize = 20; // Process 20 requests at a time
-    
+
     for (let batchStart = 0; batchStart < ipsToCheck.length; batchStart += batchSize) {
       const batch = ipsToCheck.slice(batchStart, batchStart + batchSize);
-      
+
       const batchChecks = batch.flatMap(ip =>
         commonPorts.map(port => (async () => {
           try {
             const serverUrl = `http://${ip}:${port}`;
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 500); // 500ms per check
-            
+
             const response = await fetch(`${serverUrl}/System/Info/Public`, {
               method: 'GET',
               headers: { 'Content-Type': 'application/json' },
@@ -941,7 +947,7 @@ export class JellyfinService {
             if (response.ok) {
               const data = await response.json();
               const key = `${ip}:${port}`;
-              
+
               if (!discoveredServers.has(key)) {
                 console.log(`[Jellyfin] ✓ Found server: ${data.ServerName} at ${serverUrl}`);
                 discoveredServers.set(key, {
@@ -964,16 +970,16 @@ export class JellyfinService {
           }
         })())
       );
-      
+
       // Process batch in parallel
       await Promise.all(batchChecks);
-      
+
       // Stop if we found a server
       if (discoveredServers.size > 0) {
         console.log('[Jellyfin] Server found, stopping discovery early');
         break;
       }
-      
+
       // Check timeout
       if (Date.now() - startTime > timeoutMs) {
         console.log('[Jellyfin] Discovery timeout reached');
@@ -983,7 +989,7 @@ export class JellyfinService {
 
     const servers = Array.from(discoveredServers.values());
     console.log(`[Jellyfin] Discovery complete. Found ${servers.length} server(s) in ${Date.now() - startTime}ms`);
-    
+
     return servers;
   }
 
@@ -1139,17 +1145,17 @@ export async function parseM3U(url: string): Promise<M3UChannel[]> {
     const lines = content.split('\n');
 
     let currentChannel: Partial<M3UChannel> = {};
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      
+
       if (line.startsWith('#EXTINF:')) {
         // Parse channel info
         const nameMatch = line.match(/,(.+)$/);
         const logoMatch = line.match(/tvg-logo="([^"]+)"/);
         const groupMatch = line.match(/group-title="([^"]+)"/);
         const idMatch = line.match(/tvg-id="([^"]+)"/);
-        
+
         currentChannel = {
           name: nameMatch ? nameMatch[1].trim() : 'Unknown Channel',
           logo: logoMatch ? logoMatch[1] : undefined,

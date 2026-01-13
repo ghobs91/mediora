@@ -1,5 +1,6 @@
 import React from 'react';
 import { FlatList, Text, StyleSheet, View, Platform, Dimensions } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { MediaCard } from './MediaCard';
 import { useResponsiveColumns } from '../hooks';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
@@ -44,7 +45,10 @@ export function MediaRow(props: MediaRowProps) {
 
     return (
       <View style={[styles.container, isMobile && styles.containerMobile]}>
-        <Text style={[styles.title, isMobile && styles.titleMobile, { marginLeft: horizontalPadding }]}>{title}</Text>
+        <View style={[styles.titleContainer, { marginLeft: horizontalPadding }]}>
+          <Text style={[styles.title, isMobile && styles.titleMobile]}>{title}</Text>
+          <Icon name="chevron-forward" size={isMobile ? 16 : scaleSize(24)} color="rgba(255, 255, 255, 0.5)" style={styles.chevron} />
+        </View>
         <FlatList
           horizontal
           data={items}
@@ -77,7 +81,10 @@ export function MediaRow(props: MediaRowProps) {
 
     return (
       <View style={[styles.container, isMobile && styles.containerMobile]}>
-        <Text style={[styles.title, isMobile && styles.titleMobile, { marginLeft: horizontalPadding }]}>{title}</Text>
+        <View style={[styles.titleContainer, { marginLeft: horizontalPadding }]}>
+          <Text style={[styles.title, isMobile && styles.titleMobile]}>{title}</Text>
+          <Icon name="chevron-forward" size={isMobile ? 16 : scaleSize(24)} color="rgba(255, 255, 255, 0.5)" style={styles.chevron} />
+        </View>
         <FlatList
           horizontal
           data={tmdbItems}
@@ -109,20 +116,23 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginTop: 8,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: scaleSize(16),
+  },
   title: {
-    color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: scaleFontSize(32),
+    color: '#ffffff',
+    fontSize: scaleFontSize(28),
     fontWeight: '700',
-    marginBottom: scaleSize(20),
-    marginLeft: scaleSize(52),
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(255, 255, 255, 0.2)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 16,
+    letterSpacing: 0.3,
   },
   titleMobile: {
     fontSize: 20,
-    marginBottom: 12,
+  },
+  chevron: {
+    marginLeft: scaleSize(8),
+    opacity: 0.6,
   },
   listContent: {
     paddingHorizontal: scaleSize(44),
