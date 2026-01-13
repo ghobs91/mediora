@@ -367,7 +367,43 @@ export function LiveTVScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Floating Search Bar */}
+      {/* Search Bar - Desktop at top, Mobile floating */}
+      {!isMobile && (
+        <View style={styles.desktopSearchContainer}>
+          <View style={styles.desktopSearchInner}>
+            <Icon name="search" size={scaleSize(24)} color="rgba(255, 255, 255, 0.6)" style={styles.searchIcon} />
+            <TextInput
+              style={styles.desktopSearchInput}
+              placeholder="Search channels..."
+              placeholderTextColor="rgba(255, 255, 255, 0.4)"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <Icon name="close-circle" size={scaleSize(24)} color="rgba(255, 255, 255, 0.6)" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={styles.desktopViewToggle}>
+            <TouchableOpacity
+              style={[styles.desktopViewToggleButton, viewMode === 'channels' && styles.desktopViewToggleActive]}
+              onPress={() => setViewMode('channels')}>
+              <Icon name="grid" size={scaleSize(22)} color="rgba(255, 255, 255, 0.8)" />
+              <Text style={styles.desktopViewToggleText}>Channels</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.desktopViewToggleButton, viewMode === 'guide' && styles.desktopViewToggleActive]}
+              onPress={() => setViewMode('guide')}>
+              <Icon name="list" size={scaleSize(22)} color="rgba(255, 255, 255, 0.8)" />
+              <Text style={styles.desktopViewToggleText}>Guide</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {/* Floating Search Bar for Mobile */}
       {isMobile && (
         <View style={[styles.floatingSearchContainer, { top: insets.top + 8 }]}>
           <LiquidGlassView
@@ -735,6 +771,57 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  desktopSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scaleSize(280),
+    paddingVertical: scaleSize(20),
+    paddingTop: scaleSize(24),
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    gap: scaleSize(20),
+  },
+  desktopSearchInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: scaleSize(12),
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(12),
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  desktopSearchInput: {
+    flex: 1,
+    fontSize: scaleFontSize(18),
+    color: '#ffffff',
+    paddingVertical: 0,
+  },
+  desktopViewToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: scaleSize(12),
+    padding: scaleSize(4),
+    gap: scaleSize(4),
+  },
+  desktopViewToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(10),
+    borderRadius: scaleSize(8),
+    gap: scaleSize(8),
+  },
+  desktopViewToggleActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  desktopViewToggleText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: scaleFontSize(17),
+    fontWeight: '600',
   },
   floatingSearchContainer: {
     position: 'absolute',

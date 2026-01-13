@@ -126,7 +126,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const loadLibraryItemsBase = useCallback(async () => {
     setIsLoadingItems(true);
     const combinedItems: CombinedLibraryItem[] = [];
-    
+
     try {
       // Load Jellyfin items if connected and library is selected
       if (jellyfin && isJellyfinConnected && selectedLibrary) {
@@ -139,7 +139,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
                 ? ['Series']
                 : undefined,
         });
-        
+
         // Convert Jellyfin items to combined format
         const jellyfinItems: CombinedLibraryItem[] = result.Items.map(item => ({
           id: item.Id,
@@ -150,15 +150,15 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           source: 'jellyfin' as const,
           originalItem: item,
         }));
-        
+
         combinedItems.push(...jellyfinItems);
       }
-      
+
       // Load Sonarr series if connected and viewing TV shows
       if (sonarr && isSonarrConnected && (!filterType || filterType === 'tvshows')) {
         try {
           const sonarrSeries = await sonarr.getAllSeries();
-          
+
           // Convert Sonarr series to combined format
           const sonarrItems: CombinedLibraryItem[] = sonarrSeries.map(series => ({
             id: `sonarr-${series.id}`,
@@ -169,18 +169,18 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             source: 'sonarr' as const,
             originalItem: series,
           }));
-          
+
           combinedItems.push(...sonarrItems);
         } catch (error) {
           console.error('Failed to load Sonarr series:', error);
         }
       }
-      
+
       // Load Radarr movies if connected and viewing movies
       if (radarr && isRadarrConnected && (!filterType || filterType === 'movies')) {
         try {
           const radarrMovies = await radarr.getAllMovies();
-          
+
           // Convert Radarr movies to combined format
           const radarrItems: CombinedLibraryItem[] = radarrMovies.map(movie => ({
             id: `radarr-${movie.id}`,
@@ -191,31 +191,31 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             source: 'radarr' as const,
             originalItem: movie,
           }));
-          
+
           combinedItems.push(...radarrItems);
         } catch (error) {
           console.error('Failed to load Radarr movies:', error);
         }
       }
-      
+
       // Remove duplicates (prefer Jellyfin items)
       const uniqueItems = Array.from(
         combinedItems.reduce((map, item) => {
           const key = item.title.toLowerCase().trim();
           const existing = map.get(key);
-          
+
           // Prefer Jellyfin > Radarr/Sonarr
           if (!existing || (existing.source !== 'jellyfin' && item.source === 'jellyfin')) {
             map.set(key, item);
           }
-          
+
           return map;
         }, new Map<string, CombinedLibraryItem>()).values()
       );
-      
+
       // Sort by title
       uniqueItems.sort((a, b) => a.title.localeCompare(b.title));
-      
+
       setItems(uniqueItems);
     } catch (error) {
       console.error('Failed to load library items:', error);
@@ -249,7 +249,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
       result = result.filter(item => {
         if (item.source !== 'jellyfin') return true; // Keep non-Jellyfin items
         const jellyfinItem = item.originalItem as JellyfinItem;
-        
+
         switch (filterBy) {
           case 'watched':
             return jellyfinItem.UserData?.Played === true;
@@ -266,17 +266,17 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     // Apply sorting
     result.sort((a, b) => {
       let compareResult = 0;
-      
+
       switch (sortBy) {
         case 'name':
           compareResult = a.title.localeCompare(b.title);
           break;
-          
+
         case 'random':
           // Random sort - use Math.random() centered around 0.5
           compareResult = Math.random() - 0.5;
           break;
-          
+
         case 'communityRating':
           if (a.source === 'jellyfin' && b.source === 'jellyfin') {
             const ratingA = (a.originalItem as JellyfinItem).CommunityRating || 0;
@@ -284,7 +284,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             compareResult = ratingB - ratingA;
           }
           break;
-          
+
         case 'criticsRating':
           // Jellyfin doesn't have a separate critics rating, use CommunityRating
           if (a.source === 'jellyfin' && b.source === 'jellyfin') {
@@ -293,23 +293,23 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             compareResult = ratingB - ratingA;
           }
           break;
-          
+
         case 'dateAdded':
         case 'dateShowAdded':
           // Would need DateCreated field from Jellyfin API - fallback to title for now
           compareResult = a.title.localeCompare(b.title);
           break;
-          
+
         case 'dateEpisodeAdded':
           // For TV shows, sort by latest episode added - fallback to title for now
           compareResult = a.title.localeCompare(b.title);
           break;
-          
+
         case 'datePlayed':
           // Would need LastPlayedDate from UserData - fallback to title for now
           compareResult = a.title.localeCompare(b.title);
           break;
-          
+
         case 'parentalRating':
           if (a.source === 'jellyfin' && b.source === 'jellyfin') {
             const ratingA = (a.originalItem as JellyfinItem).OfficialRating || '';
@@ -317,7 +317,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             compareResult = ratingA.localeCompare(ratingB);
           }
           break;
-          
+
         case 'playCount':
           if (a.source === 'jellyfin' && b.source === 'jellyfin') {
             const countA = (a.originalItem as JellyfinItem).UserData?.PlayCount || 0;
@@ -325,13 +325,13 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             compareResult = countB - countA;
           }
           break;
-          
+
         case 'releaseDate':
           const yearA = parseInt(a.year || '0', 10);
           const yearB = parseInt(b.year || '0', 10);
           compareResult = yearB - yearA;
           break;
-          
+
         case 'runtime':
           if (a.source === 'jellyfin' && b.source === 'jellyfin') {
             const runtimeA = (a.originalItem as JellyfinItem).RunTimeTicks || 0;
@@ -339,11 +339,11 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             compareResult = runtimeB - runtimeA;
           }
           break;
-          
+
         default:
           compareResult = 0;
       }
-      
+
       // Apply sort order (ascending/descending)
       return sortOrder === 'ascending' ? compareResult : -compareResult;
     });
@@ -370,7 +370,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   useEffect(() => {
     if (isSonarrConnected) {
       loadSonarrDownloadProgress();
-      
+
       // Refresh progress every 10 seconds
       const interval = setInterval(() => {
         loadSonarrDownloadProgress();
@@ -387,7 +387,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     } else if (item.source === 'sonarr') {
       // Try to find the series in Jellyfin by TVDB ID
       const sonarrSeries = item.originalItem as SonarrSeries;
-      
+
       if (jellyfin && isJellyfinConnected && sonarrSeries.tvdbId) {
         try {
           const jellyfinResults = await jellyfin.searchByTvdbId(sonarrSeries.tvdbId.toString());
@@ -401,7 +401,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           console.error('Failed to search Jellyfin for series:', error);
         }
       }
-      
+
       // Not in Jellyfin, look up TMDB ID using TVDB ID, then navigate to TMDB details
       if (tmdb && sonarrSeries.tvdbId) {
         try {
@@ -416,7 +416,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           console.error('Failed to find TMDB ID for series:', error);
         }
       }
-      
+
       // Fallback: search by title
       if (tmdb) {
         try {
@@ -433,7 +433,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     } else if (item.source === 'radarr') {
       // Try to find the movie in Jellyfin by TMDB ID
       const radarrMovie = item.originalItem as RadarrMovie;
-      
+
       if (jellyfin && isJellyfinConnected && radarrMovie.tmdbId) {
         try {
           const jellyfinResults = await jellyfin.searchByTmdbId(radarrMovie.tmdbId.toString(), 'Movie');
@@ -447,7 +447,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           console.error('Failed to search Jellyfin for movie:', error);
         }
       }
-      
+
       // Not in Jellyfin, navigate to TMDB details using TMDB ID
       if (tmdb && radarrMovie.tmdbId) {
         try {
@@ -569,24 +569,24 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
               <Icon name="funnel-outline" size={18} color="rgba(60, 60, 67, 0.85)" />
               <Text style={styles.floatingPillText}>
                 {sortBy === 'name' ? 'Name' :
-                 sortBy === 'random' ? 'Random' :
-                 sortBy === 'communityRating' ? 'Community Rating' :
-                 sortBy === 'criticsRating' ? 'Critics Rating' :
-                 sortBy === 'dateAdded' ? 'Date Added' :
-                 sortBy === 'dateShowAdded' ? 'Date Show Added' :
-                 sortBy === 'dateEpisodeAdded' ? 'Date Episode Added' :
-                 sortBy === 'datePlayed' ? 'Date Played' :
-                 sortBy === 'parentalRating' ? 'Parental Rating' :
-                 sortBy === 'playCount' ? 'Play Count' :
-                 sortBy === 'releaseDate' ? 'Release Date' :
-                 sortBy === 'runtime' ? 'Runtime' : 'Sort'}
+                  sortBy === 'random' ? 'Random' :
+                    sortBy === 'communityRating' ? 'Community Rating' :
+                      sortBy === 'criticsRating' ? 'Critics Rating' :
+                        sortBy === 'dateAdded' ? 'Date Added' :
+                          sortBy === 'dateShowAdded' ? 'Date Show Added' :
+                            sortBy === 'dateEpisodeAdded' ? 'Date Episode Added' :
+                              sortBy === 'datePlayed' ? 'Date Played' :
+                                sortBy === 'parentalRating' ? 'Parental Rating' :
+                                  sortBy === 'playCount' ? 'Play Count' :
+                                    sortBy === 'releaseDate' ? 'Release Date' :
+                                      sortBy === 'runtime' ? 'Runtime' : 'Sort'}
               </Text>
               <Icon name="chevron-down" size={16} color="rgba(60, 60, 67, 0.85)" />
             </TouchableOpacity>
           </LiquidGlassView>
         </View>
       )}
-      
+
       {/* Centered Sort Modal */}
       {showSortMenu && (
         <Modal
@@ -598,80 +598,80 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback>
                 <View style={styles.sortModal}>
-          <View style={styles.dropdownSection}>
-            <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort By</Text>
-            {filterType === 'tvshows' ? (
-              // TV Show sort options
-              (['name', 'random', 'communityRating', 'dateShowAdded', 'dateEpisodeAdded', 'datePlayed', 'parentalRating', 'releaseDate'] as TVShowSortOption[]).map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
-                  onPress={() => {
-                    setSortBy(option);
-                    setShowSortMenu(false);
-                  }}>
-                  <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
-                    {option === 'name' ? 'Name' :
-                     option === 'random' ? 'Random' :
-                     option === 'communityRating' ? 'Community Rating' :
-                     option === 'dateShowAdded' ? 'Date Show Added' :
-                     option === 'dateEpisodeAdded' ? 'Date Episode Added' :
-                     option === 'datePlayed' ? 'Date Played' :
-                     option === 'parentalRating' ? 'Parental Rating' :
-                     'Release Date'}
-                  </Text>
-                  {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
-                </TouchableOpacity>
-              ))
-            ) : (
-              // Movie sort options
-              (['name', 'random', 'communityRating', 'criticsRating', 'dateAdded', 'datePlayed', 'parentalRating', 'playCount', 'releaseDate', 'runtime'] as MovieSortOption[]).map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
-                  onPress={() => {
-                    setSortBy(option);
-                    setShowSortMenu(false);
-                  }}>
-                  <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
-                    {option === 'name' ? 'Name' :
-                     option === 'random' ? 'Random' :
-                     option === 'communityRating' ? 'Community Rating' :
-                     option === 'criticsRating' ? 'Critics Rating' :
-                     option === 'dateAdded' ? 'Date Added' :
-                     option === 'datePlayed' ? 'Date Played' :
-                     option === 'parentalRating' ? 'Parental Rating' :
-                     option === 'playCount' ? 'Play Count' :
-                     option === 'releaseDate' ? 'Release Date' :
-                     'Runtime'}
-                  </Text>
-                  {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-          <View style={styles.dropdownDivider} />
-          <View style={styles.dropdownSection}>
-            <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort Order</Text>
-            <TouchableOpacity
-              style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'ascending' && styles.dropdownItemActive]}
-              onPress={() => {
-                setSortOrder('ascending');
-                setShowSortMenu(false);
-              }}>
-              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'ascending' && styles.dropdownItemTextActive]}>Ascending</Text>
-              {sortOrder === 'ascending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'descending' && styles.dropdownItemActive]}
-              onPress={() => {
-                setSortOrder('descending');
-                setShowSortMenu(false);
-              }}>
-              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'descending' && styles.dropdownItemTextActive]}>Descending</Text>
-              {sortOrder === 'descending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
-            </TouchableOpacity>
-          </View>
+                  <View style={styles.dropdownSection}>
+                    <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort By</Text>
+                    {filterType === 'tvshows' ? (
+                      // TV Show sort options
+                      (['name', 'random', 'communityRating', 'dateShowAdded', 'dateEpisodeAdded', 'datePlayed', 'parentalRating', 'releaseDate'] as TVShowSortOption[]).map((option) => (
+                        <TouchableOpacity
+                          key={option}
+                          style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
+                          onPress={() => {
+                            setSortBy(option);
+                            setShowSortMenu(false);
+                          }}>
+                          <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
+                            {option === 'name' ? 'Name' :
+                              option === 'random' ? 'Random' :
+                                option === 'communityRating' ? 'Community Rating' :
+                                  option === 'dateShowAdded' ? 'Date Show Added' :
+                                    option === 'dateEpisodeAdded' ? 'Date Episode Added' :
+                                      option === 'datePlayed' ? 'Date Played' :
+                                        option === 'parentalRating' ? 'Parental Rating' :
+                                          'Release Date'}
+                          </Text>
+                          {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      // Movie sort options
+                      (['name', 'random', 'communityRating', 'criticsRating', 'dateAdded', 'datePlayed', 'parentalRating', 'playCount', 'releaseDate', 'runtime'] as MovieSortOption[]).map((option) => (
+                        <TouchableOpacity
+                          key={option}
+                          style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortBy === option && styles.dropdownItemActive]}
+                          onPress={() => {
+                            setSortBy(option);
+                            setShowSortMenu(false);
+                          }}>
+                          <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortBy === option && styles.dropdownItemTextActive]}>
+                            {option === 'name' ? 'Name' :
+                              option === 'random' ? 'Random' :
+                                option === 'communityRating' ? 'Community Rating' :
+                                  option === 'criticsRating' ? 'Critics Rating' :
+                                    option === 'dateAdded' ? 'Date Added' :
+                                      option === 'datePlayed' ? 'Date Played' :
+                                        option === 'parentalRating' ? 'Parental Rating' :
+                                          option === 'playCount' ? 'Play Count' :
+                                            option === 'releaseDate' ? 'Release Date' :
+                                              'Runtime'}
+                          </Text>
+                          {sortBy === option && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </View>
+                  <View style={styles.dropdownDivider} />
+                  <View style={styles.dropdownSection}>
+                    <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort Order</Text>
+                    <TouchableOpacity
+                      style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'ascending' && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSortOrder('ascending');
+                        setShowSortMenu(false);
+                      }}>
+                      <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'ascending' && styles.dropdownItemTextActive]}>Ascending</Text>
+                      {sortOrder === 'ascending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.dropdownItem, dynamicStyles.dropdownItem, sortOrder === 'descending' && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSortOrder('descending');
+                        setShowSortMenu(false);
+                      }}>
+                      <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, sortOrder === 'descending' && styles.dropdownItemTextActive]}>Descending</Text>
+                      {sortOrder === 'descending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </TouchableWithoutFeedback>
             </View>
@@ -795,7 +795,8 @@ const styles = StyleSheet.create({
     paddingBottom: scaleSize(52),
   },
   gridRow: {
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: scaleSize(16),
   },
   floatingSortPill: {
     position: 'absolute',

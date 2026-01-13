@@ -45,6 +45,8 @@ export function PlayerScreen() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [progressBarWidth, setProgressBarWidth] = useState(0);
   const [isBuffering, setIsBuffering] = useState(true);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [startPositionTicks, setStartPositionTicks] = useState<number>(0);
 
   // Advanced Controls State
   const [isFavorite, setIsFavorite] = useState(false);
@@ -67,6 +69,7 @@ export function PlayerScreen() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const hasRestoredPosition = useRef(false);
   const savedPositionToRestore = useRef<number>(0);
+  const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadPlaybackInfo = useCallback(async () => {
     if (!jellyfin) return;
@@ -105,19 +108,30 @@ export function PlayerScreen() {
       }
 
 
-      // Check for saved playback position FIRST
-      const savedPosition = await playbackPositionService.getPosition(itemId);
-      let startPositionTicks = 0;
-      
-      if (savedPosition && savedPosition.positionSeconds > 30) {
-        // Store the saved position to restore after video loads
-        console.log(`[PlayerScreen] Found saved position: ${Math.floor(savedPosition.positionSeconds)}s`);
-        savedPositionToRestore.current = savedPosition.positionSeconds;
-        hasRestoredPosition.current = false;
-        startPositionTicks = savedPosition.positionTicks;
+      // PRIORITY 1: Check Jellyfin server position first
+      let startPosTicks = 0;
+      let startPositionSeconds = 0;
+
+      if (itemDetails.UserData?.PlaybackPositionTicks && itemDetails.UserData.PlaybackPositionTicks > 300000000) {
+        // Server has a position (> 30 seconds in ticks)
+        startPosTicks = itemDetails.UserData.PlaybackPositionTicks;
+        startPositionSeconds = startPosTicks / 10000000;
+        console.log(`[PlayerScreen] Using Jellyfin server position: ${Math.floor(startPositionSeconds)}s`);
+        savedPositionToRestore.current = startPositionSeconds;
+        hasRestoredPosition.current = false; // Will restore client-side
       } else {
-        savedPositionToRestore.current = 0;
-        hasRestoredPosition.current = true; // No position to restore
+        // PRIORITY 2: Fall back to local storage
+        const savedPosition = await playbackPositionService.getPosition(itemId);
+        if (savedPosition && savedPosition.positionSeconds > 30) {
+          startPosTicks = savedPosition.positionTicks;
+          startPositionSeconds = savedPosition.positionSeconds;
+          console.log(`[PlayerScreen] Using local storage position: ${Math.floor(startPositionSeconds)}s`);
+          savedPositionToRestore.current = startPositionSeconds;
+          hasRestoredPosition.current = false; // Will restore client-side
+        } else {
+          savedPositionToRestore.current = 0;
+          hasRestoredPosition.current = true; // No position to restore
+        }
       }
 
       if (info.MediaSources.length > 0) {
@@ -179,7 +193,7 @@ export function PlayerScreen() {
   // Set up TV remote event handler using hook (must be called unconditionally)
   useTVEventHandler((evt: any) => {
     if (!Platform.isTV || !evt || !evt.eventType) return;
-    
+
     const { eventType } = evt;
     console.log('[PlayerScreen] TV Remote Event:', eventType);
 
@@ -251,7 +265,7 @@ export function PlayerScreen() {
       const mediaSourceId = playbackInfo.MediaSources[0].Id;
       let streamType: string;
       let url: string;
-      
+
       switch (streamAttempt) {
         case 'direct':
           streamType = 'Direct Stream';
@@ -260,9 +274,10 @@ export function PlayerScreen() {
         case 'hls':
           streamType = 'HLS (master.m3u8)';
           url = jellyfin.getHlsStreamUrl(
-            itemId, 
+            itemId,
             mediaSourceId,
             subtitlesEnabled ? selectedSubtitleTrack : undefined
+            // NOTE: StartTimeTicks not supported on HLS master.m3u8 endpoint
           );
           break;
         case 'transcoded':
@@ -281,20 +296,24 @@ export function PlayerScreen() {
     }
   }, [streamAttempt, playbackInfo, jellyfin, itemId, subtitlesEnabled, selectedSubtitleTrack]);
 
-  // Restore saved position when video is ready
-  useEffect(() => {
-    if (!hasRestoredPosition.current && 
-        savedPositionToRestore.current > 0 && 
-        !isBuffering && 
-        duration > 0 &&
-        videoRef.current) {
+  // Restore saved position when video is ready for display
+  // Seeking immediately on ready is faster than waiting for buffering to complete
+  const hasAttemptedSeek = useRef(false);
+
+  const attemptPositionRestore = useCallback(() => {
+    if (!hasAttemptedSeek.current &&
+      savedPositionToRestore.current > 0 &&
+      videoRef.current) {
       const positionToSeek = savedPositionToRestore.current;
-      console.log('[PlayerScreen] Restoring playback position:', Math.floor(positionToSeek), 's');
+      console.log('[PlayerScreen] Seeking to resume position:', Math.floor(positionToSeek), 's');
+      hasAttemptedSeek.current = true;
+
+      // Seek immediately - video player will handle buffering from this position
       videoRef.current.seek(positionToSeek);
       hasRestoredPosition.current = true;
       savedPositionToRestore.current = 0;
     }
-  }, [isBuffering, duration]);
+  }, []);
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -354,11 +373,26 @@ export function PlayerScreen() {
     showControlsWithTimeout();
   };
 
+  const performSeek = useCallback((time: number) => {
+    if (!videoRef.current || isSeeking) return;
+
+    setIsSeeking(true);
+    setIsBuffering(true);
+
+    console.log(`[PlayerScreen] Seeking to ${Math.floor(time)}s`);
+    videoRef.current.seek(time);
+    setCurrentTime(time);
+
+    // Clear seeking state after a reasonable time
+    setTimeout(() => {
+      setIsSeeking(false);
+    }, 1000);
+  }, [isSeeking]);
+
   const handleSeek = (forward: boolean) => {
     const seekTime = forward ? currentTime + 10 : currentTime - 10;
     const clampedTime = Math.max(0, Math.min(seekTime, duration));
-    videoRef.current?.seek(clampedTime);
-    setCurrentTime(clampedTime);
+    performSeek(clampedTime);
     showControlsWithTimeout();
   };
 
@@ -393,14 +427,14 @@ export function PlayerScreen() {
 
   const handleToggleSubtitles = () => {
     const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
-    
+
     console.log('[PlayerScreen] Available subtitle tracks:', subtitleTracks.map(t => ({
       index: t.Index,
       language: t.Language,
       title: t.DisplayTitle,
       isDefault: t.IsDefault
     })));
-    
+
     if (subtitleTracks.length === 0) {
       return; // No subtitles available
     }
@@ -425,13 +459,21 @@ export function PlayerScreen() {
   };
 
   const handleProgressPress = (event: any) => {
-
     if (progressBarWidth === 0 || duration === 0) return;
+
     const { locationX } = event.nativeEvent;
     const percent = Math.max(0, Math.min(locationX / progressBarWidth, 1));
     const seekTime = percent * duration;
-    videoRef.current?.seek(seekTime);
-    setCurrentTime(seekTime);
+
+    // Debounce rapid clicks on progress bar
+    if (seekTimeoutRef.current) {
+      clearTimeout(seekTimeoutRef.current);
+    }
+
+    seekTimeoutRef.current = setTimeout(() => {
+      performSeek(seekTime);
+    }, 200);
+
     showControlsWithTimeout();
   };
 
@@ -484,19 +526,19 @@ export function PlayerScreen() {
     let subtitleUrl = track.DeliveryUrl || '';
     if (!subtitleUrl && jellyfin) {
       subtitleUrl = jellyfin.getSubtitleUrl(
-        itemId, 
-        playbackInfo?.MediaSources[0]?.Id || '', 
+        itemId,
+        playbackInfo?.MediaSources[0]?.Id || '',
         track.Index,
         'vtt' // Request WebVTT format for better compatibility
       );
     }
-    
+
     // Ensure URL has server prefix if it's a relative path
     if (subtitleUrl && subtitleUrl.startsWith('/') && jellyfin) {
       const serverUrl = (jellyfin as any).serverUrl || '';
       subtitleUrl = `${serverUrl}${subtitleUrl}`;
     }
-    
+
     return {
       title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
       language: track.Language || 'und',
@@ -554,11 +596,11 @@ export function PlayerScreen() {
 
   let videoUrl: string;
   let streamType: string;
-  
+
   // DEBUG: Test with a known working public HLS stream
   const useTestStream = false; // Set to true to test with public HLS
   const testStreamUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'; // Big Buck Bunny
-  
+
   if (useTestStream) {
     videoUrl = testStreamUrl;
     streamType = 'Test HLS Stream';
@@ -621,6 +663,8 @@ export function PlayerScreen() {
         onReadyForDisplay={() => {
           console.log('[PlayerScreen] Video ready for display');
           setIsBuffering(false);
+          // Attempt to restore position as soon as video is ready
+          attemptPositionRestore();
           // Ensure controls auto-hide after video is ready
           showControlsWithTimeout();
         }}
@@ -645,10 +689,10 @@ export function PlayerScreen() {
         automaticallyWaitsToMinimizeStalling={true}
         preferredForwardBufferDuration={30}
         bufferConfig={{
-          minBufferMs: 30000,
-          maxBufferMs: 120000,
-          bufferForPlaybackMs: 5000,
-          bufferForPlaybackAfterRebufferMs: 10000,
+          minBufferMs: 15000,
+          maxBufferMs: 50000,
+          bufferForPlaybackMs: 2500,
+          bufferForPlaybackAfterRebufferMs: 5000,
         }}
         onError={(err) => {
           console.error('[PlayerScreen] Video error:', err);
@@ -667,7 +711,7 @@ export function PlayerScreen() {
             setStreamAttempt('hls');
             return;
           }
-          
+
           if (streamAttempt === 'hls') {
             console.log('[PlayerScreen] HLS failed, trying forced transcoding...');
             setStreamAttempt('transcoded');
@@ -696,10 +740,18 @@ export function PlayerScreen() {
       />
 
       {/* Buffering Indicator */}
-      {isBuffering && (
+      {isBuffering && !isSeeking && (
         <View style={styles.bufferingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.bufferingText}>Buffering...</Text>
+        </View>
+      )}
+
+      {/* Seeking Indicator */}
+      {isSeeking && (
+        <View style={styles.bufferingOverlay}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={styles.bufferingText}>Seeking...</Text>
         </View>
       )}
 
@@ -780,10 +832,10 @@ export function PlayerScreen() {
                   style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
                   onPress={handleToggleSubtitles}
                   disabled={!hasSubtitles}>
-                  <Icon 
-                    name={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"} 
-                    size={22} 
-                    color={subtitlesEnabled ? "#e50914" : "#fff"} 
+                  <Icon
+                    name={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"}
+                    size={22}
+                    color={subtitlesEnabled ? "#e50914" : "#fff"}
                   />
                   {subtitlesEnabled && currentSubtitleTrack && (
                     <Text style={styles.subtitleLabel}>
@@ -812,15 +864,15 @@ export function PlayerScreen() {
                       setShowVolumeSlider(!showVolumeSlider);
                       showControlsWithTimeout();
                     }}>
-                    <Icon 
-                      name={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"} 
-                      size={22} 
-                      color="#fff" 
+                    <Icon
+                      name={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
+                      size={22}
+                      color="#fff"
                     />
                   </TouchableOpacity>
                   {showVolumeSlider && showControls && (
                     <View style={styles.volumeSliderPopup}>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.volumeIconTop}
                         onPress={() => handleVolumeChange(1)}>
                         <Icon name="volume-high" size={18} color="#fff" />
@@ -830,7 +882,7 @@ export function PlayerScreen() {
                           <View style={[styles.volumeSliderFill, { height: `${volume * 100}%` }]} />
                         </View>
                       </View>
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.volumeIconBottom}
                         onPress={() => handleVolumeChange(0)}>
                         <Icon name="volume-mute" size={18} color="#fff" />

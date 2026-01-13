@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { NavigationContainer, useNavigation, useNavigationState } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, StyleSheet, Platform, TouchableOpacity, Text } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,110 +23,66 @@ import {
 import { Sidebar, MobileHeader } from '../components';
 import { RootStackParamList } from '../types';
 import { useDeviceType } from '../hooks/useResponsive';
+import { scaleSize } from '../utils/scaling';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Layout wrapper that handles sidebar visibility (for non-mobile)
-function ScreenWithNav({ children, currentRoute }: { children: React.ReactNode; currentRoute: string }) {
-  const { showSidebar, isMobile } = useDeviceType();
-
-  const openDrawer = () => {
-    if (isMobile && (window as any).__openMobileDrawer) {
-      (window as any).__openMobileDrawer();
-    }
-  };
-
+// Desktop/TV Stack Navigator - Content only (no sidebar)
+function DesktopStackNavigator() {
   return (
-    <View style={styles.container}>
-      {showSidebar && <Sidebar currentRoute={currentRoute} onOpenDrawer={openDrawer} />}
-      <View style={styles.content}>
-        {children}
-      </View>
-      {!showSidebar && <Sidebar currentRoute={currentRoute} onOpenDrawer={openDrawer} />}
-    </View>
+    <Stack.Navigator
+      initialRouteName="Home"
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#000' },
+        animation: 'none',
+      }}>
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="TVShows">
+        {() => <LibraryScreen filterType="tvshows" />}
+      </Stack.Screen>
+      <Stack.Screen name="Movies">
+        {() => <LibraryScreen filterType="movies" />}
+      </Stack.Screen>
+      <Stack.Screen name="Search" component={SearchScreen} />
+      <Stack.Screen name="LiveTV" component={LiveTVScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="JellyfinSettings" component={JellyfinSettingsScreen} />
+      <Stack.Screen name="SonarrSettings" component={SonarrSettingsScreen} />
+      <Stack.Screen name="RadarrSettings" component={RadarrSettingsScreen} />
+      <Stack.Screen name="LiveTVSettings" component={LiveTVSettingsScreen} />
+      <Stack.Screen
+        name="Player"
+        component={PlayerScreen}
+        options={{
+          animation: 'fade',
+        }}
+      />
+      <Stack.Screen
+        name="LivePlayer"
+        component={LivePlayerScreen}
+        options={{
+          animation: 'fade',
+        }}
+      />
+      <Stack.Screen
+        name="ItemDetails"
+        component={ItemDetailsScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="TMDBDetails"
+        component={TMDBDetailsScreen}
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
+    </Stack.Navigator>
   );
 }
 
-// Wrapper components that include the sidebar
-function HomeWithNav() {
-  return (
-    <ScreenWithNav currentRoute="Home">
-      <HomeScreen />
-    </ScreenWithNav>
-  );
-}
-
-function TVShowsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="TVShows">
-      <LibraryScreen filterType="tvshows" />
-    </ScreenWithNav>
-  );
-}
-
-function MoviesWithNav() {
-  return (
-    <ScreenWithNav currentRoute="Movies">
-      <LibraryScreen filterType="movies" />
-    </ScreenWithNav>
-  );
-}
-
-function SearchWithNav() {
-  return (
-    <ScreenWithNav currentRoute="Search">
-      <SearchScreen />
-    </ScreenWithNav>
-  );
-}
-
-function SettingsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="Settings">
-      <SettingsScreen />
-    </ScreenWithNav>
-  );
-}
-
-function JellyfinSettingsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="JellyfinSettings">
-      <JellyfinSettingsScreen />
-    </ScreenWithNav>
-  );
-}
-
-function SonarrSettingsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="SonarrSettings">
-      <SonarrSettingsScreen />
-    </ScreenWithNav>
-  );
-}
-
-function RadarrSettingsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="RadarrSettings">
-      <RadarrSettingsScreen />
-    </ScreenWithNav>
-  );
-}
-
-function LiveTVSettingsWithNav() {
-  return (
-    <ScreenWithNav currentRoute="LiveTVSettings">
-      <LiveTVSettingsScreen />
-    </ScreenWithNav>
-  );
-}
-
-function LiveTVWithNav() {
-  return (
-    <ScreenWithNav currentRoute="LiveTV">
-      <LiveTVScreen />
-    </ScreenWithNav>
-  );
-}
 
 // Tab item configuration
 const TAB_ITEMS = [
@@ -139,7 +95,7 @@ const TAB_ITEMS = [
 // Custom Liquid Glass Tab Bar Component
 function LiquidGlassTabBar({ activeTab, onTabPress, onSearchPress }: { activeTab: string; onTabPress: (tab: string) => void; onSearchPress: () => void }) {
   const insets = useSafeAreaInsets();
-  
+
   return (
     <View style={[tabBarStyles.container, { bottom: 20 + insets.bottom }]}>
       {/* Main Tab Bar with Liquid Glass */}
@@ -172,7 +128,7 @@ function LiquidGlassTabBar({ activeTab, onTabPress, onSearchPress }: { activeTab
           })}
         </View>
       </LiquidGlassView>
-      
+
       {/* Separate Search Button */}
       <LiquidGlassView
         style={tabBarStyles.searchButtonGlass}
@@ -182,10 +138,10 @@ function LiquidGlassTabBar({ activeTab, onTabPress, onSearchPress }: { activeTab
           style={tabBarStyles.searchButton}
           onPress={onSearchPress}
           activeOpacity={0.7}>
-          <Icon 
-            name={activeTab === 'Search' ? 'search' : 'search-outline'} 
-            size={24} 
-            color={activeTab === 'Search' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(60, 60, 67, 0.85)'} 
+          <Icon
+            name={activeTab === 'Search' ? 'search' : 'search-outline'}
+            size={24}
+            color={activeTab === 'Search' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(60, 60, 67, 0.85)'}
           />
         </TouchableOpacity>
       </LiquidGlassView>
@@ -215,17 +171,17 @@ function TabContent({ activeTab }: { activeTab: string }) {
 function MobileTabNavigator() {
   const [activeTab, setActiveTab] = useState('Home');
   const insets = useSafeAreaInsets();
-  
+
   const openDrawer = () => {
     if ((window as any).__openMobileDrawer) {
       (window as any).__openMobileDrawer();
     }
   };
-  
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <Sidebar currentRoute={activeTab} onOpenDrawer={openDrawer} />
-      
+
       {/* Floating Hamburger Button */}
       <View style={[styles.floatingMenuButton, { top: insets.top + 8 }]}>
         <LiquidGlassView
@@ -240,11 +196,11 @@ function MobileTabNavigator() {
           </TouchableOpacity>
         </LiquidGlassView>
       </View>
-      
+
       <TabContent activeTab={activeTab} />
-      <LiquidGlassTabBar 
-        activeTab={activeTab} 
-        onTabPress={setActiveTab} 
+      <LiquidGlassTabBar
+        activeTab={activeTab}
+        onTabPress={setActiveTab}
         onSearchPress={() => setActiveTab('Search')}
       />
     </View>
@@ -304,67 +260,80 @@ const tabBarStyles = StyleSheet.create({
 });
 
 export function AppNavigator() {
-  const { isMobile } = useDeviceType();
+  const { isMobile, showSidebar } = useDeviceType();
+  const [currentRoute, setCurrentRoute] = useState('Home');
+
+  // Track navigation state changes for desktop sidebar
+  const handleNavigationStateChange = (state: any) => {
+    if (!isMobile && state) {
+      const route = state.routes[state.index];
+      if (route?.name) {
+        setCurrentRoute(route.name);
+      }
+    }
+  };
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName={isMobile ? "MainTabs" : "Home"}
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#000' },
-            animation: 'none',
-          }}>
-          {/* Mobile: Use bottom tab navigator for main screens */}
-          {isMobile && (
+      <NavigationContainer onStateChange={handleNavigationStateChange}>
+        {isMobile ? (
+          <Stack.Navigator
+            initialRouteName="MainTabs"
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: '#000' },
+              animation: 'none',
+            }}>
             <Stack.Screen name="MainTabs" component={MobileTabNavigator} />
-          )}
-          {/* TV/Desktop: Use sidebar navigation */}
-          {!isMobile && (
-            <>
-              <Stack.Screen name="Home" component={HomeWithNav} />
-              <Stack.Screen name="TVShows" component={TVShowsWithNav} />
-              <Stack.Screen name="Movies" component={MoviesWithNav} />
-              <Stack.Screen name="Search" component={SearchWithNav} />
-            </>
-          )}
-          {/* Common screens for both mobile and TV/Desktop */}
-          <Stack.Screen name="Search" component={SearchWithNav} />
-          <Stack.Screen name="LiveTV" component={LiveTVWithNav} />
-          <Stack.Screen name="Settings" component={SettingsWithNav} />
-          <Stack.Screen name="JellyfinSettings" component={JellyfinSettingsWithNav} />
-          <Stack.Screen name="SonarrSettings" component={SonarrSettingsWithNav} />
-          <Stack.Screen name="RadarrSettings" component={RadarrSettingsWithNav} />
-          <Stack.Screen name="LiveTVSettings" component={LiveTVSettingsWithNav} />
-          <Stack.Screen
-            name="Player"
-            component={PlayerScreen}
-            options={{
-              animation: 'fade',
-            }}
-          />
-          <Stack.Screen
-            name="LivePlayer"
-            component={LivePlayerScreen}
-            options={{
-              animation: 'fade',
-            }}
-          />
-          <Stack.Screen
-            name="ItemDetails"
-            component={ItemDetailsScreen}
-            options={{
-              animation: 'slide_from_right',
-            }}
-          />
-          <Stack.Screen
-            name="TMDBDetails"
-            component={TMDBDetailsScreen}
-            options={{
-              animation: 'slide_from_right',
-            }}
-          />
-        </Stack.Navigator>
+            <Stack.Screen
+              name="Player"
+              component={PlayerScreen}
+              options={{
+                animation: 'fade',
+              }}
+            />
+            <Stack.Screen
+              name="LivePlayer"
+              component={LivePlayerScreen}
+              options={{
+                animation: 'fade',
+              }}
+            />
+            <Stack.Screen
+              name="ItemDetails"
+              component={ItemDetailsScreen}
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="TMDBDetails"
+              component={TMDBDetailsScreen}
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+          </Stack.Navigator>
+        ) : (
+          <View style={styles.container}>
+            {(() => {
+              const isPlayerScreen = currentRoute === 'Player' || currentRoute === 'LivePlayer';
+              return (
+                <>
+                  <View style={[styles.content, !isPlayerScreen && styles.contentWithSidebar]}>
+                    <DesktopStackNavigator />
+                  </View>
+                  {!isPlayerScreen && showSidebar && (
+                    <View style={styles.floatingSidebarWrapper}>
+                      <Sidebar currentRoute={currentRoute} onOpenDrawer={() => { }} />
+                    </View>
+                  )}
+                  {!isPlayerScreen && !showSidebar && <Sidebar currentRoute={currentRoute} onOpenDrawer={() => { }} />}
+                </>
+              );
+            })()}
+          </View>
+        )}
       </NavigationContainer>
     </SafeAreaProvider>
   );
@@ -373,12 +342,21 @@ export function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    flexDirection: 'row',
     backgroundColor: '#000',
   },
   content: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  contentWithSidebar: {
+    paddingLeft: scaleSize(272), // Account for floating sidebar width + margins
+  },
+  floatingSidebarWrapper: {
+    position: 'absolute',
+    left: 16,
+    top: 16,
+    bottom: 16,
+    zIndex: 1000,
   },
   floatingMenuButton: {
     position: 'absolute',

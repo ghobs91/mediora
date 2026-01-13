@@ -32,6 +32,7 @@ interface MediaCardProps {
   height?: number;
   downloadProgress?: number; // 0-1 for active downloads
   isDownloading?: boolean;
+  rank?: number; // For numbered rankings (Top 10, etc.)
 }
 
 
@@ -50,6 +51,7 @@ export function MediaCard({
   height: customHeight,
   downloadProgress,
   isDownloading,
+  rank,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
@@ -166,6 +168,11 @@ export function MediaCard({
       onLongPress={(onMarkWatched || onRemove || onToggleFavorite) ? handleContextMenu : undefined}
       delayLongPress={500}
       style={[styles.container, isMobile && styles.containerMobile]}>
+      {rank !== undefined && (
+        <View style={[styles.rankBadge, isMobile && styles.rankBadgeMobile]}>
+          <Text style={[styles.rankText, isMobile && styles.rankTextMobile]}>{rank}</Text>
+        </View>
+      )}
       <View
         style={[
           styles.cardContainer,
@@ -504,5 +511,35 @@ const styles = StyleSheet.create({
   actionButtonFavorite: {
     borderColor: '#e50914',
     backgroundColor: 'rgba(229, 9, 20, 0.2)',
+  },
+  rankBadge: {
+    position: 'absolute',
+    left: scaleSize(-12),
+    top: scaleSize(8),
+    zIndex: 10,
+    minWidth: scaleSize(70),
+    height: scaleSize(120),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankBadgeMobile: {
+    left: -8,
+    top: 4,
+    minWidth: 40,
+    height: 70,
+  },
+  rankText: {
+    fontSize: scaleFontSize(100),
+    fontWeight: '900',
+    color: '#ffffff',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: scaleSize(-3), height: scaleSize(3) },
+    textShadowRadius: scaleSize(8),
+    letterSpacing: -2,
+  },
+  rankTextMobile: {
+    fontSize: 56,
+    textShadowOffset: { width: -2, height: 2 },
+    textShadowRadius: 4,
   },
 });
