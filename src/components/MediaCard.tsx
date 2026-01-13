@@ -9,6 +9,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { JellyfinItem, TMDBMovie, TMDBTVShow } from '../types';
 import { TMDBService } from '../services';
@@ -228,9 +229,20 @@ export function MediaCard({
             }}
             activeOpacity={0.7}
           >
-            <View style={[styles.removeButtonInner, isMobile && styles.removeButtonInnerMobile]}>
-              <Icon name="close" size={isMobile ? 16 : scaleSize(22)} color="#fff" />
-            </View>
+            {isLiquidGlassSupported ? (
+              <LiquidGlassView 
+                style={[styles.removeButtonInner, isMobile && styles.removeButtonInnerMobile]}
+                effect="clear"
+                interactive
+                tintColor="rgba(255, 69, 58, 0.2)"
+              >
+                <Icon name="close" size={isMobile ? 16 : scaleSize(22)} color="#fff" />
+              </LiquidGlassView>
+            ) : (
+              <View style={[styles.removeButtonInner, isMobile && styles.removeButtonInnerMobile]}>
+                <Icon name="close" size={isMobile ? 16 : scaleSize(22)} color="#fff" />
+              </View>
+            )}
           </TouchableOpacity>
         )}
         {isFocused && (onToggleFavorite || (onMarkWatched && onRemove)) && (
@@ -241,13 +253,36 @@ export function MediaCard({
                 onPress={handleToggleFavorite}
                 activeOpacity={0.7}
               >
-                <View style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile, item.UserData?.IsFavorite && styles.actionButtonFavorite]}>
-                  <Icon 
-                    name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
-                    size={isMobile ? 16 : scaleSize(20)} 
-                    color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
-                  />
-                </View>
+                {isLiquidGlassSupported ? (
+                  <LiquidGlassView 
+                    style={[
+                      styles.actionButtonInner, 
+                      isMobile && styles.actionButtonInnerMobile,
+                      item.UserData?.IsFavorite && styles.actionButtonFavorite
+                    ]}
+                    effect="clear"
+                    interactive
+                    tintColor={item.UserData?.IsFavorite ? 'rgba(229, 9, 20, 0.3)' : undefined}
+                  >
+                    <Icon 
+                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
+                      size={isMobile ? 16 : scaleSize(20)} 
+                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
+                    />
+                  </LiquidGlassView>
+                ) : (
+                  <View style={[
+                    styles.actionButtonInner, 
+                    isMobile && styles.actionButtonInnerMobile,
+                    item.UserData?.IsFavorite && styles.actionButtonFavorite
+                  ]}>
+                    <Icon 
+                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
+                      size={isMobile ? 16 : scaleSize(20)} 
+                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
+                    />
+                  </View>
+                )}
               </TouchableOpacity>
             )}
             {(onMarkWatched || onRemove) && (
@@ -256,9 +291,19 @@ export function MediaCard({
                 onPress={handleContextMenu}
                 activeOpacity={0.7}
               >
-                <View style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile]}>
-                  <Icon name="ellipsis-horizontal" size={isMobile ? 16 : scaleSize(20)} color="#fff" />
-                </View>
+                {isLiquidGlassSupported ? (
+                  <LiquidGlassView 
+                    style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile]}
+                    effect="clear"
+                    interactive
+                  >
+                    <Icon name="ellipsis-horizontal" size={isMobile ? 16 : scaleSize(20)} color="#fff" />
+                  </LiquidGlassView>
+                ) : (
+                  <View style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile]}>
+                    <Icon name="ellipsis-horizontal" size={isMobile ? 16 : scaleSize(20)} color="#fff" />
+                  </View>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -288,27 +333,34 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   cardContainer: {
-    borderRadius: scaleSize(18),
+    borderRadius: scaleSize(24),
     overflow: 'hidden',
-    backgroundColor: 'rgba(42, 42, 42, 0.6)',
+    backgroundColor: 'rgba(28, 28, 30, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
   },
   focused: {
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: scaleSize(20) },
+    shadowColor: 'rgba(255, 255, 255, 0.9)',
+    shadowOffset: { width: 0, height: scaleSize(24) },
     shadowOpacity: 1.0,
-    shadowRadius: scaleSize(40),
-    borderWidth: scaleSize(6),
-    borderColor: '#ffffff',
-    elevation: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    shadowRadius: scaleSize(50),
+    borderWidth: scaleSize(3),
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    elevation: 40,
+    backgroundColor: 'rgba(58, 58, 60, 0.8)',
+    transform: [{ scale: 1.05 }],
   },
   image: {
-    borderRadius: scaleSize(18),
+    borderRadius: scaleSize(24),
   },
   placeholder: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(58, 58, 58, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   placeholderText: {
     fontSize: scaleFontSize(56),
@@ -356,8 +408,12 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: scaleSize(6),
-    backgroundColor: 'rgba(10, 132, 255, 0.95)',
+    backgroundColor: 'rgba(10, 132, 255, 1)',
     borderRadius: scaleSize(6),
+    shadowColor: 'rgba(10, 132, 255, 0.8)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
   },
   downloadProgressContainer: {
     position: 'absolute',
@@ -399,11 +455,15 @@ const styles = StyleSheet.create({
     width: scaleSize(32),
     height: scaleSize(32),
     borderRadius: scaleSize(16),
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(255, 69, 58, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: 'rgba(255, 69, 58, 0.4)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
   },
   removeButtonInnerMobile: {
     width: 24,
@@ -425,11 +485,15 @@ const styles = StyleSheet.create({
     width: scaleSize(36),
     height: scaleSize(36),
     borderRadius: scaleSize(18),
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
   },
   actionButtonInnerMobile: {
     width: 28,

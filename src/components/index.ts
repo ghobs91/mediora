@@ -5,4 +5,5 @@ export { MediaRow } from './MediaRow';
 export { LoadingScreen } from './LoadingScreen';
 export { CastList } from './CastList';
 export { Sidebar } from './Sidebar';
+export { MobileHeader } from './MobileHeader';
 export { QualityProfileSelector } from './QualityProfileSelector';

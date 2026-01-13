@@ -6,12 +6,15 @@ import {
   FlatList,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { LiquidGlassView } from '@callstack/liquid-glass';
 import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
 import { useResponsiveColumns } from '../hooks';
+import { useDeviceType } from '../hooks/useResponsive';
 import { JellyfinLibrary, JellyfinItem, SonarrSeries, RadarrMovie, TMDBTVShow } from '../types';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
@@ -59,8 +62,8 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('ascending');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const { numColumns, itemWidth, isMobile, contentPadding } = useResponsiveColumns();
+  const { isMobile: isMobileDevice } = useDeviceType();
   const insets = useSafeAreaInsets();
 
   const loadSonarrDownloadProgress = useCallback(async () => {
@@ -496,27 +499,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   // Dynamic styles based on device
   const dynamicStyles = {
     container: {
-      paddingTop: isMobile ? insets.top + 60 : 0, // Account for hamburger menu on mobile
-    },
-    controlBar: {
-      paddingHorizontal: contentPadding,
-      paddingVertical: isMobile ? 12 : scaleSize(20),
-    },
-    controlButton: {
-      paddingHorizontal: isMobile ? 12 : scaleSize(20),
-      paddingVertical: isMobile ? 8 : scaleSize(12),
-      gap: isMobile ? 6 : scaleSize(10),
-    },
-    controlButtonText: {
-      fontSize: isMobile ? 14 : scaleFontSize(16),
-    },
-    itemCount: {
-      fontSize: isMobile ? 12 : scaleFontSize(16),
-    },
-    dropdownMenu: {
-      left: contentPadding,
-      minWidth: isMobile ? 220 : scaleSize(280),
-      maxHeight: isMobile ? 400 : scaleSize(600),
+      paddingTop: 0,
     },
     dropdownSectionTitle: {
       fontSize: isMobile ? 11 : scaleFontSize(14),
@@ -533,12 +516,12 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     gridContent: {
       paddingLeft: contentPadding,
       paddingRight: contentPadding,
-      paddingTop: isMobile ? 12 : scaleSize(20),
+      paddingTop: isMobile ? insets.top + 68 : scaleSize(20),
       paddingBottom: isMobile ? insets.bottom + 20 : scaleSize(52),
     },
     emptyContainer: {
       padding: contentPadding,
-      paddingTop: isMobile ? insets.top + 80 : scaleSize(52),
+      paddingTop: isMobile ? insets.top + 68 : scaleSize(52),
     },
     emptyTitle: {
       fontSize: isMobile ? 24 : scaleFontSize(40),
@@ -551,7 +534,6 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
       paddingTop: isMobile ? 60 : scaleSize(120),
     },
     iconSize: isMobile ? 18 : scaleSize(22),
-    chevronSize: isMobile ? 14 : scaleSize(18),
     checkmarkSize: isMobile ? 16 : scaleSize(20),
   };
 
@@ -573,44 +555,49 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
 
   return (
     <View style={[styles.container, dynamicStyles.container]}>
-      {/* Filter and Sort Bar */}
-      <View style={[styles.controlBar, dynamicStyles.controlBar]}>
-        <View style={styles.controlGroup}>
-          <TouchableOpacity 
-            style={[styles.controlButton, dynamicStyles.controlButton]}
-            onPress={() => {
-              setShowSortMenu(!showSortMenu);
-              setShowFilterMenu(false);
-            }}>
-            <Icon name="funnel-outline" size={dynamicStyles.iconSize} color="#fff" />
-            <Text style={[styles.controlButtonText, dynamicStyles.controlButtonText]}>Sort</Text>
-            <Icon name={showSortMenu ? "chevron-up" : "chevron-down"} size={dynamicStyles.chevronSize} color="#fff" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.controlButton, dynamicStyles.controlButton]}
-            onPress={() => {
-              setShowFilterMenu(!showFilterMenu);
-              setShowSortMenu(false);
-            }}>
-            <Icon name="filter-outline" size={dynamicStyles.iconSize} color="#fff" />
-            <Text style={[styles.controlButtonText, dynamicStyles.controlButtonText]}>Filter: {filterBy}</Text>
-            <Icon name={showFilterMenu ? "chevron-up" : "chevron-down"} size={dynamicStyles.chevronSize} color="#fff" />
-          </TouchableOpacity>
+      {/* Floating Sort Pill Button (Mobile Only) */}
+      {isMobileDevice && (
+        <View style={[styles.floatingSortPill, { top: insets.top + 8 }]}>
+          <LiquidGlassView
+            style={styles.floatingPillGlass}
+            effect="regular"
+            tintColor="rgba(255, 255, 255, 0.25)">
+            <TouchableOpacity
+              style={styles.floatingPill}
+              onPress={() => setShowSortMenu(!showSortMenu)}
+              activeOpacity={0.7}>
+              <Icon name="funnel-outline" size={18} color="rgba(60, 60, 67, 0.85)" />
+              <Text style={styles.floatingPillText}>
+                {sortBy === 'name' ? 'Name' :
+                 sortBy === 'random' ? 'Random' :
+                 sortBy === 'communityRating' ? 'Community Rating' :
+                 sortBy === 'criticsRating' ? 'Critics Rating' :
+                 sortBy === 'dateAdded' ? 'Date Added' :
+                 sortBy === 'dateShowAdded' ? 'Date Show Added' :
+                 sortBy === 'dateEpisodeAdded' ? 'Date Episode Added' :
+                 sortBy === 'datePlayed' ? 'Date Played' :
+                 sortBy === 'parentalRating' ? 'Parental Rating' :
+                 sortBy === 'playCount' ? 'Play Count' :
+                 sortBy === 'releaseDate' ? 'Release Date' :
+                 sortBy === 'runtime' ? 'Runtime' : 'Sort'}
+              </Text>
+              <Icon name="chevron-down" size={16} color="rgba(60, 60, 67, 0.85)" />
+            </TouchableOpacity>
+          </LiquidGlassView>
         </View>
-
-        <Text style={[styles.itemCount, dynamicStyles.itemCount]}>
-          {filteredAndSortedItems.length} {filteredAndSortedItems.length === 1 ? 'item' : 'items'}
-        </Text>
-      </View>
-
-      {/* Sort Menu Dropdown */}
+      )}
+      
+      {/* Centered Sort Modal */}
       {showSortMenu && (
-        <>
+        <Modal
+          visible={showSortMenu}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowSortMenu(false)}>
           <TouchableWithoutFeedback onPress={() => setShowSortMenu(false)}>
-            <View style={styles.backdrop} />
-          </TouchableWithoutFeedback>
-          <View style={[styles.dropdownMenu, dynamicStyles.dropdownMenu]}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.sortModal}>
           <View style={styles.dropdownSection}>
             <Text style={[styles.dropdownSectionTitle, dynamicStyles.dropdownSectionTitle]}>Sort By</Text>
             {filterType === 'tvshows' ? (
@@ -685,35 +672,11 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
               {sortOrder === 'descending' && <Icon name="radio-button-on" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
             </TouchableOpacity>
           </View>
-        </View>
-        </>
-      )}
-
-      {/* Filter Menu Dropdown */}
-      {showFilterMenu && (
-        <>
-          <TouchableWithoutFeedback onPress={() => setShowFilterMenu(false)}>
-            <View style={styles.backdrop} />
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
           </TouchableWithoutFeedback>
-          <View style={[styles.dropdownMenu, dynamicStyles.dropdownMenu]}>
-          {(['all', 'unwatched', 'watched', 'favorites'] as FilterOption[]).map((option) => (
-            <TouchableOpacity
-              key={option}
-              style={[styles.dropdownItem, dynamicStyles.dropdownItem, filterBy === option && styles.dropdownItemActive]}
-              onPress={() => {
-                setFilterBy(option);
-                setShowFilterMenu(false);
-              }}>
-              <Text style={[styles.dropdownItemText, dynamicStyles.dropdownItemText, filterBy === option && styles.dropdownItemTextActive]}>
-                {option === 'all' ? 'All Items' : 
-                 option === 'unwatched' ? 'Unwatched' : 
-                 option === 'watched' ? 'Watched' : 'Favorites'}
-              </Text>
-              {filterBy === option && <Icon name="checkmark" size={dynamicStyles.checkmarkSize} color="#8b5cf6" />}
-            </TouchableOpacity>
-          ))}
-        </View>
-        </>
+        </Modal>
       )}
 
       {/* Library Content */}
@@ -761,6 +724,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  sortModal: {
+    width: '90%',
+    maxWidth: 400,
+    backgroundColor: 'rgba(28, 28, 30, 0.98)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    maxHeight: '80%',
+  },
   backdrop: {
     position: 'absolute',
     top: 0,
@@ -769,59 +752,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'transparent',
     zIndex: 9998,
-  },
-  controlBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: scaleSize(52),
-    paddingVertical: scaleSize(20),
-    backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(139, 92, 246, 0.3)',
-  },
-  controlGroup: {
-    flexDirection: 'row',
-    gap: scaleSize(16),
-  },
-  controlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scaleSize(10),
-    paddingHorizontal: scaleSize(20),
-    paddingVertical: scaleSize(12),
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    borderRadius: scaleSize(10),
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-  },
-  controlButtonText: {
-    color: '#fff',
-    fontSize: scaleFontSize(16),
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  itemCount: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: scaleFontSize(16),
-    fontWeight: '500',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: scaleSize(80),
-    left: scaleSize(52),
-    backgroundColor: 'rgba(28, 28, 30, 0.98)',
-    borderRadius: scaleSize(12),
-    borderWidth: 2,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
-    minWidth: scaleSize(280),
-    maxHeight: scaleSize(600),
-    zIndex: 9999,
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 20,
   },
   dropdownSection: {
     paddingVertical: scaleSize(8),
@@ -866,6 +796,61 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     justifyContent: 'space-between',
+  },
+  floatingSortPill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
+    pointerEvents: 'box-none',
+  },
+  floatingPillGlass: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  floatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    height: 44,
+    gap: 8,
+    minWidth: 200,
+    justifyContent: 'center',
+  },
+  floatingPillText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(0, 0, 0, 0.85)',
+    letterSpacing: 0.2,
+  },
+  floatingSortButton: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 100,
+  },
+  floatingButtonGlass: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  floatingButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   emptyContainer: {
     flex: 1,

@@ -1,30 +1,55 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Pressable } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
 
 interface SidebarProps {
   currentRoute: string;
+  onOpenDrawer?: () => void;
 }
 
-export function Sidebar({ currentRoute }: SidebarProps) {
+export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
+  const drawerOpenRef = useRef(() => setIsDrawerOpen(true));
 
-  const navItems = [
-    { name: 'Home', route: 'Home', icon: 'home-outline' },
-    { name: 'TV Shows', route: 'TVShows', icon: 'tv-outline', section: 'library' },
-    { name: 'Movies', route: 'Movies', icon: 'film-outline', section: 'library' },
-    { name: 'Live TV', route: 'LiveTV', icon: 'radio-outline' },
-    { name: 'Search', route: 'Search', icon: 'search-outline' },
-    { name: 'Settings', route: 'Settings', icon: 'settings-outline' },
+  // Update ref when state setter changes
+  React.useEffect(() => {
+    drawerOpenRef.current = () => setIsDrawerOpen(true);
+  }, []);
+
+  // Only expose drawer open function when this component's screen is focused
+  React.useEffect(() => {
+    if (isFocused && isMobile) {
+      (window as any).__openMobileDrawer = drawerOpenRef.current;
+    }
+  }, [isFocused, isMobile]);
+
+  // On mobile, only show items not in bottom tabs
+  // On TV/Desktop, show all navigation items
+  const allNavItems = [
+    { name: 'Home', route: 'Home', icon: 'home-outline', showInTabs: true },
+    { name: 'TV Shows', route: 'TVShows', icon: 'tv-outline', section: 'library', showInTabs: true },
+    { name: 'Movies', route: 'Movies', icon: 'film-outline', section: 'library', showInTabs: true },
+    { name: 'Live TV', route: 'LiveTV', icon: 'radio-outline', showInTabs: true },
+    { name: 'Search', route: 'Search', icon: 'search-outline', showInTabs: true },
+    { name: 'Jellyfin', route: 'JellyfinSettings', icon: 'server-outline', showInTabs: false },
+    { name: 'Sonarr', route: 'SonarrSettings', icon: 'tv-outline', showInTabs: false },
+    { name: 'Radarr', route: 'RadarrSettings', icon: 'film-outline', showInTabs: false },
+    { name: 'Live TV Settings', route: 'LiveTVSettings', icon: 'radio-outline', showInTabs: false },
   ];
+  
+  const navItems = isMobile 
+    ? allNavItems.filter(item => !item.showInTabs)
+    : allNavItems;
 
   const handleFocus = useCallback((route: string) => {
     setFocusedItem(route);
@@ -96,18 +121,10 @@ export function Sidebar({ currentRoute }: SidebarProps) {
     </>
   );
 
-  // Mobile: Render hamburger menu button and drawer
+  // Mobile: Render drawer only (header handled by screens)
   if (isMobile) {
     return (
       <>
-        {/* Hamburger Menu Button */}
-        <TouchableOpacity
-          style={[styles.hamburgerButton, { top: insets.top + 8 }]}
-          onPress={() => setIsDrawerOpen(true)}
-          activeOpacity={0.7}>
-          <Icon name="menu" size={28} color="#fff" />
-        </TouchableOpacity>
-
         {/* Mobile Drawer Modal */}
         <Modal
           visible={isDrawerOpen}
@@ -141,7 +158,9 @@ export function Sidebar({ currentRoute }: SidebarProps) {
 
   // Desktop/Tablet/TV: Render fixed sidebar
   return (
-    <View style={styles.sidebar}>
+    <LiquidGlassView
+      style={styles.sidebar}
+      effect={isLiquidGlassSupported ? 'clear' : 'none'}>
       <View style={styles.header}>
         <Text style={styles.logo}>Mediora</Text>
       </View>
@@ -149,7 +168,7 @@ export function Sidebar({ currentRoute }: SidebarProps) {
       <ScrollView style={styles.navContainer} showsVerticalScrollIndicator={false}>
         {renderNavItems()}
       </ScrollView>
-    </View>
+    </LiquidGlassView>
   );
 }
 
@@ -157,21 +176,21 @@ const styles = StyleSheet.create({
   // Fixed Sidebar Styles (Desktop/Tablet/TV)
   sidebar: {
     width: scaleSize(240),
-    backgroundColor: 'rgba(18, 18, 20, 0.98)',
-    borderRightWidth: 2,
-    borderRightColor: 'rgba(139, 92, 246, 0.3)',
+    backgroundColor: 'rgba(18, 18, 20, 0.85)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.12)',
     paddingTop: scaleSize(48),
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowColor: 'rgba(139, 92, 246, 0.4)',
+    shadowOffset: { width: 8, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 28,
+    elevation: 16,
   },
   header: {
     paddingHorizontal: scaleSize(24),
     paddingBottom: scaleSize(28),
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(139, 92, 246, 0.4)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
     marginBottom: scaleSize(20),
   },
   logo: {
@@ -179,9 +198,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#ffffff',
     letterSpacing: 1.2,
-    textShadowColor: 'rgba(139, 92, 246, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowColor: 'rgba(139, 92, 246, 1)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 16,
   },
   navContainer: {
     flex: 1,
@@ -204,27 +223,27 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   navItemActive: {
-    backgroundColor: 'rgba(139, 92, 246, 0.35)',
-    borderLeftWidth: scaleSize(6),
+    backgroundColor: 'rgba(139, 92, 246, 0.25)',
+    borderLeftWidth: scaleSize(4),
     borderLeftColor: '#a78bfa',
-    borderWidth: 3,
-    borderColor: 'rgba(167, 139, 250, 0.7)',
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-  },
-  navItemFocused: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderLeftWidth: scaleSize(6),
-    borderLeftColor: '#ffffff',
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-    transform: [{ scale: 1.1 }],
-    shadowColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(167, 139, 250, 0.5)',
+    shadowColor: 'rgba(139, 92, 246, 0.8)',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.8,
     shadowRadius: 16,
+  },
+  navItemFocused: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderLeftWidth: scaleSize(4),
+    borderLeftColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    transform: [{ scale: 1.05 }],
+    shadowColor: 'rgba(255, 255, 255, 1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 24,
   },
   navIcon: {
     marginRight: scaleSize(16),
@@ -247,18 +266,6 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(20),
   },
 
-  // Mobile Hamburger Button
-  hamburgerButton: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 100,
-    padding: 8,
-    backgroundColor: 'rgba(18, 18, 20, 0.9)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-  },
-
   // Mobile Drawer Styles
   drawerOverlay: {
     flex: 1,
@@ -268,18 +275,22 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 320,
     height: '100%',
-    backgroundColor: 'rgba(18, 18, 20, 0.98)',
+    backgroundColor: 'rgba(18, 18, 20, 0.85)',
     paddingHorizontal: 20,
-    borderRightWidth: 2,
-    borderRightColor: 'rgba(139, 92, 246, 0.3)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
+    shadowOffset: { width: 8, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 24,
   },
   drawerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingBottom: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(139, 92, 246, 0.4)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
     marginBottom: 16,
   },
   drawerLogo: {

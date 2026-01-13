@@ -119,6 +119,8 @@ export interface JellyfinMediaStream {
   DisplayTitle?: string;
   IsDefault: boolean;
   IsForced: boolean;
+  IsExternal?: boolean;
+  DeliveryUrl?: string;
 }
 
 export interface JellyfinPlaybackInfo {

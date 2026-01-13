@@ -655,9 +655,9 @@ export class JellyfinService {
     return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
   }
 
-  getHlsStreamUrl(itemId: string, mediaSourceId: string): string {
-    // Use master.m3u8 which provides absolute URLs for segments
-    const queryString = buildQueryString({
+  getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number): string {
+    // Use master.m3u8 for HLS streaming with transcoding
+    const params: Record<string, string | number | boolean | undefined> = {
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
@@ -665,19 +665,25 @@ export class JellyfinService {
       // H.264/AAC for Apple compatibility
       videoCodec: 'h264',
       audioCodec: 'aac',
-      // Transcoding settings - reduced bitrate for better streaming
+      // Transcoding settings
       maxWidth: 1920,
       maxHeight: 1080,
-      videoBitRate: 4000000,
-      audioBitRate: 128000,
-      // Segment settings for better buffering
+      videoBitRate: 8000000,
+      audioBitRate: 192000,
+      // Segment settings
       segmentContainer: 'ts',
-      minSegments: 2,
-      segmentLength: 6,
-      breakOnNonKeyFrames: true,
-      // Enable adaptive streaming
-      enableAdaptiveBitrateStreaming: true,
-    });
+      minSegments: 1,
+      segmentLength: 3,
+      breakOnNonKeyFrames: false,
+    };
+
+    // Burn subtitles into video if selected
+    if (subtitleStreamIndex !== undefined) {
+      params.subtitleStreamIndex = subtitleStreamIndex;
+      params.subtitleMethod = 'Hls'; // Burn into HLS segments
+    }
+
+    const queryString = buildQueryString(params);
 
     return `${this.serverUrl}/Videos/${itemId}/master.m3u8?${queryString}`;
   }
@@ -726,6 +732,7 @@ export class JellyfinService {
   }
 
   getSubtitleUrl(itemId: string, mediaSourceId: string, streamIndex: number, format: string = 'vtt'): string {
+    // Jellyfin subtitle endpoint: /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/Stream.{format}
     const queryString = buildQueryString({
       api_key: this.accessToken || '',
     });
