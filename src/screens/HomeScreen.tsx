@@ -26,6 +26,7 @@ export function HomeScreen() {
   const [latestShows, setLatestShows] = useState<JellyfinItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const dynamicStyles = {
     contentContainer: {
@@ -41,12 +42,17 @@ export function HomeScreen() {
   const loadData = useCallback(async () => {
     if (!jellyfin) return;
 
+    let isCancelled = false;
+    setError(null);
+
     try {
       const [resume, nextUp, latest] = await Promise.all([
         jellyfin.getResumeItems(10),
         jellyfin.getNextUp(10),
         jellyfin.getLatestMedia(undefined, 20),
       ]);
+
+      if (isCancelled) return;
 
       // Combine resume and next up candidates
       const allResumeCandidates = [...resume, ...nextUp];
@@ -115,14 +121,27 @@ export function HomeScreen() {
       const movies = latest.filter(item => item.Type === 'Movie');
       const episodes = latest.filter(item => item.Type === 'Episode' || item.Type === 'Series');
 
-      setLatestMovies(movies);
-      setLatestShows(episodes);
-    } catch (error) {
-      console.error('Failed to load home data:', error);
+      setLatestMovies(movies.slice(0, 10));
+      setLatestShows(episodes.slice(0, 10));
+    } catch (err) {
+      console.error('Failed to load home data:', err);
+      if (!isCancelled) {
+        if (err instanceof Error && err.message.includes('Network request failed')) {
+          setError('Unable to connect to your Jellyfin server. Please check your network connection and server settings.');
+        } else {
+          setError('Failed to load media. Please try again.');
+        }
+      }
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (!isCancelled) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [jellyfin]);
 
   useEffect(() => {
@@ -156,8 +175,8 @@ export function HomeScreen() {
       if (success) {
         setResumeItems(prev => prev.filter(i => i.Id !== item.Id));
       }
-    } catch (error) {
-      console.error('Failed to remove item from continue watching:', error);
+    } catch (err) {
+      console.error('Failed to remove item from continue watching:', err);
     }
   };
 
@@ -170,8 +189,8 @@ export function HomeScreen() {
         // Remove from continue watching list
         setResumeItems(prev => prev.filter(i => i.Id !== item.Id));
       }
-    } catch (error) {
-      console.error('Failed to mark item as watched:', error);
+    } catch (err) {
+      console.error('Failed to mark item as watched:', err);
     }
   };
 
@@ -194,8 +213,8 @@ export function HomeScreen() {
         setLatestMovies(prev => prev.map(updateItem));
         setLatestShows(prev => prev.map(updateItem));
       }
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
     }
   };
 
@@ -213,6 +232,16 @@ export function HomeScreen() {
 
   if (isLoading) {
     return <LoadingScreen message="Loading your media..." />;
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
+        <Text style={[styles.errorText, isMobile && styles.errorTextMobile]}>
+          {error}
+        </Text>
+      </View>
+    );
   }
 
   const hasContent =
@@ -310,13 +339,30 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(24),
     letterSpacing: 0.6,
     textAlign: 'center',
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 16,
   },
   emptyTitleMobile: {
     fontSize: 28,
     marginBottom: 16,
   },
+  errorText: {
+    color: 'rgba(255, 69, 58, 1)',
+    fontSize: scaleFontSize(22),
+    textAlign: 'center',
+    fontWeight: '600',
+    lineHeight: scaleSize(32),
+    textShadowColor: 'rgba(255, 69, 58, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
+  },
+  errorTextMobile: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
   emptyText: {
-    color: 'rgba(255, 255, 255, 0.65)',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: scaleFontSize(22),
     textAlign: 'center',
     fontWeight: '500',

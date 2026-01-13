@@ -116,6 +116,9 @@ const styles = StyleSheet.create({
     marginBottom: scaleSize(20),
     marginLeft: scaleSize(52),
     letterSpacing: 0.5,
+    textShadowColor: 'rgba(255, 255, 255, 0.2)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 16,
   },
   titleMobile: {
     fontSize: 20,

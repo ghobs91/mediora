@@ -87,10 +87,11 @@ export function PlayerScreen() {
       setItem(itemDetails);
       setIsFavorite(itemDetails.UserData?.IsFavorite || false);
 
-      // Use HLS by default for tvOS to avoid direct stream configuration issues
+      // Always start with HLS for best compatibility on iOS/tvOS
       if (info.MediaSources.length > 0) {
         const container = info.MediaSources[0].Container?.toLowerCase();
-        console.log('[PlayerScreen] Starting with HLS for container:', container);
+        console.log('[PlayerScreen] Container type:', container);
+        console.log('[PlayerScreen] Starting with HLS streaming');
         setStreamAttempt('hls');
       }
 
@@ -258,7 +259,11 @@ export function PlayerScreen() {
           break;
         case 'hls':
           streamType = 'HLS (master.m3u8)';
-          url = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
+          url = jellyfin.getHlsStreamUrl(
+            itemId, 
+            mediaSourceId,
+            subtitlesEnabled ? selectedSubtitleTrack : undefined
+          );
           break;
         case 'transcoded':
           streamType = 'Transcoded (720p)';
@@ -268,12 +273,13 @@ export function PlayerScreen() {
 
       console.log('[PlayerScreen] Stream type:', streamType);
       console.log('[PlayerScreen] Stream URL:', url);
+      console.log('[PlayerScreen] Subtitles:', { enabled: subtitlesEnabled, trackIndex: selectedSubtitleTrack });
       console.log('[PlayerScreen] Media source:', {
         id: mediaSourceId,
         container: playbackInfo.MediaSources[0].Container,
       });
     }
-  }, [streamAttempt, playbackInfo, jellyfin, itemId]);
+  }, [streamAttempt, playbackInfo, jellyfin, itemId, subtitlesEnabled, selectedSubtitleTrack]);
 
   // Restore saved position when video is ready
   useEffect(() => {
@@ -388,6 +394,13 @@ export function PlayerScreen() {
   const handleToggleSubtitles = () => {
     const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
     
+    console.log('[PlayerScreen] Available subtitle tracks:', subtitleTracks.map(t => ({
+      index: t.Index,
+      language: t.Language,
+      title: t.DisplayTitle,
+      isDefault: t.IsDefault
+    })));
+    
     if (subtitleTracks.length === 0) {
       return; // No subtitles available
     }
@@ -397,7 +410,7 @@ export function PlayerScreen() {
       const defaultTrack = subtitleTracks.find(track => track.IsDefault) || subtitleTracks[0];
       setSelectedSubtitleTrack(defaultTrack.Index);
       setSubtitlesEnabled(true);
-      console.log('[PlayerScreen] Subtitles enabled, track:', defaultTrack.DisplayTitle || defaultTrack.Language);
+      console.log('[PlayerScreen] Subtitles enabled, track:', defaultTrack.DisplayTitle || defaultTrack.Language, 'index:', defaultTrack.Index);
     } else {
       // Disable subtitles
       setSelectedSubtitleTrack(undefined);
@@ -466,12 +479,40 @@ export function PlayerScreen() {
   const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
   // Build text tracks for external subtitles
-  const textTracks = subtitleTracks.map(track => ({
-    title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
-    language: track.Language || 'und',
-    type: 'text/vtt' as const,
-    uri: jellyfin?.getSubtitleUrl(itemId, playbackInfo?.MediaSources[0]?.Id || '', track.Index) || '',
-  }));
+  const textTracks = subtitleTracks.map(track => {
+    // Get subtitle URL - DeliveryUrl should have full URL, otherwise build it
+    let subtitleUrl = track.DeliveryUrl || '';
+    if (!subtitleUrl && jellyfin) {
+      subtitleUrl = jellyfin.getSubtitleUrl(
+        itemId, 
+        playbackInfo?.MediaSources[0]?.Id || '', 
+        track.Index,
+        'vtt' // Request WebVTT format for better compatibility
+      );
+    }
+    
+    // Ensure URL has server prefix if it's a relative path
+    if (subtitleUrl && subtitleUrl.startsWith('/') && jellyfin) {
+      const serverUrl = (jellyfin as any).serverUrl || '';
+      subtitleUrl = `${serverUrl}${subtitleUrl}`;
+    }
+    
+    return {
+      title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
+      language: track.Language || 'und',
+      type: 'text/vtt' as const,
+      uri: subtitleUrl,
+    };
+  });
+
+  console.log('[PlayerScreen] Text tracks:', textTracks.map(t => ({ title: t.title, uri: t.uri })));
+
+  // Map Jellyfin stream index to textTracks array index
+  const getTextTrackIndex = (jellyfinIndex: number | undefined): number | undefined => {
+    if (jellyfinIndex === undefined) return undefined;
+    const arrayIndex = subtitleTracks.findIndex(t => t.Index === jellyfinIndex);
+    return arrayIndex >= 0 ? arrayIndex : undefined;
+  };
 
   const currentEpisodeIndex = episodes.findIndex(e => e.Id === item?.Id);
   const hasPrevious = currentEpisodeIndex > 0;
@@ -530,7 +571,7 @@ export function PlayerScreen() {
         break;
       case 'hls':
         videoUrl = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
-        streamType = 'HLS (main.m3u8)';
+        streamType = 'HLS (master.m3u8)';
         break;
       case 'transcoded':
         videoUrl = jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
@@ -551,6 +592,14 @@ export function PlayerScreen() {
         key={videoUrl}
         source={{
           uri: videoUrl,
+          type: streamAttempt === 'hls' ? 'm3u8' : undefined,
+        }}
+        textTracks={subtitlesEnabled && selectedSubtitleTrack !== undefined && textTracks[selectedSubtitleTrack] ? [textTracks[selectedSubtitleTrack]] : []}
+        selectedTextTrack={subtitlesEnabled && selectedSubtitleTrack !== undefined ? {
+          type: SelectedTrackType.INDEX,
+          value: 0,
+        } : {
+          type: SelectedTrackType.DISABLED,
         }}
         style={styles.video}
         resizeMode="contain"
@@ -744,7 +793,15 @@ export function PlayerScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
-                  onPress={() => setShowSubtitles(true)}
+                  onPress={() => {
+                    console.log('[PlayerScreen] Opening subtitle selection, available tracks:', subtitleTracks.map(t => ({
+                      index: t.Index,
+                      language: t.Language,
+                      title: t.DisplayTitle,
+                      codec: t.Codec
+                    })));
+                    setShowSubtitles(true);
+                  }}
                   disabled={!hasSubtitles}>
                   <Icon name="list-outline" size={22} color="#fff" />
                 </TouchableOpacity>
@@ -830,29 +887,28 @@ export function PlayerScreen() {
         onClose={() => setShowSubtitles(false)}
         data={[{ Index: -1, DisplayTitle: 'Off', Type: 'Subtitle' as const }, ...subtitleTracks]}
         keyExtractor={(item) => item.Index.toString()}
-        renderItem={({ item: track }) => (
-          <TouchableOpacity
-            style={[
-              styles.modalItem, 
-              (track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index) && styles.modalItemActive
-            ]}
+        renderItem={({ item: track, index }) => (
+          <ModalItem
+            text={track.DisplayTitle || track.Language || `Track ${track.Index}`}
+            isActive={track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index}
+            hasTVPreferredFocus={index === 0}
             onPress={() => {
               if (track.Index === -1) {
+                console.log('[PlayerScreen] Disabling subtitles');
                 setSelectedSubtitleTrack(undefined);
                 setSubtitlesEnabled(false);
               } else {
+                console.log('[PlayerScreen] Selecting subtitle track:', {
+                  index: track.Index,
+                  language: track.Language,
+                  title: track.DisplayTitle
+                });
                 setSelectedSubtitleTrack(track.Index);
                 setSubtitlesEnabled(true);
               }
               setShowSubtitles(false);
-            }}>
-            <Text style={[
-              styles.modalItemText, 
-              (track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index) && { color: '#000' }
-            ]}>
-              {track.DisplayTitle || track.Language || `Track ${track.Index}`}
-            </Text>
-          </TouchableOpacity>
+            }}
+          />
         )}
       />
 
@@ -877,15 +933,16 @@ export function PlayerScreen() {
         title="Playback Speed"
         onClose={() => setShowSettings(false)}
         data={playbackSpeeds}
-        renderItem={({ item: speed }) => (
-          <TouchableOpacity
-            style={[styles.modalItem, playbackRate === speed && styles.modalItemActive]}
+        renderItem={({ item: speed, index }) => (
+          <ModalItem
+            text={`${speed}x`}
+            isActive={playbackRate === speed}
+            hasTVPreferredFocus={index === 1}
             onPress={() => {
               setPlaybackRate(speed);
               setShowSettings(false);
-            }}>
-            <Text style={[styles.modalItemText, playbackRate === speed && { color: '#000' }]}>{speed}x</Text>
-          </TouchableOpacity>
+            }}
+          />
         )}
       />
     </TouchableOpacity>
@@ -908,11 +965,13 @@ function SelectionModal({ visible, title, onClose, data, renderItem, keyExtracto
       transparent
       animationType="fade"
       onRequestClose={onClose}>
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={onClose}>
-        <View style={styles.modalContent}>
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={styles.modalContent} focusable={false}>
           <Text style={styles.modalTitle}>{title}</Text>
           <FlatList
             data={data}
@@ -921,8 +980,67 @@ function SelectionModal({ visible, title, onClose, data, renderItem, keyExtracto
             contentContainerStyle={styles.modalList}
           />
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
+  );
+}
+
+interface ModalItemProps {
+  text: string;
+  isActive: boolean;
+  onPress: () => void;
+  hasTVPreferredFocus?: boolean;
+}
+
+function ModalItem({ text, isActive, onPress, hasTVPreferredFocus = false }: ModalItemProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    Animated.spring(scaleValue, {
+      toValue: 1.05,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onPress={onPress}
+      hasTVPreferredFocus={hasTVPreferredFocus}
+      activeOpacity={0.9}>
+      <Animated.View
+        style={[
+          styles.modalItem,
+          isActive && styles.modalItemActive,
+          {
+            transform: [{ scale: scaleValue }],
+            borderWidth: isFocused ? 3 : 0,
+            borderColor: isFocused ? '#fff' : 'transparent',
+          },
+        ]}>
+        <Text
+          style={[
+            styles.modalItemText,
+            isActive && { color: '#000' },
+            isFocused && !isActive && { color: '#fff' },
+          ]}>
+          {text}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 

@@ -9,7 +9,9 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { LiquidGlassView } from '@callstack/liquid-glass';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService, IPTV_REGIONS, IPTVCountry } from '../services';
@@ -30,6 +32,7 @@ export function SettingsScreen() {
     useServices();
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('jellyfin');
 
@@ -37,7 +40,7 @@ export function SettingsScreen() {
 
   const dynamicStyles = {
     contentContainer: {
-      paddingTop: isMobile ? insets.top + 60 : 48, // Account for hamburger menu on mobile
+      paddingTop: isMobile ? insets.top + 72 : 48, // Account for header bar on mobile
       paddingBottom: isMobile ? insets.bottom + 24 : 48,
     },
     tabsContainer: {
@@ -52,68 +55,87 @@ export function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={dynamicStyles.contentContainer}>
-      {/* Section Tabs */}
-      <View style={[styles.tabsContainer, dynamicStyles.tabsContainer]}>
-        <SettingsTab
-          title="Jellyfin"
-          isSelected={activeSection === 'jellyfin'}
-          isConnected={isJellyfinConnected}
-          onPress={() => setActiveSection('jellyfin')}
-          isMobile={isMobile}
-        />
-        <SettingsTab
-          title="Sonarr"
-          isSelected={activeSection === 'sonarr'}
-          isConnected={isSonarrConnected}
-          onPress={() => setActiveSection('sonarr')}
-          isMobile={isMobile}
-        />
-        <SettingsTab
-          title="Radarr"
-          isSelected={activeSection === 'radarr'}
-          isConnected={isRadarrConnected}
-          onPress={() => setActiveSection('radarr')}
-          isMobile={isMobile}
-        />
-        <SettingsTab
-          title="Live TV"
-          isSelected={activeSection === 'livetv'}
-          isConnected={hasIPTVCountries}
-          onPress={() => setActiveSection('livetv')}
-          isMobile={isMobile}
-        />
-      </View>
+    <View style={styles.wrapper}>
+      {/* Mobile Back Button */}
+      {isMobile && (
+        <View style={[styles.backButtonContainer, { top: insets.top + 8 }]}>
+          <LiquidGlassView
+            style={styles.backButtonGlass}
+            effect="regular"
+            tintColor="rgba(255, 255, 255, 0.25)">
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}>
+              <Icon name="arrow-back" size={28} color="rgba(60, 60, 67, 0.85)" />
+            </TouchableOpacity>
+          </LiquidGlassView>
+        </View>
+      )}
 
-      {/* Section Content */}
-      <View style={[styles.sectionContent, dynamicStyles.sectionContent]}>
-        {activeSection === 'jellyfin' && (
-          <JellyfinSettings
-            settings={settings.jellyfin}
-            onUpdate={updateJellyfinSettings}
-            onClear={clearJellyfinSettings}
+      <ScrollView style={styles.container} contentContainerStyle={dynamicStyles.contentContainer}>
+        {/* Section Tabs */}
+        <View style={[styles.tabsContainer, dynamicStyles.tabsContainer]}>
+          <SettingsTab
+            title="Jellyfin"
+            isSelected={activeSection === 'jellyfin'}
+            isConnected={isJellyfinConnected}
+            onPress={() => setActiveSection('jellyfin')}
+            isMobile={isMobile}
           />
-        )}
-        {activeSection === 'sonarr' && (
-          <SonarrSettings
-            settings={settings.sonarr}
-            onUpdate={updateSonarrSettings}
+          <SettingsTab
+            title="Sonarr"
+            isSelected={activeSection === 'sonarr'}
+            isConnected={isSonarrConnected}
+            onPress={() => setActiveSection('sonarr')}
+            isMobile={isMobile}
           />
-        )}
-        {activeSection === 'radarr' && (
-          <RadarrSettings
-            settings={settings.radarr}
-            onUpdate={updateRadarrSettings}
+          <SettingsTab
+            title="Radarr"
+            isSelected={activeSection === 'radarr'}
+            isConnected={isRadarrConnected}
+            onPress={() => setActiveSection('radarr')}
+            isMobile={isMobile}
           />
-        )}
-        {activeSection === 'livetv' && (
-          <LiveTVSettings
-            settings={settings.iptv}
-            onUpdate={updateIPTVSettings}
+          <SettingsTab
+            title="Live TV"
+            isSelected={activeSection === 'livetv'}
+            isConnected={hasIPTVCountries}
+            onPress={() => setActiveSection('livetv')}
+            isMobile={isMobile}
           />
-        )}
-      </View>
-    </ScrollView>
+        </View>
+
+        {/* Section Content */}
+        <View style={[styles.sectionContent, dynamicStyles.sectionContent]}>
+          {activeSection === 'jellyfin' && (
+            <JellyfinSettings
+              settings={settings.jellyfin}
+              onUpdate={updateJellyfinSettings}
+              onClear={clearJellyfinSettings}
+            />
+          )}
+          {activeSection === 'sonarr' && (
+            <SonarrSettings
+              settings={settings.sonarr}
+              onUpdate={updateSonarrSettings}
+            />
+          )}
+          {activeSection === 'radarr' && (
+            <RadarrSettings
+              settings={settings.radarr}
+              onUpdate={updateRadarrSettings}
+            />
+          )}
+          {activeSection === 'livetv' && (
+            <LiveTVSettings
+              settings={settings.iptv}
+              onUpdate={updateIPTVSettings}
+            />
+          )}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1293,9 +1315,36 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  contentContainer: {
+    paddingTop: 48,
+  },
+  // Mobile Back Button
+  backButtonContainer: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 100,
+  },
+  backButtonGlass: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: 'rgba(139, 92, 246, 0.6)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  backButton: {
+    padding: 10,
+    backgroundColor: 'transparent',
   },
   contentContainer: {
     paddingTop: 48,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Text, Image, useWindowDimensions, TouchableOpacity, FlatList, Alert, ImageBackground, Platform } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen, CastList } from '../components';
@@ -789,23 +790,35 @@ export function ItemDetailsScreen() {
 
   const renderSeasonTab = (season: EnrichedSeason) => {
     const isSelected = selectedSeason?.seasonNumber === season.seasonNumber;
+    const GlassWrapper = isLiquidGlassSupported ? LiquidGlassView : View;
+    
     return (
       <TouchableOpacity
         key={season.seasonNumber}
-        style={[
-          styles.seasonTab,
-          isSelected && styles.seasonTabActive,
-          !season.hasInLibrary && styles.seasonTabMissing
-        ]}
+        style={styles.seasonTabWrapper}
         onPress={() => handleSeasonSelect(season)}
       >
-        <Text style={[
-          styles.seasonTabText,
-          isSelected && styles.seasonTabTextActive,
-          !season.hasInLibrary && styles.seasonTabTextMissing
-        ]}>
-          {season.name}
-        </Text>
+        <GlassWrapper
+          style={[
+            styles.seasonTab,
+            isSelected && styles.seasonTabActive,
+            !season.hasInLibrary && styles.seasonTabMissing,
+            !isLiquidGlassSupported && isSelected && { backgroundColor: 'rgba(255,255,255,0.2)' },
+            !isLiquidGlassSupported && !isSelected && { backgroundColor: 'rgba(255,255,255,0.08)' },
+          ]}
+          {...(isLiquidGlassSupported && {
+            effect: isSelected ? 'regular' : 'clear',
+            tintColor: isSelected ? 'rgba(255, 215, 0, 0.2)' : undefined,
+          })}
+        >
+          <Text style={[
+            styles.seasonTabText,
+            isSelected && styles.seasonTabTextActive,
+            !season.hasInLibrary && styles.seasonTabTextMissing
+          ]}>
+            {season.name}
+          </Text>
+        </GlassWrapper>
       </TouchableOpacity>
     );
   };
@@ -921,7 +934,17 @@ export function ItemDetailsScreen() {
           )}
 
           <View style={styles.metaRow}>
-            {rating && <View style={styles.ratingBadge}><Text style={styles.ratingText}>{rating}</Text></View>}
+            {rating && (
+              isLiquidGlassSupported ? (
+                <LiquidGlassView style={styles.ratingBadge} effect="clear">
+                  <Text style={styles.ratingText}>{rating}</Text>
+                </LiquidGlassView>
+              ) : (
+                <View style={[styles.ratingBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                  <Text style={styles.ratingText}>{rating}</Text>
+                </View>
+              )
+            )}
             <Text style={styles.metaText}>{heroSubtitle}</Text>
             {tmdbScore && (
               <View style={styles.scoreContainer}>
@@ -989,61 +1012,123 @@ export function ItemDetailsScreen() {
               />
             )}
 
-            <TouchableOpacity style={styles.circleButton}>
-              <Icon name="heart-outline" size={24} color="#fff" />
+            <TouchableOpacity style={styles.circleButtonWrapper}>
+              {isLiquidGlassSupported ? (
+                <LiquidGlassView style={styles.circleButton} effect="clear" interactive>
+                  <Icon name="heart-outline" size={24} color="#fff" />
+                </LiquidGlassView>
+              ) : (
+                <View style={styles.circleButton}>
+                  <Icon name="heart-outline" size={24} color="#fff" />
+                </View>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.circleButton}>
-              <Icon name="ellipsis-horizontal" size={24} color="#fff" />
+            <TouchableOpacity style={styles.circleButtonWrapper}>
+              {isLiquidGlassSupported ? (
+                <LiquidGlassView style={styles.circleButton} effect="clear" interactive>
+                  <Icon name="ellipsis-horizontal" size={24} color="#fff" />
+                </LiquidGlassView>
+              ) : (
+                <View style={styles.circleButton}>
+                  <Icon name="ellipsis-horizontal" size={24} color="#fff" />
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
           {/* Media Info */}
           {isMovie && initialItem.MediaSources && initialItem.MediaSources.length > 0 && (
-            <View style={styles.mediaInfoContainer}>
-              <View style={styles.mediaInfoRow}>
-                <Icon name="film-outline" size={20} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.mediaInfoLabel}>4K HEVC SDR</Text>
+            isLiquidGlassSupported ? (
+              <LiquidGlassView style={styles.mediaInfoContainer} effect="clear">
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="film-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>4K HEVC SDR</Text>
+                </View>
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="musical-notes-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>AAC - 5.1 - Stereo</Text>
+                </View>
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="text-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>English [CC] - 16 more</Text>
+                </View>
+              </LiquidGlassView>
+            ) : (
+              <View style={[styles.mediaInfoContainer, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="film-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>4K HEVC SDR</Text>
+                </View>
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="musical-notes-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>AAC - 5.1 - Stereo</Text>
+                </View>
+                <View style={styles.mediaInfoRow}>
+                  <Icon name="text-outline" size={20} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.mediaInfoLabel}>English [CC] - 16 more</Text>
+                </View>
               </View>
-              <View style={styles.mediaInfoRow}>
-                <Icon name="musical-notes-outline" size={20} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.mediaInfoLabel}>AAC - 5.1 - Stereo</Text>
-              </View>
-              <View style={styles.mediaInfoRow}>
-                <Icon name="text-outline" size={20} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.mediaInfoLabel}>English [CC] - 16 more</Text>
-              </View>
-            </View>
+            )
           )}
 
           {/* Details Grid */}
           {isMovie && (genres.length > 0 || director || writer || studios.length > 0) && (
-            <View style={styles.detailsGrid}>
-              {genres.length > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Genres</Text>
-                  <Text style={styles.detailValue}>{genres.join(', ')}</Text>
-                </View>
-              )}
-              {director && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Director</Text>
-                  <Text style={styles.detailValue}>{director}</Text>
-                </View>
-              )}
-              {writer && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Writer</Text>
-                  <Text style={styles.detailValue}>{writer}</Text>
-                </View>
-              )}
-              {studios.length > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Studios</Text>
-                  <Text style={styles.detailValue}>{studios.slice(0, 2).join(', ')}</Text>
-                </View>
-              )}
-            </View>
+            isLiquidGlassSupported ? (
+              <LiquidGlassView style={styles.detailsGrid} effect="clear">
+                {genres.length > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Genres</Text>
+                    <Text style={styles.detailValue}>{genres.join(', ')}</Text>
+                  </View>
+                )}
+                {director && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Director</Text>
+                    <Text style={styles.detailValue}>{director}</Text>
+                  </View>
+                )}
+                {writer && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Writer</Text>
+                    <Text style={styles.detailValue}>{writer}</Text>
+                  </View>
+                )}
+                {studios.length > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Studios</Text>
+                    <Text style={styles.detailValue}>{studios.slice(0, 2).join(', ')}</Text>
+                  </View>
+                )}
+              </LiquidGlassView>
+            ) : (
+              <View style={[styles.detailsGrid, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
+                {genres.length > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Genres</Text>
+                    <Text style={styles.detailValue}>{genres.join(', ')}</Text>
+                  </View>
+                )}
+                {director && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Director</Text>
+                    <Text style={styles.detailValue}>{director}</Text>
+                  </View>
+                )}
+                {writer && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Writer</Text>
+                    <Text style={styles.detailValue}>{writer}</Text>
+                  </View>
+                )}
+                {studios.length > 0 && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Studios</Text>
+                    <Text style={styles.detailValue}>{studios.slice(0, 2).join(', ')}</Text>
+                  </View>
+                )}
+              </View>
+            )
           )}
 
           {/* Debug: Show Sonarr data status for TV shows */}
@@ -1110,13 +1195,15 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
   playButton: { minWidth: 160 },
   downloadingButton: { minWidth: 160, opacity: 0.8 },
-  actionButton: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  circleButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  actionButton: { minWidth: 160 },
+  circleButtonWrapper: {},
+  circleButton: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)', shadowColor: 'rgba(0,0,0,0.3)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12 },
   sectionsContainer: { paddingLeft: 48, backgroundColor: '#000', paddingTop: 20 },
   section: { marginBottom: 30 },
   seasonScroll: { flexDirection: 'row', marginBottom: 10 },
-  seasonTab: { paddingHorizontal: 20, paddingVertical: 10, marginRight: 12, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'transparent' },
-  seasonTabActive: { backgroundColor: 'rgba(255,255,255,0.2)', borderColor: '#FFD700' },
+  seasonTabWrapper: { marginRight: 12 },
+  seasonTab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
+  seasonTabActive: { borderColor: 'rgba(255, 215, 0, 0.6)', shadowColor: 'rgba(255, 215, 0, 0.8)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16 },
   seasonTabText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, fontWeight: '600' },
   seasonTabTextActive: { color: '#fff', fontWeight: '700' },
   seasonTabMissing: { opacity: 0.5 },
@@ -1125,7 +1212,7 @@ const styles = StyleSheet.create({
   episodeCard: { width: 300, marginRight: 16 },
   episodeCardMissing: { opacity: 0.5 },
   episodeCardSelected: { transform: [{ scale: 1.02 }] },
-  episodeImageContainer: { width: 300, height: 169, borderRadius: 12, backgroundColor: '#222', overflow: 'hidden', marginBottom: 12, borderWidth: 2, borderColor: 'transparent' },
+  episodeImageContainer: { width: 300, height: 169, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(30px)', overflow: 'hidden', marginBottom: 12, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)' },
   episodeImageMissing: { grayscale: 1 },
   episodeThumbnail: { width: '100%', height: '100%' },
   episodeThumbnailMissing: { opacity: 0.5 },
@@ -1142,8 +1229,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    backdropFilter: 'blur(20px)',
+    borderRadius: 16,
     padding: 2,
   },
   episodeDownloadOverlay: {
@@ -1151,7 +1239,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    backdropFilter: 'blur(30px) saturate(150%)',
     padding: 8,
     alignItems: 'center',
   },
@@ -1176,9 +1265,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.25)',
+    backdropFilter: 'blur(20px) saturate(180%)',
+    borderRadius: 16,
     padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.4)',
   },
   sonarrStatusText: {
     color: '#4caf50',
@@ -1192,11 +1284,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   ratingBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 8,
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   ratingText: {
     color: '#fff',
@@ -1235,6 +1328,10 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 24,
     gap: 12,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   mediaInfoRow: {
     flexDirection: 'row',
@@ -1248,6 +1345,10 @@ const styles = StyleSheet.create({
   detailsGrid: {
     marginTop: 24,
     gap: 16,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   detailRow: {
     flexDirection: 'row',
