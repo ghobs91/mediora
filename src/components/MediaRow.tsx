@@ -32,9 +32,12 @@ type MediaRowProps = JellyfinMediaRowProps | TMDBMediaRowProps;
 export function MediaRow(props: MediaRowProps) {
   const { title } = props;
   const { spacing, isMobile } = useResponsiveColumns();
-  
+
   // Responsive horizontal padding
   const horizontalPadding = isMobile ? 16 : scaleSize(52);
+
+  // Separator component for spacing between items
+  const ItemSeparator = () => <View style={{ width: spacing }} />;
 
   if ('items' in props && props.items) {
     const { items, onItemPress, onItemRemove, onItemMarkWatched, onItemToggleFavorite, getImageUrl } = props;
@@ -64,7 +67,14 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - (isMobile ? 4 : scaleSize(10)), paddingRight: isMobile ? 16 : scaleSize(44) }]}
+          ItemSeparatorComponent={ItemSeparator}
+          contentContainerStyle={[
+            styles.listContent,
+            {
+              paddingLeft: horizontalPadding, // Removed compensation for card margin
+              paddingRight: horizontalPadding
+            }
+          ]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />
@@ -96,7 +106,14 @@ export function MediaRow(props: MediaRowProps) {
             />
           )}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.listContent, { paddingLeft: horizontalPadding - (isMobile ? 4 : scaleSize(10)), paddingRight: isMobile ? 16 : scaleSize(44) }]}
+          ItemSeparatorComponent={ItemSeparator}
+          contentContainerStyle={[
+            styles.listContent,
+            {
+              paddingLeft: horizontalPadding, // Removed compensation for card margin
+              paddingRight: horizontalPadding
+            }
+          ]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
         />

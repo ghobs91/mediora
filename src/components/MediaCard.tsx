@@ -237,7 +237,7 @@ export function MediaCard({
             activeOpacity={0.7}
           >
             {isLiquidGlassSupported ? (
-              <LiquidGlassView 
+              <LiquidGlassView
                 style={[styles.removeButtonInner, isMobile && styles.removeButtonInnerMobile]}
                 effect="clear"
                 interactive
@@ -261,9 +261,9 @@ export function MediaCard({
                 activeOpacity={0.7}
               >
                 {isLiquidGlassSupported ? (
-                  <LiquidGlassView 
+                  <LiquidGlassView
                     style={[
-                      styles.actionButtonInner, 
+                      styles.actionButtonInner,
                       isMobile && styles.actionButtonInnerMobile,
                       item.UserData?.IsFavorite && styles.actionButtonFavorite
                     ]}
@@ -271,22 +271,22 @@ export function MediaCard({
                     interactive
                     tintColor={item.UserData?.IsFavorite ? 'rgba(229, 9, 20, 0.3)' : undefined}
                   >
-                    <Icon 
-                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
-                      size={isMobile ? 16 : scaleSize(20)} 
-                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
+                    <Icon
+                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"}
+                      size={isMobile ? 16 : scaleSize(20)}
+                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"}
                     />
                   </LiquidGlassView>
                 ) : (
                   <View style={[
-                    styles.actionButtonInner, 
+                    styles.actionButtonInner,
                     isMobile && styles.actionButtonInnerMobile,
                     item.UserData?.IsFavorite && styles.actionButtonFavorite
                   ]}>
-                    <Icon 
-                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"} 
-                      size={isMobile ? 16 : scaleSize(20)} 
-                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"} 
+                    <Icon
+                      name={item.UserData?.IsFavorite ? "heart" : "heart-outline"}
+                      size={isMobile ? 16 : scaleSize(20)}
+                      color={item.UserData?.IsFavorite ? "#e50914" : "#fff"}
                     />
                   </View>
                 )}
@@ -299,7 +299,7 @@ export function MediaCard({
                 activeOpacity={0.7}
               >
                 {isLiquidGlassSupported ? (
-                  <LiquidGlassView 
+                  <LiquidGlassView
                     style={[styles.actionButtonInner, isMobile && styles.actionButtonInnerMobile]}
                     effect="clear"
                     interactive
@@ -332,12 +332,10 @@ export function MediaCard({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: scaleSize(14),
-    marginHorizontal: scaleSize(6),
+    // Margins removed - layout containers handle spacing now
   },
   containerMobile: {
-    marginVertical: 8,
-    marginHorizontal: 4,
+    // Margins removed
   },
   cardContainer: {
     borderRadius: scaleSize(24),

@@ -285,6 +285,10 @@ export function AppNavigator() {
               animation: 'none',
             }}>
             <Stack.Screen name="MainTabs" component={MobileTabNavigator} />
+            <Stack.Screen name="JellyfinSettings" component={JellyfinSettingsScreen} />
+            <Stack.Screen name="SonarrSettings" component={SonarrSettingsScreen} />
+            <Stack.Screen name="RadarrSettings" component={RadarrSettingsScreen} />
+            <Stack.Screen name="LiveTVSettings" component={LiveTVSettingsScreen} />
             <Stack.Screen
               name="Player"
               component={PlayerScreen}

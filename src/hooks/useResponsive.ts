@@ -5,6 +5,7 @@ interface ResponsiveConfig {
   numColumns: number;
   itemWidth: number;
   spacing: number;
+  gap: number;
   windowWidth: number;
   windowHeight: number;
   isMobile: boolean;
@@ -87,6 +88,7 @@ export function useResponsiveColumns(): ResponsiveConfig {
       numColumns: numCols,
       itemWidth: itemW,
       spacing,
+      gap,
       windowWidth: safeWidth,
       windowHeight: safeHeight,
       isMobile,
