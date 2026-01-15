@@ -31,7 +31,7 @@ export function SearchScreen() {
   const [trendingTV, setTrendingTV] = useState<TMDBTVShow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const { numColumns, itemWidth, spacing, isMobile } = useResponsiveColumns();
+  const { numColumns, itemWidth, spacing, isMobile, gap } = useResponsiveColumns();
   const insets = useSafeAreaInsets();
 
   const dynamicStyles = {
@@ -72,7 +72,7 @@ export function SearchScreen() {
         'week',
         1
       );
-      
+
       if (mode === 'movies') {
         setTrendingMovies(result.results as TMDBMovie[]);
       } else {
@@ -92,11 +92,11 @@ export function SearchScreen() {
 
       // Load popular content for each genre (limit to top 6 genres to avoid too many requests)
       const topGenres = genres.slice(0, 6);
-      
+
       await Promise.all(
         topGenres.map(async (genre) => {
           try {
-            const result = mode === 'movies' 
+            const result = mode === 'movies'
               ? await tmdb.discoverMovies(genre.id, 1)
               : await tmdb.discoverTV(genre.id, 1);
             contentMap[genre.id] = result.results;
@@ -208,7 +208,7 @@ export function SearchScreen() {
       ) : hasSearched ? (
         results.length > 0 ? (
           <View style={[styles.resultsContainer, { paddingHorizontal: spacing }]}>
-            <View style={styles.resultsGrid}>
+            <View style={[styles.resultsGrid, { gap }]}>
               {results.map((item, index) => (
                 <MediaCard
                   key={`result-${item.id}-${index}`}
@@ -386,7 +386,6 @@ const styles = StyleSheet.create({
   resultsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
   noResults: {
     padding: 48,

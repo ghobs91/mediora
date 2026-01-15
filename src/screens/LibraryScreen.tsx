@@ -62,7 +62,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('ascending');
   const [filterBy, setFilterBy] = useState<FilterOption>('all');
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const { numColumns, itemWidth, isMobile, contentPadding } = useResponsiveColumns();
+  const { numColumns, itemWidth, isMobile, contentPadding, gap } = useResponsiveColumns();
   const { isMobile: isMobileDevice } = useDeviceType();
   const insets = useSafeAreaInsets();
 
@@ -703,9 +703,10 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
           )}
           contentContainerStyle={[
             styles.gridContent,
-            dynamicStyles.gridContent
+            dynamicStyles.gridContent,
+            { gap } // Add vertical gap between rows
           ]}
-          columnWrapperStyle={styles.gridRow}
+          columnWrapperStyle={[styles.gridRow, { gap }]}
           removeClippedSubviews={true}
           tvParallaxProperties={undefined}
           ListEmptyComponent={
@@ -796,7 +797,6 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     justifyContent: 'flex-start',
-    gap: scaleSize(16),
   },
   floatingSortPill: {
     position: 'absolute',
