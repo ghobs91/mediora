@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Text, Image, useWindowDimensions, TouchableOpacity, FlatList, Alert, ImageBackground, Platform } from 'react-native';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp, useIsFocused } from '@react-navigation/native';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
@@ -62,6 +62,8 @@ export function ItemDetailsScreen() {
   const [sonarrSeriesId, setSonarrSeriesId] = useState<number | null>(null);
   const [sonarrQueue, setSonarrQueue] = useState<SonarrQueueItem[]>([]);
   const currentSeasonRef = useRef<number | null>(null);
+  const lastSonarrUpdateRef = useRef<string>(''); // Track last Sonarr data version to prevent infinite loops
+  const isFocused = useIsFocused(); // Track if screen is focused to pause polling when navigated away
 
   const isMovie = initialItem.Type === 'Movie';
   const isSeriesOrEpisode = initialItem.Type === 'Series' || initialItem.Type === 'Episode';
@@ -150,7 +152,7 @@ export function ItemDetailsScreen() {
 
             // Helper to load seasons structure
             const seasons: EnrichedSeason[] = details.seasons
-              .filter(s => s.season_number > 0)
+              .filter(s => s.season_number > 0 && s.episode_count > 0)
               .map(s => {
                 const hasInLibrary = allEpisodes.some(ep => ep.ParentIndexNumber === s.season_number);
                 return {
@@ -281,19 +283,12 @@ export function ItemDetailsScreen() {
           ? Math.max(0, Math.min(1, (queueItem.size - queueItem.sizeleft) / queueItem.size))
           : undefined;
 
-        // Debug logging
-        if (queueItem) {
-          console.log(`[ItemDetails] Episode S${season.seasonNumber}E${tmdbEp.episode_number} is downloading:`, {
-            title: tmdbEp.name,
-            progress: downloadProgress,
-            progressPercent: downloadProgress ? (downloadProgress * 100).toFixed(1) + '%' : 'N/A',
-            status: queueItem?.status,
-            size: queueItem.size,
-            sizeLeft: queueItem.sizeleft,
-            episodeId: sonarrEp?.id,
-            queueEpisodeId: queueItem.episodeId,
-          });
-        }
+        // Debug logging for images
+        console.log(`[ItemDetails] Episode S${season.seasonNumber}E${tmdbEp.episode_number} - ${tmdbEp.name}:`, {
+          still_path: tmdbEp.still_path,
+          hasImage: !!tmdbEp.still_path,
+          fullImageUrl: tmdbEp.still_path ? `https://image.tmdb.org/t/p/w780${tmdbEp.still_path}` : null,
+        });
         
         return {
           ...tmdbEp,
@@ -665,9 +660,11 @@ export function ItemDetailsScreen() {
       isSonarrConnected,
       hasSeriesItem: !!seriesItem,
       hasTmdbDetails: !!tmdbDetails,
+      isFocused,
     });
 
-    if (sonarr && isSonarrConnected && (seriesItem || tmdbDetails)) {
+    // Only poll Sonarr when the screen is focused (not when navigated to PlayerScreen)
+    if (sonarr && isSonarrConnected && (seriesItem || tmdbDetails) && isFocused) {
       loadSonarrData();
       interval = setInterval(loadSonarrData, 10000); // Refresh every 10 seconds
     } else {
@@ -677,7 +674,7 @@ export function ItemDetailsScreen() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [sonarr, isSonarrConnected, seriesItem, tmdbDetails]);
+  }, [sonarr, isSonarrConnected, seriesItem, tmdbDetails, isFocused]);
   
   // Track selected season number
   useEffect(() => {
@@ -690,20 +687,42 @@ export function ItemDetailsScreen() {
   useEffect(() => {
     // Only reload if we have a selected season with episodes AND we have loaded Sonarr data
     const seasonNum = currentSeasonRef.current;
-    if (seasonNum && tmdbDetails?.id && sonarrEpisodes.length > 0 && selectedSeason) {
+    if (!seasonNum || !tmdbDetails?.id || !selectedSeason) {
+      return;
+    }
+
+    // Create a hash of the Sonarr data to detect actual changes
+    const sonarrDataHash = JSON.stringify({
+      episodeCount: sonarrEpisodes.length,
+      queueCount: sonarrQueue.length,
+      queueIds: sonarrQueue.map(q => q.episodeId).sort(),
+    });
+
+    // Only reload if the Sonarr data actually changed
+    if (sonarrDataHash !== lastSonarrUpdateRef.current) {
       console.log(`[ItemDetails] Reloading season ${seasonNum} with updated Sonarr data`);
+      lastSonarrUpdateRef.current = sonarrDataHash;
       loadSeasonEpisodes(selectedSeason, tmdbDetails.id, jellyfinEpisodes);
     }
-  }, [sonarrEpisodes, sonarrQueue, loadSeasonEpisodes, tmdbDetails, jellyfinEpisodes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sonarrEpisodes, sonarrQueue, tmdbDetails, jellyfinEpisodes]);
 
   // ... (Init logic remains similar, mostly UI changes)
 
   // Render Helpers
   const renderEpisodeCard = ({ item }: { item: EnrichedEpisode }) => {
     const isSelected = selectedEpisode?.id === item.id;
-    let imageUrl = item.still_path ? `https://image.tmdb.org/t/p/w300${item.still_path}` : null;
+    // Prioritize TMDB still image (episode thumbnail), fall back to season poster, then Jellyfin
+    let imageUrl = item.still_path ? `https://image.tmdb.org/t/p/w780${item.still_path}` : null;
+    
+    // If no episode still, use season poster as fallback
+    if (!imageUrl && selectedSeason?.posterPath) {
+      imageUrl = `https://image.tmdb.org/t/p/w780${selectedSeason.posterPath}`;
+    }
+    
+    // Final fallback to Jellyfin
     if (!imageUrl && item.jellyfinItem && jellyfin?.getImageUrl) {
-      imageUrl = jellyfin.getImageUrl(item.jellyfinItem.Id, 'Primary', { maxWidth: 320 });
+      imageUrl = jellyfin.getImageUrl(item.jellyfinItem.Id, 'Primary', { maxWidth: 780 });
     }
     
     // Determine episode status
@@ -729,34 +748,36 @@ export function ItemDetailsScreen() {
         style={[
           styles.episodeCard,
           { width: episodeWidth },
-          isSelected && styles.episodeCardSelected,
-          !canPlay && !isDownloading && styles.episodeCardMissing
+          isSelected && styles.episodeCardSelected
         ]}
         onPress={() => handleEpisodeSelect(item)}
         activeOpacity={0.7}
       >
         <View style={[
           styles.episodeImageContainer,
-          { width: episodeWidth, height: episodeHeight },
-          !canPlay && !isDownloading && styles.episodeImageMissing
+          { width: episodeWidth, height: episodeHeight }
         ]}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={[styles.episodeThumbnail, !canPlay && !isDownloading && styles.episodeThumbnailMissing]} />
+            <Image source={{ uri: imageUrl }} style={styles.episodeThumbnail} />
           ) : (
             <View style={styles.episodePlaceholder}>
               <Icon name="tv-outline" size={30} color="rgba(255,255,255,0.3)" />
             </View>
           )}
           
-          {/* Download Progress Indicator */}
+          {/* Download Progress Indicator - Simple Progress Bar */}
           {isDownloading && item.downloadProgress !== undefined && (
-            <View style={styles.episodeDownloadOverlay}>
-              <View style={styles.episodeProgressBar}>
-                <View style={[styles.episodeProgressFill, { width: `${item.downloadProgress * 100}%` }]} />
+            <View style={styles.episodeDownloadProgressBar}>
+              <View style={[styles.episodeDownloadProgressFill, { width: `${item.downloadProgress * 100}%` }]} />
+            </View>
+          )}
+          
+          {/* Play Button Overlay for Available Episodes */}
+          {isSelected && canPlay && !isDownloading && (
+            <View style={styles.playButtonOverlay}>
+              <View style={styles.playButtonCircle}>
+                <Icon name="play" size={48} color="#fff" />
               </View>
-              <Text style={styles.episodeDownloadText}>
-                {Math.round(item.downloadProgress * 100)}%
-              </Text>
             </View>
           )}
           
@@ -774,10 +795,10 @@ export function ItemDetailsScreen() {
           )}
         </View>
         <View style={styles.episodeCardContent}>
-          <Text style={[styles.episodeCardTitle, !canPlay && !isDownloading && styles.textMissing]} numberOfLines={1}>
+          <Text style={styles.episodeCardTitle} numberOfLines={1}>
             {item.episode_number}. {item.name}
           </Text>
-          <Text style={[styles.episodeCardOverview, !canPlay && !isDownloading && styles.textMissing]} numberOfLines={2}>
+          <Text style={styles.episodeCardOverview} numberOfLines={2}>
             {item.overview}
           </Text>
           {hasFileInSonarr && (
@@ -802,7 +823,6 @@ export function ItemDetailsScreen() {
           style={[
             styles.seasonTab,
             isSelected && styles.seasonTabActive,
-            !season.hasInLibrary && styles.seasonTabMissing,
             !isLiquidGlassSupported && isSelected && { backgroundColor: 'rgba(255,255,255,0.2)' },
             !isLiquidGlassSupported && !isSelected && { backgroundColor: 'rgba(255,255,255,0.08)' },
           ]}
@@ -813,8 +833,7 @@ export function ItemDetailsScreen() {
         >
           <Text style={[
             styles.seasonTabText,
-            isSelected && styles.seasonTabTextActive,
-            !season.hasInLibrary && styles.seasonTabTextMissing
+            isSelected && styles.seasonTabTextActive
           ]}>
             {season.name}
           </Text>
@@ -922,7 +941,11 @@ export function ItemDetailsScreen() {
         <Icon name="arrow-back" size={28} color="#fff" />
       </TouchableOpacity>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: backdropHeight * 0.5 }]}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={[styles.scrollContent, { paddingTop: backdropHeight * 0.5 }]}
+        focusable={false}
+      >
         <View style={[styles.heroContent, { paddingHorizontal: spacing }]}>
           {(isSeriesOrEpisode && seriesItem) && <Text style={styles.seriesTitle}>{seriesItem.SeriesName || seriesItem.Name}</Text>}
 
@@ -966,14 +989,13 @@ export function ItemDetailsScreen() {
           <Text style={styles.overview} numberOfLines={4}>{heroOverview}</Text>
 
           <View style={styles.actionRow}>
-            {/* Primary Action */}
-            {selectedSeason && !selectedSeason.hasInLibrary ? (
+            {/* Primary Action - Show Request button for unavailable episodes, Play for available */}
+            {selectedEpisode && !selectedEpisode.isAvailable && !selectedEpisode.hasFile ? (
               <FocusableButton
-                title={downloadProgress ? "Downloading..." : `Request Season ${selectedSeason.seasonNumber}`}
-                onPress={() => !downloadProgress && handleRequestSeason(selectedSeason.seasonNumber)}
-                style={downloadProgress ? styles.downloadingButton : styles.playButton}
-                icon={downloadProgress ? "cloud-download" : "download"}
-                disabled={!!downloadProgress}
+                title={`Request Season ${selectedEpisode.season_number}`}
+                onPress={() => handleRequestSeason(selectedEpisode.season_number)}
+                style={styles.playButton}
+                icon="download"
               />
             ) : (
               <FocusableButton
@@ -984,12 +1006,11 @@ export function ItemDetailsScreen() {
                 onPress={handlePlay}
                 style={styles.playButton}
                 icon="play"
+                hasTVPreferredFocus={true}
               />
             )}
 
-
-
-            {/* Mark as Watched Toggle */}
+            {/* Mark as Watched Toggle - only for available episodes */}
             {selectedEpisode && selectedEpisode.jellyfinItem && (
               <FocusableButton
                 title={selectedEpisode.jellyfinItem.UserData?.Played ? "Mark Unwatched" : "Mark Watched"}
@@ -1000,15 +1021,14 @@ export function ItemDetailsScreen() {
               />
             )}
 
-            {/* Secondary Action */}
-            {selectedSeason && selectedSeason.hasInLibrary && !selectedSeason.isFullyAvailable && (
+            {/* Request Missing Episodes for partially available seasons */}
+            {selectedSeason && selectedSeason.hasInLibrary && !selectedSeason.isFullyAvailable && selectedEpisode?.isAvailable && (
               <FocusableButton
-                title={downloadProgress ? "Checking..." : "Request Missing"}
+                title="Request Missing Episodes"
                 onPress={() => handleRequestSeason(selectedSeason.seasonNumber)}
                 variant="secondary"
                 style={styles.actionButton}
                 icon="download-outline"
-                disabled={!!downloadProgress}
               />
             )}
 
@@ -1036,6 +1056,26 @@ export function ItemDetailsScreen() {
               )}
             </TouchableOpacity>
           </View>
+
+          {/* Download Progress Bar - Full Width */}
+          {downloadProgress && (
+            <View style={styles.downloadProgressSection}>
+              <View style={styles.downloadProgressInfo}>
+                <Text style={styles.downloadProgressTitle}>Downloading</Text>
+                <Text style={styles.downloadProgressStats}>
+                  {downloadProgress.percent.toFixed(1)}% • {downloadProgress.timeLeft} remaining
+                </Text>
+              </View>
+              <View style={styles.downloadProgressBarContainer}>
+                <View 
+                  style={[
+                    styles.downloadProgressBarFill, 
+                    { width: `${downloadProgress.percent}%` }
+                  ]} 
+                />
+              </View>
+            </View>
+          )}
 
           {/* Media Info */}
           {isMovie && initialItem.MediaSources && initialItem.MediaSources.length > 0 && (
@@ -1131,22 +1171,13 @@ export function ItemDetailsScreen() {
             )
           )}
 
-          {/* Debug: Show Sonarr data status for TV shows */}
-          {isSeriesOrEpisode && isSonarrConnected && (
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugText}>
-                📊 Sonarr: {sonarrEpisodes.length} eps, {sonarrQueue.length} downloading
-              </Text>
-            </View>
-          )}
-
         </View>
 
         <View style={[styles.sectionsContainer, { paddingLeft: spacing }]}>
           {/* Season Selector */}
           {isSeriesOrEpisode && (
             <View style={styles.section}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonScroll}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seasonScroll} focusable={false}>
                 {enrichedSeasons.map(renderSeasonTab)}
               </ScrollView>
             </View>
@@ -1187,11 +1218,11 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 50 },
   heroContent: { paddingHorizontal: 48, marginBottom: 40 },
-  seriesTitle: { color: '#FFD700', fontSize: 18, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
-  heroTitle: { color: '#fff', fontSize: 48, fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  seriesTitle: { color: '#FFD700', fontSize: 24, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+  heroTitle: { color: '#fff', fontSize: 56, fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  metaText: { color: 'rgba(255,255,255,0.8)', fontSize: 18, fontWeight: '600', marginRight: 10 },
-  overview: { color: 'rgba(255,255,255,0.7)', fontSize: 16, lineHeight: 24, maxWidth: 700, marginBottom: 30 },
+  metaText: { color: 'rgba(255,255,255,0.8)', fontSize: 22, fontWeight: '600', marginRight: 10 },
+  overview: { color: 'rgba(255,255,255,0.7)', fontSize: 20, lineHeight: 30, maxWidth: 700, marginBottom: 30 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
   playButton: { minWidth: 160 },
   downloadingButton: { minWidth: 160, opacity: 0.8 },
@@ -1204,7 +1235,7 @@ const styles = StyleSheet.create({
   seasonTabWrapper: { marginRight: 12 },
   seasonTab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
   seasonTabActive: { borderColor: 'rgba(255, 215, 0, 0.6)', shadowColor: 'rgba(255, 215, 0, 0.8)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16 },
-  seasonTabText: { color: 'rgba(255,255,255,0.6)', fontSize: 16, fontWeight: '600' },
+  seasonTabText: { color: 'rgba(255,255,255,0.6)', fontSize: 20, fontWeight: '600' },
   seasonTabTextActive: { color: '#fff', fontWeight: '700' },
   seasonTabMissing: { opacity: 0.5 },
   seasonTabTextMissing: { color: 'rgba(255,255,255,0.5)' },
@@ -1218,8 +1249,8 @@ const styles = StyleSheet.create({
   episodeThumbnailMissing: { opacity: 0.5 },
   episodePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   episodeCardContent: { paddingHorizontal: 4 },
-  episodeCardTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  episodeCardOverview: { color: 'rgba(255,255,255,0.5)', fontSize: 13 },
+  episodeCardTitle: { color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 4 },
+  episodeCardOverview: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
   textMissing: { color: 'rgba(255,255,255,0.4)' },
   progressContainer: { marginTop: 20, maxWidth: 500 },
   progressBar: { height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, marginBottom: 8, overflow: 'hidden' },
@@ -1234,32 +1265,70 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 2,
   },
-  episodeDownloadOverlay: {
+  playButtonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButtonCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  episodeDownloadProgressBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    backdropFilter: 'blur(30px) saturate(150%)',
-    padding: 8,
-    alignItems: 'center',
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
-  episodeProgressBar: {
-    width: '100%',
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  episodeProgressFill: {
+  episodeDownloadProgressFill: {
     height: '100%',
     backgroundColor: '#4caf50',
   },
-  episodeDownloadText: {
-    color: '#4caf50',
-    fontSize: 11,
+  downloadProgressSection: {
+    marginTop: 20,
+    maxWidth: 700,
+    width: '100%',
+  },
+  downloadProgressInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  downloadProgressTitle: {
+    fontSize: 20,
+    color: '#fff',
     fontWeight: '600',
+  },
+  downloadProgressStats: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  downloadProgressBarContainer: {
+    height: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  downloadProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#4caf50',
+    borderRadius: 6,
   },
   sonarrBadge: {
     position: 'absolute',
@@ -1274,7 +1343,7 @@ const styles = StyleSheet.create({
   },
   sonarrStatusText: {
     color: '#4caf50',
-    fontSize: 11,
+    fontSize: 14,
     marginTop: 4,
     fontWeight: '600',
   },
@@ -1293,7 +1362,7 @@ const styles = StyleSheet.create({
   },
   ratingText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '700',
   },
   scoreContainer: {
@@ -1304,23 +1373,23 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
   },
   imdbLabel: {
     color: '#FFD700',
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '700',
     marginRight: 4,
   },
   endsAtText: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
+    fontSize: 18,
     marginLeft: 10,
   },
   tagline: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 18,
+    fontSize: 22,
     fontStyle: 'italic',
     marginBottom: 12,
   },
@@ -1340,7 +1409,7 @@ const styles = StyleSheet.create({
   },
   mediaInfoLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 15,
+    fontSize: 18,
   },
   detailsGrid: {
     marginTop: 24,
@@ -1355,13 +1424,13 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
+    fontSize: 18,
     width: 120,
     fontWeight: '600',
   },
   detailValue: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 15,
+    fontSize: 18,
     flex: 1,
   },
   debugContainer: {

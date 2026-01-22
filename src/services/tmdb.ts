@@ -5,6 +5,7 @@ import {
   TMDBMovieDetails,
   TMDBTVDetails,
   TMDBSeasonDetails,
+  TMDBImagesResponse,
 } from '../types';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -166,6 +167,30 @@ export class TMDBService {
 
     if (!response.ok) {
       throw new Error(`Failed to get season details: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getTVImages(tvId: number | string): Promise<{ backdrops: { file_path: string; aspect_ratio: number }[] }> {
+    const params = this.addApiKey(new URLSearchParams());
+
+    const response = await fetch(`${BASE_URL}/tv/${tvId}/images?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get TV images: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getMovieImages(movieId: number | string): Promise<{ backdrops: { file_path: string; aspect_ratio: number }[] }> {
+    const params = this.addApiKey(new URLSearchParams());
+
+    const response = await fetch(`${BASE_URL}/movie/${movieId}/images?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to get movie images: ${response.status}`);
     }
 
     return response.json();

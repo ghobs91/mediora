@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Video, { OnProgressData, VideoRef, SelectedTrackType } from 'react-native-video';
+import Video, { OnProgressData, VideoRef, SelectedTrackType, TextTrackType } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
@@ -70,6 +70,8 @@ export function PlayerScreen() {
   const hasRestoredPosition = useRef(false);
   const savedPositionToRestore = useRef<number>(0);
   const seekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoLoadedRef = useRef(false);
 
   const loadPlaybackInfo = useCallback(async () => {
     if (!jellyfin) return;
@@ -90,11 +92,13 @@ export function PlayerScreen() {
       setItem(itemDetails);
       setIsFavorite(itemDetails.UserData?.IsFavorite || false);
 
-      // Always start with HLS for best compatibility on iOS/tvOS
+      // Start with HLS for transcoding support (handles AV1, HEVC, etc.)
+      // Direct stream only works if codecs are natively supported
       if (info.MediaSources.length > 0) {
         const container = info.MediaSources[0].Container?.toLowerCase();
-        console.log('[PlayerScreen] Container type:', container);
-        console.log('[PlayerScreen] Starting with HLS streaming');
+        const videoCodec = info.MediaSources[0].MediaStreams.find(s => s.Type === 'Video')?.Codec;
+        console.log('[PlayerScreen] Container:', container, 'Video codec:', videoCodec);
+        console.log('[PlayerScreen] Starting with HLS streaming for transcoding support');
         setStreamAttempt('hls');
       }
 
@@ -135,11 +139,20 @@ export function PlayerScreen() {
       }
 
       if (info.MediaSources.length > 0) {
+        // For transcoded content (HLS), always start from 0 to avoid slow seeking during transcode
+        // We'll seek client-side after playback starts
+        const videoCodec = info.MediaSources[0].MediaStreams.find(s => s.Type === 'Video')?.Codec;
+        const needsTranscoding = videoCodec === 'av1' || videoCodec === 'hevc' || videoCodec === 'vp9';
+        const reportPosition = needsTranscoding ? 0 : startPosTicks;
+        
+        console.log(`[PlayerScreen] Video codec: ${videoCodec}, needs transcoding: ${needsTranscoding}`);
+        console.log(`[PlayerScreen] Reporting playback start at position ${reportPosition / 10000000}s`);
+        
         // Report playback start with the correct position
         await jellyfin.reportPlaybackStart(
           itemId,
           info.MediaSources[0].Id,
-          startPositionTicks,
+          reportPosition,
           'DirectStream', // Start with DirectStream, will be updated based on actual method
         );
       }
@@ -217,8 +230,7 @@ export function PlayerScreen() {
         showControlsWithTimeout();
         break;
       case 'rewind':
-      case 'left':
-        console.log('[PlayerScreen] Rewind/Left button pressed, current time:', currentTime);
+        console.log('[PlayerScreen] Rewind button pressed, current time:', currentTime);
         if (videoRef.current) {
           const newTime = Math.max(0, currentTime - 10);
           videoRef.current.seek(newTime);
@@ -227,8 +239,7 @@ export function PlayerScreen() {
         showControlsWithTimeout();
         break;
       case 'fastForward':
-      case 'right':
-        console.log('[PlayerScreen] Fast Forward/Right button pressed, current time:', currentTime);
+        console.log('[PlayerScreen] Fast Forward button pressed, current time:', currentTime);
         if (videoRef.current) {
           const newTime = Math.min(duration, currentTime + 10);
           videoRef.current.seek(newTime);
@@ -243,7 +254,10 @@ export function PlayerScreen() {
         break;
       case 'up':
       case 'down':
-        console.log('[PlayerScreen] Up/Down button pressed');
+      case 'left':
+      case 'right':
+        console.log('[PlayerScreen] Directional button pressed:', eventType);
+        // Let the focus system handle left/right/up/down for navigation
         showControlsWithTimeout();
         break;
       case 'menu':
@@ -257,6 +271,19 @@ export function PlayerScreen() {
 
   useEffect(() => {
     console.log('[PlayerScreen] Component mounted, Platform.isTV:', Platform.isTV, 'Platform.OS:', Platform.OS);
+    
+    // Cleanup on unmount
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+      if (controlsTimeout.current) {
+        clearTimeout(controlsTimeout.current);
+      }
+      if (seekTimeoutRef.current) {
+        clearTimeout(seekTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Log stream attempt changes
@@ -514,40 +541,100 @@ export function PlayerScreen() {
     return `Ends at ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
   };
 
-  const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
+  // Memoize subtitle tracks to prevent array recreation on every render
+  const subtitleTracks = useMemo(() => {
+    return playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
+  }, [playbackInfo?.MediaSources]);
+
   const hasSubtitles = subtitleTracks.length > 0;
   const currentSubtitleTrack = subtitleTracks.find(track => track.Index === selectedSubtitleTrack);
   const castList = item?.People || [];
   const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-  // Build text tracks for external subtitles
-  const textTracks = subtitleTracks.map(track => {
-    // Get subtitle URL - DeliveryUrl should have full URL, otherwise build it
-    let subtitleUrl = track.DeliveryUrl || '';
-    if (!subtitleUrl && jellyfin) {
-      subtitleUrl = jellyfin.getSubtitleUrl(
+  // Build text tracks for external subtitles - memoized to prevent rebuilding on every render
+  const textTracks = useMemo(() => {
+    if (!playbackInfo?.MediaSources[0] || !jellyfin) return [];
+    
+    const tracks = subtitleTracks.map(track => {
+      // Always build subtitle URL ourselves for consistent format
+      // DeliveryUrl from Jellyfin may not include necessary auth parameters
+      const subtitleUrl = jellyfin.getSubtitleUrl(
         itemId,
-        playbackInfo?.MediaSources[0]?.Id || '',
+        playbackInfo.MediaSources[0].Id,
         track.Index,
         'vtt' // Request WebVTT format for better compatibility
       );
+
+      // Determine the correct language code - ensure it's a valid ISO 639-1 code
+      let languageCode = track.Language || 'und';
+      // Truncate to 2 characters if longer (some languages come as 3-letter codes)
+      if (languageCode.length > 2 && languageCode !== 'und') {
+        languageCode = languageCode.substring(0, 2);
+      }
+
+      return {
+        title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
+        language: languageCode as any, // Cast needed as react-native-video expects ISO639_1 type
+        type: TextTrackType.VTT,
+        uri: subtitleUrl,
+      };
+    });
+    
+    // Only log when tracks are actually built
+    if (tracks.length > 0) {
+      console.log('[PlayerScreen] Built text tracks:', tracks.map(t => ({ title: t.title, uri: t.uri })));
+    }
+    
+    return tracks;
+  }, [subtitleTracks, jellyfin, itemId, playbackInfo?.MediaSources]);
+
+  // Generate stream URLs - memoized to prevent recalculation on every render
+  const { videoUrl, streamType } = useMemo(() => {
+    if (!playbackInfo?.MediaSources[0] || !jellyfin) {
+      return { videoUrl: '', streamType: '' };
     }
 
-    // Ensure URL has server prefix if it's a relative path
-    if (subtitleUrl && subtitleUrl.startsWith('/') && jellyfin) {
-      const serverUrl = (jellyfin as any).serverUrl || '';
-      subtitleUrl = `${serverUrl}${subtitleUrl}`;
+    const mediaSourceId = playbackInfo.MediaSources[0].Id;
+
+    // DEBUG: Test with a known working public HLS stream
+    const useTestStream = false; // Set to true to test with public HLS
+    const testStreamUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'; // Big Buck Bunny
+
+    // Use external text tracks for subtitles on all platforms
+    // Burning subtitles into HLS stream requires proper server transcoding which may not work
+    // External WebVTT tracks are more reliable with react-native-video
+
+    if (useTestStream) {
+      return {
+        videoUrl: testStreamUrl,
+        streamType: 'Test HLS Stream',
+      };
     }
 
-    return {
-      title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
-      language: track.Language || 'und',
-      type: 'text/vtt' as const,
-      uri: subtitleUrl,
-    };
-  });
-
-  console.log('[PlayerScreen] Text tracks:', textTracks.map(t => ({ title: t.title, uri: t.uri })));
+    switch (streamAttempt) {
+      case 'direct':
+        return {
+          videoUrl: jellyfin.getStreamUrl(itemId, mediaSourceId),
+          streamType: 'Direct Stream',
+        };
+      case 'hls':
+        // Don't burn subtitles into HLS - use external text tracks instead
+        return {
+          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId),
+          streamType: 'HLS (master.m3u8)',
+        };
+      case 'transcoded':
+        return {
+          videoUrl: jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId),
+          streamType: 'Transcoded (720p)',
+        };
+      default:
+        return {
+          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId),
+          streamType: 'HLS (master.m3u8)',
+        };
+    }
+  }, [playbackInfo, streamAttempt, jellyfin, itemId]);
 
   // Map Jellyfin stream index to textTracks array index
   const getTextTrackIndex = (jellyfinIndex: number | undefined): number | undefined => {
@@ -591,36 +678,10 @@ export function PlayerScreen() {
     );
   }
 
-  // Generate stream URLs
-  const mediaSourceId = playbackInfo.MediaSources[0].Id;
-
-  let videoUrl: string;
-  let streamType: string;
-
-  // DEBUG: Test with a known working public HLS stream
-  const useTestStream = false; // Set to true to test with public HLS
-  const testStreamUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'; // Big Buck Bunny
-
-  if (useTestStream) {
-    videoUrl = testStreamUrl;
-    streamType = 'Test HLS Stream';
-    console.log('[PlayerScreen] Using test stream for debugging');
-  } else {
-    switch (streamAttempt) {
-      case 'direct':
-        videoUrl = jellyfin.getStreamUrl(itemId, mediaSourceId);
-        streamType = 'Direct Stream';
-        break;
-      case 'hls':
-        videoUrl = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
-        streamType = 'HLS (master.m3u8)';
-        break;
-      case 'transcoded':
-        videoUrl = jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
-        streamType = 'Transcoded (720p)';
-        break;
-    }
-  }
+  // Get the correct textTracks array index from the Jellyfin stream index
+  const selectedTextTrackArrayIndex = getTextTrackIndex(selectedSubtitleTrack);
+  // Use external text tracks for all stream types when subtitles are enabled
+  const useExternalTextTracks = subtitlesEnabled && selectedTextTrackArrayIndex !== undefined && textTracks[selectedTextTrackArrayIndex];
 
   return (
     <TouchableOpacity
@@ -636,13 +697,14 @@ export function PlayerScreen() {
           uri: videoUrl,
           type: streamAttempt === 'hls' ? 'm3u8' : undefined,
         }}
-        textTracks={subtitlesEnabled && selectedSubtitleTrack !== undefined && textTracks[selectedSubtitleTrack] ? [textTracks[selectedSubtitleTrack]] : []}
-        selectedTextTrack={subtitlesEnabled && selectedSubtitleTrack !== undefined ? {
-          type: SelectedTrackType.INDEX,
-          value: 0,
-        } : {
-          type: SelectedTrackType.DISABLED,
-        }}
+        // TEMP: Disable text tracks to diagnose loading issue
+        // textTracks={textTracks}
+        // selectedTextTrack={useExternalTextTracks ? {
+        //   type: SelectedTrackType.INDEX,
+        //   value: selectedTextTrackArrayIndex!,
+        // } : {
+        //   type: SelectedTrackType.DISABLED,
+        // }}
         style={styles.video}
         resizeMode="contain"
         paused={!isPlaying}
@@ -652,9 +714,54 @@ export function PlayerScreen() {
         onLoadStart={() => {
           console.log('[PlayerScreen] Video load started, URL:', videoUrl);
           setIsBuffering(true);
+          videoLoadedRef.current = false;
+          
+          // Validate URL is accessible before waiting for timeout
+          fetch(videoUrl, { method: 'HEAD' })
+            .then(response => {
+              console.log('[PlayerScreen] URL validation - Status:', response.status, 'Content-Type:', response.headers.get('content-type'));
+              if (!response.ok) {
+                console.error('[PlayerScreen] URL returned error status:', response.status, response.statusText);
+              }
+            })
+            .catch(err => {
+              console.error('[PlayerScreen] URL validation failed:', err.message);
+            });
+          
+          // Clear any existing timeout
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+          }
+          
+          // Set a timeout to fallback if video doesn't load within 30 seconds
+          // AV1 transcoding can take 15-20s to generate first HLS segment
+          loadTimeoutRef.current = setTimeout(() => {
+            if (!videoLoadedRef.current) {
+              console.log('[PlayerScreen] Load timeout - video failed to load within 30s');
+              console.log('[PlayerScreen] Current stream attempt:', streamAttempt);
+              
+              // Trigger fallback
+              if (streamAttempt === 'direct') {
+                console.log('[PlayerScreen] Timeout: switching from direct to HLS...');
+                setStreamAttempt('hls');
+              } else if (streamAttempt === 'hls') {
+                console.log('[PlayerScreen] Timeout: switching from HLS to transcoded...');
+                setStreamAttempt('transcoded');
+              } else {
+                console.log('[PlayerScreen] All stream methods timed out');
+                setError('Video failed to load. Transcoding may have failed on server.');
+              }
+            }
+          }, 30000);
         }}
         onLoad={(data) => {
           console.log('[PlayerScreen] Video loaded, duration:', data.duration);
+          videoLoadedRef.current = true;
+          // Clear timeout since video loaded successfully
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = null;
+          }
           handleLoad(data);
           setIsBuffering(false);
           // Start auto-hide timer for controls
@@ -662,6 +769,12 @@ export function PlayerScreen() {
         }}
         onReadyForDisplay={() => {
           console.log('[PlayerScreen] Video ready for display');
+          videoLoadedRef.current = true;
+          // Clear timeout since video is ready
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = null;
+          }
           setIsBuffering(false);
           // Attempt to restore position as soon as video is ready
           attemptPositionRestore();
@@ -757,32 +870,34 @@ export function PlayerScreen() {
 
       {showControls && (
         <Animated.View
+          focusable={false}
           style={[styles.controlsOverlay, { opacity: controlsOpacity }]}>
           {/* Top Bar */}
-          <View style={[styles.topBar, { paddingTop: Math.max(insets.top, 20), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
-            <View style={styles.topBarLeft}>
-              <TouchableOpacity onPress={handleBack} style={styles.topIconButton}>
+          <View focusable={false} style={[styles.topBar, { paddingTop: Math.max(insets.top, 20), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
+            <View focusable={false} style={styles.topBarLeft}>
+              <TouchableOpacity onPress={handleBack} style={styles.topIconButton} tvParallaxProperties={undefined}>
                 <Icon name="arrow-back" size={24} color="#fff" />
               </TouchableOpacity>
               <Text style={styles.topTitle}>{getEnrichedTitle()}</Text>
             </View>
-            <View style={styles.topBarRight}>
+            <View focusable={false} style={styles.topBarRight}>
               <TouchableOpacity
                 style={styles.topIconButton}
+                tvParallaxProperties={undefined}
                 onPress={() => setShowPeople(true)}>
                 <Icon name="people-outline" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.topIconButton}>
+              <TouchableOpacity style={styles.topIconButton} tvParallaxProperties={undefined}>
                 <Icon name="tv-outline" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Bottom Container */}
-          <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 24), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
+          <View focusable={false} style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 24), paddingLeft: Math.max(insets.left, 24), paddingRight: Math.max(insets.right, 24) }]}>
             {/* Control Row */}
-            <View style={styles.controlRow}>
-              <View style={styles.controlGroupLeft}>
+            <View focusable={false} style={styles.controlRow}>
+              <View focusable={false} style={styles.controlGroupLeft}>
                 <ControlButton
                   icon="play-skip-back-outline"
                   onPress={handlePrevious}
@@ -818,33 +933,21 @@ export function PlayerScreen() {
                 <Text style={styles.endsAtText}>{getEndsAt()}</Text>
               </View>
 
-              <View style={styles.controlGroupRight}>
-                <TouchableOpacity
-                  style={styles.bottomIconButton}
-                  onPress={handleToggleFavorite}>
-                  <Icon
-                    name={isFavorite ? "heart" : "heart-outline"}
-                    size={22}
-                    color={isFavorite ? "#e50914" : "#fff"}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
+              <View focusable={false} style={styles.controlGroupRight}>
+                <IconButton
+                  icon={isFavorite ? "heart" : "heart-outline"}
+                  onPress={handleToggleFavorite}
+                  color={isFavorite ? "#e50914" : "#fff"}
+                />
+                <IconButton
+                  icon={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"}
                   onPress={handleToggleSubtitles}
-                  disabled={!hasSubtitles}>
-                  <Icon
-                    name={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"}
-                    size={22}
-                    color={subtitlesEnabled ? "#e50914" : "#fff"}
-                  />
-                  {subtitlesEnabled && currentSubtitleTrack && (
-                    <Text style={styles.subtitleLabel}>
-                      {currentSubtitleTrack.Language?.substring(0, 2).toUpperCase() || 'CC'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.bottomIconButton, !hasSubtitles && styles.disabledButton]}
+                  disabled={!hasSubtitles}
+                  color={subtitlesEnabled ? "#e50914" : "#fff"}
+                  badge={subtitlesEnabled && currentSubtitleTrack ? (currentSubtitleTrack.Language?.substring(0, 2).toUpperCase() || 'CC') : undefined}
+                />
+                <IconButton
+                  icon="list-outline"
                   onPress={() => {
                     console.log('[PlayerScreen] Opening subtitle selection, available tracks:', subtitleTracks.map(t => ({
                       index: t.Index,
@@ -854,74 +957,44 @@ export function PlayerScreen() {
                     })));
                     setShowSubtitles(true);
                   }}
-                  disabled={!hasSubtitles}>
-                  <Icon name="list-outline" size={22} color="#fff" />
-                </TouchableOpacity>
-                <View>
-                  <TouchableOpacity
-                    style={styles.bottomIconButton}
-                    onPress={() => {
-                      setShowVolumeSlider(!showVolumeSlider);
-                      showControlsWithTimeout();
-                    }}>
-                    <Icon
-                      name={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
-                      size={22}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
-                  {showVolumeSlider && showControls && (
-                    <View style={styles.volumeSliderPopup}>
-                      <TouchableOpacity
-                        style={styles.volumeIconTop}
-                        onPress={() => handleVolumeChange(1)}>
-                        <Icon name="volume-high" size={18} color="#fff" />
-                      </TouchableOpacity>
-                      <View style={styles.volumeSliderContainer}>
-                        <View style={styles.volumeSliderTrack}>
-                          <View style={[styles.volumeSliderFill, { height: `${volume * 100}%` }]} />
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.volumeIconBottom}
-                        onPress={() => handleVolumeChange(0)}>
-                        <Icon name="volume-mute" size={18} color="#fff" />
-                      </TouchableOpacity>
-                      <Text style={styles.volumePercentage}>{Math.round(volume * 100)}%</Text>
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.bottomIconButton}
-                  onPress={() => setShowSettings(true)}>
-                  <Icon name="settings-outline" size={22} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.bottomIconButton}
-                  onPress={() => setIsPiP(!isPiP)}>
-                  <Icon name="copy-outline" size={22} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.bottomIconButton}
-                  onPress={() => setIsFullscreen(!isFullscreen)}>
-                  <Icon name="expand-outline" size={22} color="#fff" />
-                </TouchableOpacity>
+                  disabled={!hasSubtitles}
+                />
+                <IconButton
+                  icon={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
+                  onPress={() => {
+                    setShowVolumeSlider(!showVolumeSlider);
+                    showControlsWithTimeout();
+                  }}
+                />
+                <IconButton
+                  icon="settings-outline"
+                  onPress={() => setShowSettings(true)}
+                />
+                <IconButton
+                  icon="copy-outline"
+                  onPress={() => setIsPiP(!isPiP)}
+                />
+                <IconButton
+                  icon="expand-outline"
+                  onPress={() => setIsFullscreen(!isFullscreen)}
+                />
               </View>
             </View>
 
             {/* Progress Bar Container */}
-            <View style={styles.progressSection}>
+            <View focusable={false} style={styles.progressSection}>
               <Text style={styles.timeLabel}>{formatTime(currentTime)}</Text>
               <TouchableOpacity
                 activeOpacity={1}
                 onPress={handleProgressPress}
                 style={styles.progressBarContainer}
+                tvParallaxProperties={undefined}
                 onLayout={(e) => setProgressBarWidth(e.nativeEvent.layout.width)}>
                 <View style={styles.progressBar}>
                   <View
                     style={[
                       styles.progressFill,
-                      { width: (duration > 0 ? (currentTime / duration) * 100 : 0) + '%' },
+                      { width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` as any },
                     ]}
                   />
                 </View>
@@ -929,6 +1002,28 @@ export function PlayerScreen() {
               <Text style={styles.timeLabel}>{formatRemainingTime(currentTime)}</Text>
             </View>
           </View>
+
+          {/* Volume Slider Popup */}
+          {showVolumeSlider && showControls && (
+            <View style={styles.volumeSliderPopup}>
+              <TouchableOpacity
+                style={styles.volumeIconTop}
+                onPress={() => handleVolumeChange(1)}>
+                <Icon name="volume-high" size={18} color="#fff" />
+              </TouchableOpacity>
+              <View style={styles.volumeSliderContainer}>
+                <View style={styles.volumeSliderTrack}>
+                  <View style={[styles.volumeSliderFill, { height: `${volume * 100}%` }]} />
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.volumeIconBottom}
+                onPress={() => handleVolumeChange(0)}>
+                <Icon name="volume-mute" size={18} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.volumePercentage}>{Math.round(volume * 100)}%</Text>
+            </View>
+          )}
         </Animated.View>
       )}
 
@@ -1091,6 +1186,68 @@ function ModalItem({ text, isActive, onPress, hasTVPreferredFocus = false }: Mod
           ]}>
           {text}
         </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+
+interface IconButtonProps {
+  icon: string;
+  onPress: () => void;
+  disabled?: boolean;
+  color?: string;
+  badge?: string;
+}
+
+function IconButton({
+  icon,
+  onPress,
+  disabled = false,
+  color = '#fff',
+  badge,
+}: IconButtonProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const scaleValue = useRef(new Animated.Value(1)).current;
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    Animated.spring(scaleValue, {
+      toValue: 1.3,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.bottomIconButton, disabled && styles.disabledButton]}
+      tvParallaxProperties={undefined}
+      accessible={true}
+      accessibilityRole="button">
+      <Animated.View
+        style={{
+          transform: [{ scale: scaleValue }],
+        }}>
+        <Icon name={icon} size={22} color={color} />
+        {badge && (
+          <Text style={styles.subtitleLabel}>
+            {badge}
+          </Text>
+        )}
       </Animated.View>
     </TouchableOpacity>
   );
@@ -1413,9 +1570,8 @@ const styles = StyleSheet.create({
   },
   volumeSliderPopup: {
     position: 'absolute',
-    bottom: 40,
-    left: '50%',
-    marginLeft: -30,
+    bottom: 100,
+    right: 150,
     width: 60,
     height: 200,
     backgroundColor: 'rgba(30, 30, 30, 0.95)',

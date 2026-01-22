@@ -14,6 +14,7 @@ import { MediaRow, LoadingScreen } from '../components';
 import { JellyfinItem } from '../types';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
+import { TMDBService } from '../services';
 
 export function HomeScreen() {
   const navigation = useNavigation();
@@ -27,6 +28,7 @@ export function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seriesBackdrops, setSeriesBackdrops] = useState<Map<string, string>>(new Map());
 
   const dynamicStyles = {
     contentContainer: {
@@ -114,15 +116,23 @@ export function HomeScreen() {
         }
       });
 
-      setResumeItems(finalResumeItems.slice(0, 15));
+      const finalResumeSlice = finalResumeItems.slice(0, 15);
+      setResumeItems(finalResumeSlice);
       setNextUpItems([]);
 
       // Separate movies and episodes
       const movies = latest.filter(item => item.Type === 'Movie');
       const episodes = latest.filter(item => item.Type === 'Episode' || item.Type === 'Series');
+      const episodesSlice = episodes.slice(0, 10);
 
-      setLatestMovies(movies.slice(0, 10));
-      setLatestShows(episodes.slice(0, 10));
+      const moviesSlice = movies.slice(0, 10);
+      setLatestMovies(moviesSlice);
+      setLatestShows(episodesSlice);
+      
+      // Fetch TMDB backdrops in background (non-blocking)
+      setTimeout(() => {
+        fetchMediaBackdrops([...finalResumeSlice, ...episodesSlice, ...moviesSlice]);
+      }, 100);
     } catch (err) {
       console.error('Failed to load home data:', err);
       if (!isCancelled) {
@@ -165,6 +175,115 @@ export function HomeScreen() {
   const getImageUrl = (item: JellyfinItem): string | null => {
     if (!jellyfin) return null;
     return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+  };
+
+  const getImageUrlWithBackdrop = (item: JellyfinItem): string | null => {
+    if (!jellyfin) return null;
+    
+    // Check if we have a TMDB backdrop for this item (Series or Movie)
+    if ((item.Type === 'Series' || item.Type === 'Movie') && seriesBackdrops.has(item.Id)) {
+      const backdropUrl = seriesBackdrops.get(item.Id);
+      return backdropUrl || null;
+    }
+    
+    // Fall back to Jellyfin image
+    return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+  };
+
+  const fetchMediaBackdrops = async (items: JellyfinItem[]) => {
+    if (!jellyfin) return;
+    
+    const tmdb = new TMDBService();
+    const newBackdrops = new Map<string, string>();
+    
+    // Get unique series IDs and movie IDs
+    const seriesIds = new Set<string>();
+    const movieIds = new Set<string>();
+    
+    items.forEach(item => {
+      if (item.Type === 'Episode' && item.SeriesId) {
+        seriesIds.add(item.SeriesId);
+      } else if (item.Type === 'Movie') {
+        movieIds.add(item.Id);
+      }
+    });
+    
+    // Helper function to process items in batches to avoid overwhelming the network
+    const processBatch = async (ids: string[], processFn: (id: string) => Promise<void>) => {
+      const batchSize = 3; // Process 3 at a time
+      const batches = [];
+      const idArray = Array.from(ids);
+      
+      for (let i = 0; i < idArray.length; i += batchSize) {
+        batches.push(idArray.slice(i, i + batchSize));
+      }
+      
+      for (const batch of batches) {
+        await Promise.all(batch.map(processFn));
+        // Small delay between batches
+        if (batches.indexOf(batch) < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+    };
+    
+    // Process series
+    await processBatch(seriesIds, async (seriesId) => {
+      try {
+        const seriesItem = await jellyfin.getItem(seriesId);
+        const tmdbId = seriesItem?.ProviderIds?.Tmdb;
+        
+        if (tmdbId) {
+          const images = await tmdb.getTVImages(tmdbId);
+          if (images.backdrops && images.backdrops.length > 0) {
+            const backdrop = images.backdrops.find(b => b.aspect_ratio >= 1.7 && b.aspect_ratio <= 1.8) || images.backdrops[0];
+            const backdropUrl = TMDBService.getBackdropUrl(backdrop.file_path, 'w780');
+            if (backdropUrl) {
+              newBackdrops.set(seriesId, backdropUrl);
+              return;
+            }
+          }
+        }
+        
+        // Fallback to Jellyfin backdrop
+        if (seriesItem?.BackdropImageTags && seriesItem.BackdropImageTags.length > 0) {
+          const jellyfinBackdrop = jellyfin.getImageUrl(seriesId, 'Backdrop', { maxWidth: 780 });
+          newBackdrops.set(seriesId, jellyfinBackdrop);
+        }
+      } catch (error) {
+        // Silently fail for individual items
+      }
+    });
+    
+    // Process movies
+    await processBatch(movieIds, async (movieId) => {
+      try {
+        const movieItem = await jellyfin.getItem(movieId);
+        const tmdbId = movieItem?.ProviderIds?.Tmdb;
+        
+        if (tmdbId) {
+          const images = await tmdb.getMovieImages(tmdbId);
+          if (images.backdrops && images.backdrops.length > 0) {
+            const backdrop = images.backdrops.find(b => b.aspect_ratio >= 1.7 && b.aspect_ratio <= 1.8) || images.backdrops[0];
+            const backdropUrl = TMDBService.getBackdropUrl(backdrop.file_path, 'w780');
+            if (backdropUrl) {
+              newBackdrops.set(movieId, backdropUrl);
+              return;
+            }
+          }
+        }
+        
+        // Fallback to Jellyfin backdrop
+        if (movieItem?.BackdropImageTags && movieItem.BackdropImageTags.length > 0) {
+          const jellyfinBackdrop = jellyfin.getImageUrl(movieId, 'Backdrop', { maxWidth: 780 });
+          newBackdrops.set(movieId, jellyfinBackdrop);
+        }
+      } catch (error) {
+        // Silently fail for individual items
+      }
+    });
+    
+    setSeriesBackdrops(newBackdrops);
   };
 
   const handleRemoveFromContinueWatching = async (item: JellyfinItem) => {
@@ -255,6 +374,7 @@ export function HomeScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={dynamicStyles.contentContainer}
+      focusable={false}
       refreshControl={
         Platform.select({
           ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
@@ -288,7 +408,9 @@ export function HomeScreen() {
         onItemRemove={handleRemoveFromContinueWatching}
         onItemMarkWatched={handleMarkAsWatched}
         onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrl}
+        getImageUrl={getImageUrlWithBackdrop}
+        landscape={true}
+        useSeriesThumbnail={true}
       />
 
       <MediaRow
@@ -296,7 +418,9 @@ export function HomeScreen() {
         items={latestShows}
         onItemPress={handleItemPress}
         onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrl}
+        getImageUrl={getImageUrlWithBackdrop}
+        landscape={true}
+        useSeriesThumbnail={true}
       />
 
       <MediaRow
@@ -304,7 +428,8 @@ export function HomeScreen() {
         items={latestMovies}
         onItemPress={handleItemPress}
         onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrl}
+        getImageUrl={getImageUrlWithBackdrop}
+        landscape={true}
       />
     </ScrollView>
   );

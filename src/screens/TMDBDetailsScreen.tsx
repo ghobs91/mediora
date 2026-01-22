@@ -570,7 +570,7 @@ export function TMDBDetailsScreen() {
   const tvDetails = mediaType === 'tv' ? (details as TMDBTVDetails) : null;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} focusable={false}>
       {/* Backdrop */}
       {backdropUrl && (
         <Image
@@ -639,6 +639,7 @@ export function TMDBDetailsScreen() {
                   onPress={handlePlayFromJellyfin}
                   size="large"
                   variant="primary"
+                  hasTVPreferredFocus={true}
                 />
               )}
               {canRequest && (
@@ -646,8 +647,8 @@ export function TMDBDetailsScreen() {
                   title={
                     alreadyExists
                       ? mediaType === 'movie'
-                        ? 'Already in Radarr'
-                        : 'Already in Sonarr'
+                        ? 'Added to Radarr'
+                        : 'Added to Sonarr'
                       : mediaType === 'movie'
                         ? 'Request Movie'
                         : 'Request TV Show'
@@ -659,30 +660,9 @@ export function TMDBDetailsScreen() {
                   loading={isRequesting || loadingProfiles}
                   size="large"
                   variant={jellyfinItem ? 'secondary' : (alreadyExists ? 'secondary' : 'primary')}
+                  hasTVPreferredFocus={!jellyfinItem}
                 />
               )}
-              {/* Show movie download progress */}
-              {mediaType === 'movie' && alreadyExists && (() => {
-                const movieProgress = getMovieProgress();
-                if (movieProgress) {
-                  const progress = calculateProgress(movieProgress);
-                  return (
-                    <View style={styles.downloadProgressContainer}>
-                      <Text style={styles.downloadProgressTitle}>Downloading Movie</Text>
-                      <Text style={styles.downloadProgressDetails}>
-                        {progress}% • {movieProgress.timeleft || 'calculating...'}
-                      </Text>
-                      <View style={styles.progressBar}>
-                        <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
-                      </View>
-                      <Text style={styles.downloadProgressStatus}>
-                        {movieProgress.status} • {movieProgress.downloadClient}
-                      </Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
               {!canRequest && !jellyfinItem && (
                 <View>
                   <Text style={styles.configureText}>
@@ -692,6 +672,28 @@ export function TMDBDetailsScreen() {
                 </View>
               )}
             </View>
+
+            {/* Show movie download progress */}
+            {mediaType === 'movie' && alreadyExists && (() => {
+              const movieProgress = getMovieProgress();
+              if (movieProgress) {
+                const progress = calculateProgress(movieProgress);
+                return (
+                  <View style={styles.downloadProgressSection}>
+                    <View style={styles.downloadProgressInfo}>
+                      <Text style={styles.downloadProgressTitle}>Downloading</Text>
+                      <Text style={styles.downloadProgressStats}>
+                        {progress}% • {movieProgress.timeleft || 'calculating...'} remaining
+                      </Text>
+                    </View>
+                    <View style={styles.downloadProgressBarContainer}>
+                      <View style={[styles.downloadProgressBarFill, { width: `${progress}%` }]} />
+                    </View>
+                  </View>
+                );
+              }
+              return null;
+            })()}
           </View>
         </View>
 
@@ -744,6 +746,7 @@ export function TMDBDetailsScreen() {
               showsHorizontalScrollIndicator={false}
               style={styles.seasonTabs}
               contentContainerStyle={styles.seasonTabsContent}
+              focusable={false}
             >
               {tvDetails.seasons
                 .filter(season => season.season_number > 0)
@@ -1054,29 +1057,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  downloadProgressContainer: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#2196f3',
+  downloadProgressSection: {
+    marginTop: 20,
+    maxWidth: 700,
+    width: '100%',
+  },
+  downloadProgressInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   downloadProgressTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
     color: '#fff',
-    marginBottom: 4,
+    fontWeight: '600',
   },
-  downloadProgressDetails: {
-    fontSize: 14,
-    color: '#aaa',
-    marginBottom: 8,
+  downloadProgressStats: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.7)',
   },
-  downloadProgressStatus: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
+  downloadProgressBarContainer: {
+    height: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 6,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  downloadProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#4caf50',
+    borderRadius: 6,
   },
   downloadProgress: {
     marginTop: 4,
@@ -1085,18 +1097,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#2196f3',
     marginBottom: 4,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#2196f3',
-    borderRadius: 2,
   },
   seasonProgressContainer: {
     marginVertical: 8,
