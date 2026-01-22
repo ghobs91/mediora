@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Video, { OnProgressData, VideoRef, SelectedTrackType, TextTrackType } from 'react-native-video';
+import Video, { OnProgressData, VideoRef } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
@@ -290,38 +290,19 @@ export function PlayerScreen() {
   useEffect(() => {
     if (jellyfin && playbackInfo?.MediaSources[0]) {
       const mediaSourceId = playbackInfo.MediaSources[0].Id;
-      let streamType: string;
-      let url: string;
-
-      switch (streamAttempt) {
-        case 'direct':
-          streamType = 'Direct Stream';
-          url = jellyfin.getStreamUrl(itemId, mediaSourceId);
-          break;
-        case 'hls':
-          streamType = 'HLS (master.m3u8)';
-          url = jellyfin.getHlsStreamUrl(
-            itemId,
-            mediaSourceId,
-            subtitlesEnabled ? selectedSubtitleTrack : undefined
-            // NOTE: StartTimeTicks not supported on HLS master.m3u8 endpoint
-          );
-          break;
-        case 'transcoded':
-          streamType = 'Transcoded (720p)';
-          url = jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
-          break;
-      }
-
       console.log('[PlayerScreen] Stream type:', streamType);
-      console.log('[PlayerScreen] Stream URL:', url);
-      console.log('[PlayerScreen] Subtitles:', { enabled: subtitlesEnabled, trackIndex: selectedSubtitleTrack });
+      console.log('[PlayerScreen] Stream URL:', videoUrl);
+      console.log('[PlayerScreen] Subtitles:', { 
+        enabled: subtitlesEnabled, 
+        trackIndex: selectedSubtitleTrack,
+        method: subtitlesEnabled ? 'server-side burn (Encode)' : 'disabled'
+      });
       console.log('[PlayerScreen] Media source:', {
         id: mediaSourceId,
         container: playbackInfo.MediaSources[0].Container,
       });
     }
-  }, [streamAttempt, playbackInfo, jellyfin, itemId, subtitlesEnabled, selectedSubtitleTrack]);
+  }, [streamAttempt, playbackInfo, jellyfin, itemId, subtitlesEnabled, selectedSubtitleTrack, videoUrl, streamType]);
 
   // Restore saved position when video is ready for display
   // Seeking immediately on ready is faster than waiting for buffering to complete
@@ -452,7 +433,7 @@ export function PlayerScreen() {
     }
   };
 
-  const handleToggleSubtitles = () => {
+  const handleToggleSubtitles = async () => {
     const subtitleTracks = playbackInfo?.MediaSources[0]?.MediaStreams.filter(m => m.Type === 'Subtitle') || [];
 
     console.log('[PlayerScreen] Available subtitle tracks:', subtitleTracks.map(t => ({
@@ -464,6 +445,15 @@ export function PlayerScreen() {
 
     if (subtitleTracks.length === 0) {
       return; // No subtitles available
+    }
+
+    // Save current position before reloading stream
+    const currentPosition = currentTime;
+
+    // Stop current encoding session before changing subtitle settings
+    if (jellyfin && streamAttempt === 'hls') {
+      console.log('[PlayerScreen] Stopping encoding session to change subtitles...');
+      await jellyfin.stopEncodingSession();
     }
 
     if (!subtitlesEnabled) {
@@ -478,6 +468,21 @@ export function PlayerScreen() {
       setSubtitlesEnabled(false);
       console.log('[PlayerScreen] Subtitles disabled');
     }
+
+    // Save position for restoration after reload
+    if (currentPosition > 0) {
+      savedPositionToRestore.current = currentPosition;
+      hasRestoredPosition.current = false;
+      console.log('[PlayerScreen] Will restore position after subtitle change:', Math.floor(currentPosition), 's');
+    }
+
+    // Force reload by toggling stream attempt and back
+    // This ensures a fresh encoding session with new subtitle settings
+    setStreamAttempt('direct');
+    setTimeout(() => {
+      setStreamAttempt('hls');
+    }, 100);
+
     showControlsWithTimeout();
   };
 
@@ -551,44 +556,12 @@ export function PlayerScreen() {
   const castList = item?.People || [];
   const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-  // Build text tracks for external subtitles - memoized to prevent rebuilding on every render
-  const textTracks = useMemo(() => {
-    if (!playbackInfo?.MediaSources[0] || !jellyfin) return [];
-    
-    const tracks = subtitleTracks.map(track => {
-      // Always build subtitle URL ourselves for consistent format
-      // DeliveryUrl from Jellyfin may not include necessary auth parameters
-      const subtitleUrl = jellyfin.getSubtitleUrl(
-        itemId,
-        playbackInfo.MediaSources[0].Id,
-        track.Index,
-        'vtt' // Request WebVTT format for better compatibility
-      );
-
-      // Determine the correct language code - ensure it's a valid ISO 639-1 code
-      let languageCode = track.Language || 'und';
-      // Truncate to 2 characters if longer (some languages come as 3-letter codes)
-      if (languageCode.length > 2 && languageCode !== 'und') {
-        languageCode = languageCode.substring(0, 2);
-      }
-
-      return {
-        title: track.DisplayTitle || track.Language || `Track ${track.Index}`,
-        language: languageCode as any, // Cast needed as react-native-video expects ISO639_1 type
-        type: TextTrackType.VTT,
-        uri: subtitleUrl,
-      };
-    });
-    
-    // Only log when tracks are actually built
-    if (tracks.length > 0) {
-      console.log('[PlayerScreen] Built text tracks:', tracks.map(t => ({ title: t.title, uri: t.uri })));
-    }
-    
-    return tracks;
-  }, [subtitleTracks, jellyfin, itemId, playbackInfo?.MediaSources]);
+  // Note: External text tracks are disabled on tvOS due to AVKit limitations
+  // Subtitles are burned into the HLS stream server-side using subtitleMethod='Encode'
+  // This works with all subtitle formats including ASS, SSA, SRT, VTT, and image-based subtitles
 
   // Generate stream URLs - memoized to prevent recalculation on every render
+  // Includes subtitle track index for server-side subtitle burning
   const { videoUrl, streamType } = useMemo(() => {
     if (!playbackInfo?.MediaSources[0] || !jellyfin) {
       return { videoUrl: '', streamType: '' };
@@ -596,32 +569,23 @@ export function PlayerScreen() {
 
     const mediaSourceId = playbackInfo.MediaSources[0].Id;
 
-    // DEBUG: Test with a known working public HLS stream
-    const useTestStream = false; // Set to true to test with public HLS
-    const testStreamUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'; // Big Buck Bunny
-
-    // Use external text tracks for subtitles on all platforms
-    // Burning subtitles into HLS stream requires proper server transcoding which may not work
-    // External WebVTT tracks are more reliable with react-native-video
-
-    if (useTestStream) {
-      return {
-        videoUrl: testStreamUrl,
-        streamType: 'Test HLS Stream',
-      };
-    }
+    // Determine which subtitle track to burn into the stream (if any)
+    // Server-side subtitle burning works better on tvOS than external text tracks
+    const burnSubtitleIndex = subtitlesEnabled ? selectedSubtitleTrack : undefined;
 
     switch (streamAttempt) {
       case 'direct':
+        // Direct stream doesn't support subtitle burning - subtitles won't show
         return {
           videoUrl: jellyfin.getStreamUrl(itemId, mediaSourceId),
           streamType: 'Direct Stream',
         };
       case 'hls':
-        // Don't burn subtitles into HLS - use external text tracks instead
+        // Burn subtitles into HLS stream using subtitleMethod='Encode'
+        // This works with all subtitle formats (ASS, SSA, SRT, VTT, PGS, etc.)
         return {
-          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId),
-          streamType: 'HLS (master.m3u8)',
+          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId, burnSubtitleIndex),
+          streamType: burnSubtitleIndex !== undefined ? 'HLS (with subtitles)' : 'HLS (master.m3u8)',
         };
       case 'transcoded':
         return {
@@ -630,18 +594,11 @@ export function PlayerScreen() {
         };
       default:
         return {
-          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId),
+          videoUrl: jellyfin.getHlsStreamUrl(itemId, mediaSourceId, burnSubtitleIndex),
           streamType: 'HLS (master.m3u8)',
         };
     }
-  }, [playbackInfo, streamAttempt, jellyfin, itemId]);
-
-  // Map Jellyfin stream index to textTracks array index
-  const getTextTrackIndex = (jellyfinIndex: number | undefined): number | undefined => {
-    if (jellyfinIndex === undefined) return undefined;
-    const arrayIndex = subtitleTracks.findIndex(t => t.Index === jellyfinIndex);
-    return arrayIndex >= 0 ? arrayIndex : undefined;
-  };
+  }, [playbackInfo, streamAttempt, jellyfin, itemId, subtitlesEnabled, selectedSubtitleTrack]);
 
   const currentEpisodeIndex = episodes.findIndex(e => e.Id === item?.Id);
   const hasPrevious = currentEpisodeIndex > 0;
@@ -678,11 +635,6 @@ export function PlayerScreen() {
     );
   }
 
-  // Get the correct textTracks array index from the Jellyfin stream index
-  const selectedTextTrackArrayIndex = getTextTrackIndex(selectedSubtitleTrack);
-  // Use external text tracks for all stream types when subtitles are enabled
-  const useExternalTextTracks = subtitlesEnabled && selectedTextTrackArrayIndex !== undefined && textTracks[selectedTextTrackArrayIndex];
-
   return (
     <TouchableOpacity
       style={styles.container}
@@ -692,19 +644,13 @@ export function PlayerScreen() {
       accessible={false}>
       <Video
         ref={videoRef}
-        key={videoUrl}
+        key={`${videoUrl}-${subtitlesEnabled ? selectedSubtitleTrack : 'nosub'}`}
         source={{
           uri: videoUrl,
           type: streamAttempt === 'hls' ? 'm3u8' : undefined,
         }}
-        // TEMP: Disable text tracks to diagnose loading issue
-        // textTracks={textTracks}
-        // selectedTextTrack={useExternalTextTracks ? {
-        //   type: SelectedTrackType.INDEX,
-        //   value: selectedTextTrackArrayIndex!,
-        // } : {
-        //   type: SelectedTrackType.DISABLED,
-        // }}
+        // Subtitles are burned into the HLS stream server-side (no external text tracks needed)
+        // This is more reliable on tvOS than using textTracks prop
         style={styles.video}
         resizeMode="contain"
         paused={!isPlaying}
@@ -940,14 +886,7 @@ export function PlayerScreen() {
                   color={isFavorite ? "#e50914" : "#fff"}
                 />
                 <IconButton
-                  icon={subtitlesEnabled ? "closed-captioning" : "closed-captioning-outline"}
-                  onPress={handleToggleSubtitles}
-                  disabled={!hasSubtitles}
-                  color={subtitlesEnabled ? "#e50914" : "#fff"}
-                  badge={subtitlesEnabled && currentSubtitleTrack ? (currentSubtitleTrack.Language?.substring(0, 2).toUpperCase() || 'CC') : undefined}
-                />
-                <IconButton
-                  icon="list-outline"
+                  icon="chatbubble-outline"
                   onPress={() => {
                     console.log('[PlayerScreen] Opening subtitle selection, available tracks:', subtitleTracks.map(t => ({
                       index: t.Index,
@@ -958,6 +897,7 @@ export function PlayerScreen() {
                     setShowSubtitles(true);
                   }}
                   disabled={!hasSubtitles}
+                  color={subtitlesEnabled ? "#e50914" : "#fff"}
                 />
                 <IconButton
                   icon={volume === 0 ? "volume-mute" : volume < 0.5 ? "volume-low" : "volume-high"}
@@ -1039,21 +979,58 @@ export function PlayerScreen() {
             text={track.DisplayTitle || track.Language || `Track ${track.Index}`}
             isActive={track.Index === -1 ? !subtitlesEnabled : selectedSubtitleTrack === track.Index}
             hasTVPreferredFocus={index === 0}
-            onPress={() => {
+            onPress={async () => {
+              // Close modal first to restore focus
+              setShowSubtitles(false);
+              
+              // Small delay to allow modal to close before state changes
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
               if (track.Index === -1) {
                 console.log('[PlayerScreen] Disabling subtitles');
-                setSelectedSubtitleTrack(undefined);
-                setSubtitlesEnabled(false);
+                // If subtitles were enabled, toggle them off
+                if (subtitlesEnabled) {
+                  await handleToggleSubtitles();
+                }
               } else {
                 console.log('[PlayerScreen] Selecting subtitle track:', {
                   index: track.Index,
                   language: track.Language,
                   title: track.DisplayTitle
                 });
-                setSelectedSubtitleTrack(track.Index);
-                setSubtitlesEnabled(true);
+                
+                // Check if we're changing to a different subtitle track
+                const isChangingTrack = selectedSubtitleTrack !== track.Index;
+                
+                if (isChangingTrack) {
+                  // If subtitles are already enabled with a different track, need to reload
+                  if (subtitlesEnabled && jellyfin && streamAttempt === 'hls') {
+                    console.log('[PlayerScreen] Changing subtitle track, stopping encoding session...');
+                    await jellyfin.stopEncodingSession();
+                  }
+                  
+                  // Save current position
+                  const currentPosition = currentTime;
+                  if (currentPosition > 0) {
+                    savedPositionToRestore.current = currentPosition;
+                    hasRestoredPosition.current = false;
+                    console.log('[PlayerScreen] Will restore position after subtitle change:', Math.floor(currentPosition), 's');
+                  }
+                  
+                  // Update subtitle selection
+                  setSelectedSubtitleTrack(track.Index);
+                  setSubtitlesEnabled(true);
+                  
+                  // Force stream reload
+                  setStreamAttempt('direct');
+                  setTimeout(() => {
+                    setStreamAttempt('hls');
+                  }, 100);
+                } else if (!subtitlesEnabled) {
+                  // Just enabling the same track that was previously selected
+                  await handleToggleSubtitles();
+                }
               }
-              setShowSubtitles(false);
             }}
           />
         )}
