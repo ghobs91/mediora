@@ -33,6 +33,7 @@ interface MediaCardProps {
   downloadProgress?: number; // 0-1 for active downloads
   isDownloading?: boolean;
   rank?: number; // For numbered rankings (Top 10, etc.)
+  landscape?: boolean; // For landscape orientation (wider instead of taller)
 }
 
 
@@ -52,6 +53,7 @@ export function MediaCard({
   downloadProgress,
   isDownloading,
   rank,
+  landscape = false,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
@@ -113,6 +115,26 @@ export function MediaCard({
 
   // Responsive dimensions
   const getDimensions = () => {
+    if (landscape) {
+      // Landscape mode - wider instead of taller (approx 16:9 ratio)
+      if (isMobile) {
+        const mobileLandscapeDimensions = {
+          small: { width: 160, height: 90 },
+          medium: { width: 213, height: 120 },
+          large: { width: 267, height: 150 },
+          xlarge: { width: 356, height: 200 },
+        };
+        return mobileLandscapeDimensions[size];
+      }
+      // TV/Desktop landscape sizes
+      return {
+        small: { width: scaleSize(Platform.isTV ? 249 : 178), height: scaleSize(Platform.isTV ? 140 : 100) },
+        medium: { width: scaleSize(Platform.isTV ? 320 : 249), height: scaleSize(Platform.isTV ? 180 : 140) },
+        large: { width: scaleSize(Platform.isTV ? 391 : 320), height: scaleSize(Platform.isTV ? 220 : 180) },
+        xlarge: { width: scaleSize(Platform.isTV ? 640 : 498), height: scaleSize(Platform.isTV ? 360 : 280) },
+      }[size];
+    }
+    
     if (isMobile) {
       // Mobile sizes - smaller and more compact
       const mobileDimensions = {
@@ -134,7 +156,7 @@ export function MediaCard({
 
   const dimensions = getDimensions();
   const width = customWidth || dimensions.width;
-  const height = customHeight || (customWidth ? customWidth * 1.5 : dimensions.height);
+  const height = customHeight || (customWidth && !landscape ? customWidth * 1.5 : dimensions.height);
 
   // Responsive style values
   const borderRadius = isMobile ? 10 : scaleSize(18);
@@ -183,7 +205,7 @@ export function MediaCard({
           <Image
             source={{ uri: displayImageUrl }}
             style={[styles.image, { width, height, borderRadius }]}
-            resizeMode="cover"
+            resizeMode={landscape ? "contain" : "cover"}
           />
         ) : (
           <View style={[styles.placeholder, { width, height, borderRadius }]}>
@@ -315,17 +337,33 @@ export function MediaCard({
             )}
           </View>
         )}
-      </View>
-      <View style={[styles.textContainer, { width }, isMobile && styles.textContainerMobile]}>
-        <Text style={[styles.title, isMobile && styles.titleMobile]} numberOfLines={1}>
-          {displayTitle}
-        </Text>
-        {displaySubtitle && (
-          <Text style={[styles.subtitle, isMobile && styles.subtitleMobile]} numberOfLines={1}>
-            {displaySubtitle}
-          </Text>
+        {landscape && (
+          <View style={[styles.titleOverlay, { borderRadius }]}>
+            <View style={styles.titleOverlayGradient}>
+              <Text style={[styles.titleOverlayText, isMobile && styles.titleOverlayTextMobile]} numberOfLines={1}>
+                {displayTitle}
+              </Text>
+              {displaySubtitle && (
+                <Text style={[styles.subtitleOverlayText, isMobile && styles.subtitleOverlayTextMobile]} numberOfLines={1}>
+                  {displaySubtitle}
+                </Text>
+              )}
+            </View>
+          </View>
         )}
       </View>
+      {!landscape && (
+        <View style={[styles.textContainer, { width }, isMobile && styles.textContainerMobile]}>
+          <Text style={[styles.title, isMobile && styles.titleMobile]} numberOfLines={1}>
+            {displayTitle}
+          </Text>
+          {displaySubtitle && (
+            <Text style={[styles.subtitle, isMobile && styles.subtitleMobile]} numberOfLines={1}>
+              {displaySubtitle}
+            </Text>
+          )}
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -465,10 +503,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.4)',
-    shadowColor: 'rgba(255, 69, 58, 0.4)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
   },
   removeButtonInnerMobile: {
     width: 24,
@@ -495,10 +529,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.3)',
-    shadowColor: 'rgba(0, 0, 0, 0.3)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
   },
   actionButtonInnerMobile: {
     width: 28,
@@ -539,5 +569,40 @@ const styles = StyleSheet.create({
     fontSize: 56,
     textShadowOffset: { width: -2, height: 2 },
     textShadowRadius: 4,
+  },
+  titleOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+  },
+  titleOverlayGradient: {
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(12),
+    paddingBottom: scaleSize(16),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  titleOverlayText: {
+    color: '#ffffff',
+    fontSize: scaleFontSize(18),
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  titleOverlayTextMobile: {
+    fontSize: 14,
+  },
+  subtitleOverlayText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: scaleFontSize(14),
+    marginTop: scaleSize(4),
+    fontWeight: '500',
+  },
+  subtitleOverlayTextMobile: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

@@ -271,6 +271,23 @@ export interface TMDBCrew {
   job: string;
 }
 
+export interface TMDBImage {
+  aspect_ratio: number;
+  height: number;
+  iso_639_1: string | null;
+  file_path: string;
+  vote_average: number;
+  vote_count: number;
+  width: number;
+}
+
+export interface TMDBImagesResponse {
+  backdrops: TMDBImage[];
+  logos: TMDBImage[];
+  posters: TMDBImage[];
+  id: number;
+}
+
 // Sonarr Types
 export interface SonarrRootFolder {
   id: number;

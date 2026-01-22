@@ -635,24 +635,15 @@ export class JellyfinService {
   }
 
   getStreamUrl(itemId: string, mediaSourceId?: string): string {
-    // Direct stream with container conversion to mp4 for Apple compatibility
-    // This remuxes MKV to MP4 without re-encoding the video/audio
+    // Stream the original file directly without container remuxing
+    // Just tell Jellyfin to stream it as-is
     const queryString = buildQueryString({
-      mediaSourceId: mediaSourceId,
       api_key: this.accessToken || '',
-      deviceId: this.deviceId,
-      playSessionId: this.playSessionId,
-      // Output in mp4 container for Apple compatibility
-      container: 'mp4',
-      // Copy streams when possible (no transcoding, just remux)
-      videoCodec: 'h264',
-      audioCodec: 'aac',
-      enableAutoStreamCopy: true,
-      allowVideoStreamCopy: true,
-      allowAudioStreamCopy: true,
+      mediaSourceId: mediaSourceId,
+      static: true, // Serve as static file, no transcoding
     });
 
-    return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
+    return `${this.serverUrl}/Videos/${itemId}/stream?${queryString}`;
   }
 
   getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number, startTimeTicks?: number): string {
@@ -665,15 +656,15 @@ export class JellyfinService {
       // H.264/AAC for Apple compatibility
       videoCodec: 'h264',
       audioCodec: 'aac',
-      // Transcoding settings
-      maxWidth: 1920,
-      maxHeight: 1080,
-      videoBitRate: 8000000,
-      audioBitRate: 192000,
-      // Segment settings
+      // Transcoding settings - lower resolution for faster initial transcode
+      maxWidth: 1280,
+      maxHeight: 720,
+      videoBitRate: 4000000,
+      audioBitRate: 128000,
+      // Segment settings - longer segments for faster generation
       segmentContainer: 'ts',
       minSegments: 1,
-      segmentLength: 3,
+      segmentLength: 6,  // Longer segments = faster to generate first one
       breakOnNonKeyFrames: false,
     };
 
@@ -686,7 +677,7 @@ export class JellyfinService {
     // Burn subtitles into video if selected
     if (subtitleStreamIndex !== undefined) {
       params.subtitleStreamIndex = subtitleStreamIndex;
-      params.subtitleMethod = 'Hls'; // Burn into HLS segments
+      params.subtitleMethod = 'Encode'; // Burn/encode subtitles into video stream (required for ASS/SSA and image-based subtitles)
     }
 
     const queryString = buildQueryString(params);
@@ -695,14 +686,15 @@ export class JellyfinService {
   }
 
   getTranscodedStreamUrl(itemId: string, mediaSourceId: string): string {
-    // Fallback: Progressive MP4 stream with full transcoding
+    // Fallback: MPEG-TS stream with full transcoding
+    // TS format is better for progressive streaming than fragmented MP4
     const queryString = buildQueryString({
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      // Output container
-      container: 'mp4',
+      // Output container - use TS for better streaming compatibility
+      container: 'ts',
       // Force H.264/AAC transcoding at lower quality
       videoCodec: 'h264',
       audioCodec: 'aac',
@@ -716,7 +708,7 @@ export class JellyfinService {
       allowAudioStreamCopy: false,
     });
 
-    return `${this.serverUrl}/Videos/${itemId}/stream.mp4?${queryString}`;
+    return `${this.serverUrl}/Videos/${itemId}/stream.ts?${queryString}`;
   }
 
   getImageUrl(

@@ -71,9 +71,9 @@ export function FocusableButton({
   };
 
   const textSizes = {
-    small: 14,
-    medium: 16,
-    large: 20,
+    small: 18,
+    medium: 22,
+    large: 26,
   };
 
   const getVariantStyles = () => {
@@ -112,8 +112,7 @@ export function FocusableButton({
 
   const getTextColor = () => {
     if (disabled) return '#888';
-    if (isFocused) return '#000';
-    if (variant === 'secondary') return '#fff';
+    // Always use white for maximum contrast
     return '#fff';
   };
 
@@ -131,11 +130,6 @@ export function FocusableButton({
         style={[
           {
             transform: [{ scale: scaleValue }],
-            shadowColor: isFocused ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.3)',
-            shadowOffset: { width: 0, height: isFocused ? 12 : 6 },
-            shadowOpacity: isFocused ? 1 : 0.4,
-            shadowRadius: isFocused ? 28 : 12,
-            elevation: isFocused ? 16 : 6,
           },
         ]}>
         {isLiquidGlassSupported ? (
