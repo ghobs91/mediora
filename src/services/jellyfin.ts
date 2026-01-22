@@ -674,10 +674,11 @@ export class JellyfinService {
       console.log(`[Jellyfin] Starting HLS stream at ${Math.floor(startTimeTicks / 10000000)}s`);
     }
 
-    // Burn subtitles into video if selected
+    // Burn subtitles into video if selected (PascalCase required by Jellyfin API)
     if (subtitleStreamIndex !== undefined) {
-      params.subtitleStreamIndex = subtitleStreamIndex;
-      params.subtitleMethod = 'Encode'; // Burn/encode subtitles into video stream (required for ASS/SSA and image-based subtitles)
+      params.SubtitleStreamIndex = subtitleStreamIndex;
+      params.SubtitleMethod = 'Encode'; // Burn/encode subtitles into video stream (required for ASS/SSA and image-based subtitles)
+      console.log(`[Jellyfin] Burning subtitle track ${subtitleStreamIndex} into HLS stream`);
     }
 
     const queryString = buildQueryString(params);
