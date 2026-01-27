@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -575,11 +576,11 @@ export function TMDBDetailsScreen() {
       {backdropUrl && (
         <Image
           source={{ uri: backdropUrl }}
-          style={[styles.backdrop, { width: windowWidth, height: backdropHeight }]}
+          style={[styles.backdrop, { width: Platform.isTV ? windowWidth + 272 : windowWidth, height: backdropHeight, left: Platform.isTV ? -272 : 0 }]}
           resizeMode="cover"
         />
       )}
-      <View style={[styles.backdropOverlay, { height: backdropHeight }]} />
+      <View style={[styles.backdropOverlay, { height: backdropHeight, width: Platform.isTV ? windowWidth + 272 : windowWidth, left: Platform.isTV ? -272 : 0 }]} />
 
       <View style={[styles.content, { marginTop: backdropHeight * 0.5 }]}>
         <View style={styles.mainContent}>
@@ -844,7 +845,8 @@ const styles = StyleSheet.create({
     top: 0,
   },
   backdropOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   content: {

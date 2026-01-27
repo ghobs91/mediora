@@ -8,6 +8,7 @@ import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen, CastList } from '../components';
 import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails, SonarrEpisode, SonarrQueueItem } from '../types';
 import { TMDBService } from '../services/tmdb';
+import { scaleSize } from '../utils/scaling';
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, 'ItemDetails'>;
 
@@ -955,7 +956,11 @@ export function ItemDetailsScreen() {
     <View style={styles.container}>
       <ImageBackground
         source={{ uri: heroImage || undefined }}
-        style={[styles.backdrop, { width: windowWidth, height: backdropHeight }]}
+        style={[styles.backdrop, { 
+          width: Platform.isTV ? windowWidth + scaleSize(272) : windowWidth, 
+          height: backdropHeight,
+          left: Platform.isTV ? -scaleSize(272) : 0
+        }]}
         resizeMode="cover"
       >
         <View style={[styles.backdropOverlay, selectedEpisode && styles.backdropOverlayDimmed]} />
@@ -967,7 +972,7 @@ export function ItemDetailsScreen() {
             'rgba(15,5,25,0.95)',
             '#0f0519'
           ]}
-          style={styles.gradientOverlay}
+          style={[styles.gradientOverlay, Platform.isTV && { left: -scaleSize(272) }]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         />
@@ -1266,11 +1271,11 @@ export function ItemDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0519' },
-  backdrop: { position: 'absolute', top: 0, left: 0 },
-  backdropOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
+  container: { flex: 1, backgroundColor: '#0f0519', overflow: 'visible' },
+  backdrop: { position: 'absolute', top: 0 },
+  backdropOverlay: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)' },
   backdropOverlayDimmed: { backgroundColor: 'rgba(0,0,0,0.5)' },
-  gradientOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 400 },
+  gradientOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 400, width: '100%' },
   backButton: { position: 'absolute', top: 60, left: 40, zIndex: 10, padding: 8, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 50 },

@@ -207,7 +207,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
     <LiquidGlassView
       style={styles.sidebar}
       effect={isLiquidGlassSupported ? 'regular' : 'none'}
-      tintColor="rgba(28, 28, 30, 0.85)">
+      tintColor={Platform.isTV ? "rgba(28, 28, 30, 0.4)" : "rgba(28, 28, 30, 0.85)"}>
       {/* macOS Window Controls (Traffic Lights) */}
       {Platform.OS === 'macos' && (
         <View style={styles.windowControls}>
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   sidebar: {
     flex: 1,
     width: scaleSize(240),
-    backgroundColor: 'rgba(28, 28, 30, 0.85)',
+    backgroundColor: Platform.isTV ? 'rgba(28, 28, 30, 0.4)' : 'rgba(28, 28, 30, 0.85)',
     borderRadius: scaleSize(16),
     paddingTop: scaleSize(20),
     paddingBottom: scaleSize(16),
