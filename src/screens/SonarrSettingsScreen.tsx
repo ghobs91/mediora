@@ -8,6 +8,7 @@ import { useSettings } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { SonarrService } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
+import { DEV_CONFIG } from '../config/dev';
 
 export function SonarrSettingsScreen() {
   const { settings, updateSonarrSettings } = useSettings();
@@ -15,8 +16,12 @@ export function SonarrSettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
-  const [serverUrl, setServerUrl] = useState(settings.sonarr?.serverUrl || '');
-  const [apiKey, setApiKey] = useState(settings.sonarr?.apiKey || '');
+  const [serverUrl, setServerUrl] = useState(
+    settings.sonarr?.serverUrl || (__DEV__ ? DEV_CONFIG.sonarr.url : '')
+  );
+  const [apiKey, setApiKey] = useState(
+    settings.sonarr?.apiKey || (__DEV__ ? DEV_CONFIG.sonarr.apiKey : '')
+  );
   const [rootFolderPath, setRootFolderPath] = useState(
     settings.sonarr?.rootFolderPath || '',
   );

@@ -14,6 +14,7 @@ import {
   SonarrService,
   RadarrService,
 } from '../services';
+import { DEV_CONFIG } from '../config/dev';
 
 interface ServicesContextType {
   jellyfin: JellyfinService | null;
@@ -49,6 +50,14 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sonarr = useMemo(() => {
+    // In dev mode, use env config if available and no user settings
+    if (__DEV__ && !settings.sonarr && DEV_CONFIG.sonarr.url && DEV_CONFIG.sonarr.apiKey) {
+      console.log('[ServicesContext] Using dev config for Sonarr');
+      return new SonarrService(
+        DEV_CONFIG.sonarr.url,
+        DEV_CONFIG.sonarr.apiKey,
+      );
+    }
     if (!settings.sonarr) return null;
     return new SonarrService(
       settings.sonarr.serverUrl,
@@ -57,6 +66,14 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   }, [settings.sonarr]);
 
   const radarr = useMemo(() => {
+    // In dev mode, use env config if available and no user settings
+    if (__DEV__ && !settings.radarr && DEV_CONFIG.radarr.url && DEV_CONFIG.radarr.apiKey) {
+      console.log('[ServicesContext] Using dev config for Radarr');
+      return new RadarrService(
+        DEV_CONFIG.radarr.url,
+        DEV_CONFIG.radarr.apiKey,
+      );
+    }
     if (!settings.radarr) return null;
     return new RadarrService(
       settings.radarr.serverUrl,

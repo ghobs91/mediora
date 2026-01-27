@@ -8,6 +8,7 @@ import { useSettings } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { RadarrService } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
+import { DEV_CONFIG } from '../config/dev';
 
 export function RadarrSettingsScreen() {
   const { settings, updateRadarrSettings } = useSettings();
@@ -15,8 +16,12 @@ export function RadarrSettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
-  const [serverUrl, setServerUrl] = useState(settings.radarr?.serverUrl || '');
-  const [apiKey, setApiKey] = useState(settings.radarr?.apiKey || '');
+  const [serverUrl, setServerUrl] = useState(
+    settings.radarr?.serverUrl || (__DEV__ ? DEV_CONFIG.radarr.url : '')
+  );
+  const [apiKey, setApiKey] = useState(
+    settings.radarr?.apiKey || (__DEV__ ? DEV_CONFIG.radarr.apiKey : '')
+  );
   const [rootFolderPath, setRootFolderPath] = useState(
     settings.radarr?.rootFolderPath || '',
   );

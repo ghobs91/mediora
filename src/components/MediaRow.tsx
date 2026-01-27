@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: scaleSize(16),
+    marginBottom: scaleSize(28),
   },
   title: {
     color: '#ffffff',

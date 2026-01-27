@@ -8,6 +8,7 @@ import {
   TouchableWithoutFeedback,
   Modal,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LiquidGlassView } from '@callstack/liquid-glass';
@@ -555,6 +556,12 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
 
   return (
     <View style={[styles.container, dynamicStyles.container]}>
+      <LinearGradient
+        colors={['#1a0a2e', '#0f0519', '#000000']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
       {/* Floating Sort Pill Button (Mobile Only) */}
       {isMobileDevice && (
         <View style={[styles.floatingSortPill, { top: insets.top + 8 }]}>
@@ -723,7 +730,6 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   modalOverlay: {
     flex: 1,

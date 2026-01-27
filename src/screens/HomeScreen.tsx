@@ -7,6 +7,7 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
@@ -180,13 +181,30 @@ export function HomeScreen() {
   const getImageUrlWithBackdrop = (item: JellyfinItem): string | null => {
     if (!jellyfin) return null;
     
+    // For episodes, check if we have a backdrop for the series
+    if (item.Type === 'Episode' && item.SeriesId && seriesBackdrops.has(item.SeriesId)) {
+      const backdropUrl = seriesBackdrops.get(item.SeriesId);
+      return backdropUrl || null;
+    }
+    
     // Check if we have a TMDB backdrop for this item (Series or Movie)
     if ((item.Type === 'Series' || item.Type === 'Movie') && seriesBackdrops.has(item.Id)) {
       const backdropUrl = seriesBackdrops.get(item.Id);
       return backdropUrl || null;
     }
     
-    // Fall back to Jellyfin image
+    // Fall back to Jellyfin backdrop for Series/Movies (wide aspect ratio)
+    // or Jellyfin primary image for Episodes (will use series poster via useSeriesThumbnail)
+    if (item.Type === 'Series' || item.Type === 'Movie') {
+      // Try Backdrop first, then Thumb, finally Primary
+      if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
+        return jellyfin.getImageUrl(item.Id, 'Backdrop', { maxWidth: 780 });
+      }
+      return jellyfin.getImageUrl(item.Id, 'Thumb', { maxWidth: 780 }) || 
+             jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+    }
+    
+    // For episodes without TMDB backdrop, fall back to episode's primary image
     return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
   };
 
@@ -371,28 +389,35 @@ export function HomeScreen() {
 
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={dynamicStyles.contentContainer}
-      focusable={false}
-      refreshControl={
-        Platform.select({
-          ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor="#fff"
-            />
-          ) : undefined,
-          default: (
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor="#fff"
-            />
-          ),
-        })
-      }>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#1e2a3a', '#0f1419', '#000000']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      />
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={dynamicStyles.contentContainer}
+        focusable={false}
+        refreshControl={
+          Platform.select({
+            ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#fff"
+              />
+            ) : undefined,
+            default: (
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#fff"
+              />
+            ),
+          })
+        }>
       {!hasContent && (
         <View style={styles.emptyContentContainer}>
           <Text style={[styles.emptyText, isMobile && styles.emptyTextMobile]}>
@@ -431,14 +456,17 @@ export function HomeScreen() {
         getImageUrl={getImageUrlWithBackdrop}
         landscape={true}
       />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+  },
+  scrollContainer: {
+    flex: 1,
   },
   contentContainer: {
     paddingTop: scaleSize(52),

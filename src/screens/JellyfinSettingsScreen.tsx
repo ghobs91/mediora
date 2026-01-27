@@ -16,6 +16,7 @@ import { useSettings } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
+import { DEV_CONFIG } from '../config/dev';
 
 export function JellyfinSettingsScreen() {
   const { settings, updateJellyfinSettings, clearJellyfinSettings } = useSettings();
@@ -23,7 +24,7 @@ export function JellyfinSettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
 
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState(__DEV__ ? DEV_CONFIG.jellyfin.url : '');
   const [quickConnectCode, setQuickConnectCode] = useState<string | null>(null);
   const [_quickConnectSecret, setQuickConnectSecret] = useState<string | null>(null);
   const [username, setUsername] = useState('');

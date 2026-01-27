@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, StyleSheet, Text, Image, useWindowDimensions, TouchableOpacity, FlatList, Alert, ImageBackground, Platform } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, useNavigation, RouteProp, useIsFocused } from '@react-navigation/native';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen, CastList } from '../components';
 import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails, SonarrEpisode, SonarrQueueItem } from '../types';
+import { TMDBService } from '../services/tmdb';
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, 'ItemDetails'>;
 
@@ -37,9 +39,18 @@ export function ItemDetailsScreen() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Responsive values
-  const backdropHeight = windowHeight * 0.7;
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
+  const backdropHeight = isMobile ? windowHeight * 0.5 : windowHeight * 0.7;
+  const logoWidth = isMobile ? Math.min(windowWidth * 0.7, 300) : 400;
   const episodeWidth = Math.max(windowWidth * 0.25, 240);
   const episodeHeight = (episodeWidth * 9) / 16;
+  
+  // Responsive text sizes
+  const metaTextSize = isMobile ? 14 : (isTablet ? 18 : 22);
+  const overviewTextSize = isMobile ? 14 : (isTablet ? 16 : 18);
+  const overviewLineHeight = isMobile ? 20 : (isTablet ? 24 : 26);
+  const overviewMargin = isMobile ? 20 : 30;
 
   // State
   const [seriesItem, setSeriesItem] = useState<JellyfinItem | null>(initialItem.Type === 'Series' ? initialItem : null);
@@ -56,6 +67,7 @@ export function ItemDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [cast, setCast] = useState<TMDBCast[]>([]);
+  const [tvLogoUrl, setTvLogoUrl] = useState<string | null>(null);
   
   // Sonarr State
   const [sonarrEpisodes, setSonarrEpisodes] = useState<SonarrEpisode[]>([]);
@@ -149,6 +161,20 @@ export function ItemDetailsScreen() {
             // Fetch TMDB Details
             const details = await tmdb.getTVDetails(tmdbId);
             setTmdbDetails(details);
+
+            // Fetch TV logos from TMDB images
+            try {
+              const images = await tmdb.getTVImages(tmdbId);
+              if (images.logos && images.logos.length > 0) {
+                // Prefer English logos, or use the first available
+                const englishLogo = images.logos.find(logo => logo.iso_639_1 === 'en');
+                const selectedLogo = englishLogo || images.logos[0];
+                const logoUrl = TMDBService.getLogoUrl(selectedLogo.file_path, 'w500');
+                setTvLogoUrl(logoUrl);
+              }
+            } catch (e) {
+              console.warn('Failed to fetch TV logos', e);
+            }
 
             // Helper to load seasons structure
             const seasons: EnrichedSeason[] = details.seasons
@@ -927,14 +953,24 @@ export function ItemDetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ... (Keep existing backdrop) ... */}
       <ImageBackground
         source={{ uri: heroImage || undefined }}
         style={[styles.backdrop, { width: windowWidth, height: backdropHeight }]}
         resizeMode="cover"
       >
-        <View style={styles.backdropOverlay} />
-        <View style={styles.gradientOverlay} />
+        <View style={[styles.backdropOverlay, selectedEpisode && styles.backdropOverlayDimmed]} />
+        <LinearGradient
+          colors={[
+            'rgba(0,0,0,0)',
+            'rgba(0,0,0,0.3)',
+            'rgba(15,5,25,0.8)',
+            'rgba(15,5,25,0.95)',
+            '#0f0519'
+          ]}
+          style={styles.gradientOverlay}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
       </ImageBackground>
 
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -947,12 +983,23 @@ export function ItemDetailsScreen() {
         focusable={false}
       >
         <View style={[styles.heroContent, { paddingHorizontal: spacing }]}>
-          {(isSeriesOrEpisode && seriesItem) && <Text style={styles.seriesTitle}>{seriesItem.SeriesName || seriesItem.Name}</Text>}
+          {/* TV Series Logo - only when no episode selected */}
+          {(isSeriesOrEpisode && seriesItem && !selectedEpisode && tvLogoUrl) && (
+            <Image source={{ uri: tvLogoUrl }} style={[styles.logoImage, { width: logoWidth }]} resizeMode="contain" />
+          )}
+
+          {/* TV Series Title - only when no logo and no episode selected */}
+          {(isSeriesOrEpisode && seriesItem && !selectedEpisode && !tvLogoUrl) && (
+            <Text style={styles.seriesTitle}>{seriesItem.SeriesName || seriesItem.Name}</Text>
+          )}
 
           {/* Movie Logo */}
-          {isMovie && logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={styles.logoImage} resizeMode="contain" />
-          ) : (
+          {(isMovie && logoUrl) && (
+            <Image source={{ uri: logoUrl }} style={[styles.logoImage, { width: logoWidth }]} resizeMode="contain" />
+          )}
+
+          {/* Movie Title, Episode Title, or Series Title (when no logo) */}
+          {((isMovie && !logoUrl) || selectedEpisode) && (
             <Text style={styles.heroTitle}>{heroTitle}</Text>
           )}
 
@@ -968,7 +1015,7 @@ export function ItemDetailsScreen() {
                 </View>
               )
             )}
-            <Text style={styles.metaText}>{heroSubtitle}</Text>
+            <Text style={[styles.metaText, { fontSize: metaTextSize }]}>{heroSubtitle}</Text>
             {tmdbScore && (
               <View style={styles.scoreContainer}>
                 <Icon name="star" size={16} color="#FFD700" />
@@ -986,7 +1033,16 @@ export function ItemDetailsScreen() {
 
           {tagline && <Text style={styles.tagline}>{tagline}</Text>}
 
-          <Text style={styles.overview} numberOfLines={4}>{heroOverview}</Text>
+          <Text 
+            style={[styles.overview, { 
+              fontSize: overviewTextSize, 
+              lineHeight: overviewLineHeight,
+              marginBottom: overviewMargin 
+            }]} 
+            numberOfLines={4}
+          >
+            {heroOverview}
+          </Text>
 
           <View style={styles.actionRow}>
             {/* Primary Action - Show Request button for unavailable episodes, Play for available */}
@@ -1210,19 +1266,20 @@ export function ItemDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: '#0f0519' },
   backdrop: { position: 'absolute', top: 0, left: 0 },
   backdropOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
-  gradientOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 300, backgroundColor: 'rgba(0,0,0,0.8)' },
+  backdropOverlayDimmed: { backgroundColor: 'rgba(0,0,0,0.5)' },
+  gradientOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 400 },
   backButton: { position: 'absolute', top: 60, left: 40, zIndex: 10, padding: 8, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 50 },
   heroContent: { paddingHorizontal: 48, marginBottom: 40 },
   seriesTitle: { color: '#FFD700', fontSize: 24, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
-  heroTitle: { color: '#fff', fontSize: 56, fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  heroTitle: { color: '#fff', fontSize: 36, fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  metaText: { color: 'rgba(255,255,255,0.8)', fontSize: 22, fontWeight: '600', marginRight: 10 },
-  overview: { color: 'rgba(255,255,255,0.7)', fontSize: 20, lineHeight: 30, maxWidth: 700, marginBottom: 30 },
+  metaText: { color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginRight: 10 },
+  overview: { color: 'rgba(255,255,255,0.7)', maxWidth: 700 },
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 16, flexWrap: 'wrap' },
   playButton: { minWidth: 160 },
   downloadingButton: { minWidth: 160, opacity: 0.8 },

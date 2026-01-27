@@ -8,6 +8,7 @@ import {
   ViewStyle,
   View,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -37,6 +38,11 @@ export function FocusableButton({
 }: FocusableButtonProps) {
   const [isFocused, setIsFocused] = useState(false);
   const scaleValue = useRef(new Animated.Value(1)).current;
+  const { width: windowWidth } = useWindowDimensions();
+
+  // Responsive sizing based on device width
+  const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
 
   // Debug: Log liquid glass support once
   useEffect(() => {
@@ -65,15 +71,24 @@ export function FocusableButton({
   };
 
   const sizeStyles = {
-    small: { paddingHorizontal: 16, paddingVertical: 8 },
-    medium: { paddingHorizontal: 24, paddingVertical: 12 },
-    large: { paddingHorizontal: 32, paddingVertical: 16 },
+    small: { 
+      paddingHorizontal: isMobile ? 12 : (isTablet ? 14 : 16), 
+      paddingVertical: isMobile ? 6 : (isTablet ? 7 : 8) 
+    },
+    medium: { 
+      paddingHorizontal: isMobile ? 16 : (isTablet ? 20 : 24), 
+      paddingVertical: isMobile ? 10 : (isTablet ? 11 : 12) 
+    },
+    large: { 
+      paddingHorizontal: isMobile ? 24 : (isTablet ? 28 : 32), 
+      paddingVertical: isMobile ? 14 : (isTablet ? 15 : 16) 
+    },
   };
 
   const textSizes = {
-    small: 18,
-    medium: 22,
-    large: 26,
+    small: isMobile ? 14 : (isTablet ? 16 : 18),
+    medium: isMobile ? 16 : (isTablet ? 19 : 22),
+    large: isMobile ? 18 : (isTablet ? 22 : 26),
   };
 
   const getVariantStyles = () => {
@@ -91,19 +106,19 @@ export function FocusableButton({
         backgroundColor: isLiquidGlassSupported 
           ? 'transparent' 
           : (isFocused ? 'rgba(10, 132, 255, 0.85)' : 'rgba(10, 132, 255, 0.75)'),
-        borderColor: isFocused ? 'rgba(255, 255, 255, 0.8)' : 'rgba(10, 132, 255, 0.6)',
+        borderColor: isFocused ? 'rgba(147, 51, 234, 1)' : 'rgba(10, 132, 255, 0.6)',
       },
       secondary: {
         backgroundColor: isLiquidGlassSupported
           ? 'transparent'
           : (isFocused ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.12)'),
-        borderColor: isFocused ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.3)',
+        borderColor: isFocused ? 'rgba(147, 51, 234, 1)' : 'rgba(255, 255, 255, 0.3)',
       },
       danger: {
         backgroundColor: isLiquidGlassSupported
           ? 'transparent'
           : (isFocused ? 'rgba(255, 69, 58, 0.85)' : 'rgba(255, 69, 58, 0.7)'),
-        borderColor: isFocused ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 69, 58, 0.6)',
+        borderColor: isFocused ? 'rgba(147, 51, 234, 1)' : 'rgba(255, 69, 58, 0.6)',
       },
     };
 
@@ -207,7 +222,7 @@ export function FocusableButton({
 const styles = StyleSheet.create({
   button: {
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 100,
