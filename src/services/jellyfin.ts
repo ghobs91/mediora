@@ -666,6 +666,8 @@ export class JellyfinService {
       minSegments: 1,
       segmentLength: 6,  // Longer segments = faster to generate first one
       breakOnNonKeyFrames: false,
+      // Include subtitle streams in HLS manifest for native player
+      SubtitleMethod: 'Hls',
     };
 
     // Add start position if provided - tells server to start stream from this position
@@ -674,12 +676,9 @@ export class JellyfinService {
       console.log(`[Jellyfin] Starting HLS stream at ${Math.floor(startTimeTicks / 10000000)}s`);
     }
 
-    // Burn subtitles into video if selected (PascalCase required by Jellyfin API)
-    if (subtitleStreamIndex !== undefined) {
-      params.SubtitleStreamIndex = subtitleStreamIndex;
-      params.SubtitleMethod = 'Encode'; // Burn/encode subtitles into video stream (required for ASS/SSA and image-based subtitles)
-      console.log(`[Jellyfin] Burning subtitle track ${subtitleStreamIndex} into HLS stream`);
-    }
+    // Note: SubtitleStreamIndex is intentionally NOT set here
+    // Setting SubtitleMethod=Hls tells Jellyfin to include all subtitle tracks in the HLS manifest
+    // The native player (AVPlayerViewController) will then show all available subtitle options
 
     const queryString = buildQueryString(params);
 

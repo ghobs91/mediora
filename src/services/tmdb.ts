@@ -172,7 +172,7 @@ export class TMDBService {
     return response.json();
   }
 
-  async getTVImages(tvId: number | string): Promise<{ backdrops: { file_path: string; aspect_ratio: number }[] }> {
+  async getTVImages(tvId: number | string): Promise<TMDBImagesResponse> {
     const params = this.addApiKey(new URLSearchParams());
 
     const response = await fetch(`${BASE_URL}/tv/${tvId}/images?${params}`);
@@ -184,7 +184,7 @@ export class TMDBService {
     return response.json();
   }
 
-  async getMovieImages(movieId: number | string): Promise<{ backdrops: { file_path: string; aspect_ratio: number }[] }> {
+  async getMovieImages(movieId: number | string): Promise<TMDBImagesResponse> {
     const params = this.addApiKey(new URLSearchParams());
 
     const response = await fetch(`${BASE_URL}/movie/${movieId}/images?${params}`);
@@ -377,5 +377,13 @@ export class TMDBService {
   ): string | null {
     if (!stillPath) return null;
     return `${IMAGE_BASE_URL}/${size}${stillPath}`;
+  }
+
+  static getLogoUrl(
+    logoPath: string | null,
+    size: 'w45' | 'w92' | 'w154' | 'w185' | 'w300' | 'w500' | 'original' = 'w500',
+  ): string | null {
+    if (!logoPath) return null;
+    return `${IMAGE_BASE_URL}/${size}${logoPath}`;
   }
 }

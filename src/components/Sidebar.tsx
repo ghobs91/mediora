@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Pressable } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Pressable, Animated } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
@@ -20,11 +20,30 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
   const drawerOpenRef = useRef(() => setIsDrawerOpen(true));
+  const slideAnim = useRef(new Animated.Value(-320)).current;
 
   // Update ref when state setter changes
   React.useEffect(() => {
     drawerOpenRef.current = () => setIsDrawerOpen(true);
   }, []);
+
+  // Animate drawer open/close
+  useEffect(() => {
+    if (isDrawerOpen) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: -320,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isDrawerOpen, slideAnim]);
 
   // Only expose drawer open function when this component's screen is focused
   React.useEffect(() => {
@@ -148,15 +167,22 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
         {/* Mobile Drawer Modal */}
         <Modal
           visible={isDrawerOpen}
-          animationType="slide"
+          animationType="fade"
           transparent={true}
           onRequestClose={() => setIsDrawerOpen(false)}>
           <Pressable
             style={styles.drawerOverlay}
             onPress={() => setIsDrawerOpen(false)}>
-            <Pressable
-              style={[styles.drawer, { paddingTop: insets.top + 16 }]}
-              onPress={(e) => e.stopPropagation()}>
+            <Animated.View 
+              style={[
+                styles.drawer, 
+                { 
+                  paddingTop: insets.top + 16,
+                  transform: [{ translateX: slideAnim }]
+                }
+              ]}
+              onStartShouldSetResponder={() => true}
+              onTouchEnd={(e) => e.stopPropagation()}>
               <View style={styles.drawerHeader}>
                 <Text style={styles.drawerLogo}>Mediora</Text>
                 <TouchableOpacity
@@ -169,7 +195,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
               <ScrollView style={styles.drawerNav} showsVerticalScrollIndicator={false}>
                 {renderNavItems()}
               </ScrollView>
-            </Pressable>
+            </Animated.View>
           </Pressable>
         </Modal>
       </>

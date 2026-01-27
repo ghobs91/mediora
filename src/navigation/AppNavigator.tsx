@@ -187,7 +187,7 @@ function MobileTabNavigator() {
         <LiquidGlassView
           style={styles.floatingButtonGlass}
           effect="regular"
-          tintColor="rgba(255, 255, 255, 0.25)">
+          tintColor="rgba(255, 255, 255, 0.5)">
           <TouchableOpacity
             style={styles.floatingButton}
             onPress={openDrawer}
