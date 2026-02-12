@@ -18,9 +18,13 @@
 		B48ED8A01D322F82FB4DB481 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B81C21D6CAEC9244E5C269B4 /* Foundation.framework */; };
 		C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
 		C84EECCD2F03EC75007E8102 /* MedioraIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */; };
+		C8B71C732F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B71C722F2AC40200406A8C /* VideoPlayerWindow 2.swift */; };
+		C8B71C742F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */ = {isa = PBXBuildFile; fileRef = C8B71C712F2AC40200406A8C /* VideoPlayerWindow 2.m */; };
+		C8B71C752F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B71C722F2AC40200406A8C /* VideoPlayerWindow 2.swift */; };
+		C8B71C762F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */ = {isa = PBXBuildFile; fileRef = C8B71C712F2AC40200406A8C /* VideoPlayerWindow 2.m */; };
 		C8CDF1832F0543E800EACBF9 /* AppIcon-tvOS.png in Resources */ = {isa = PBXBuildFile; fileRef = C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */; };
 		C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */; };
+		D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,8 +43,11 @@
 		B1A385C6CA8E8DD3A0C2947E /* libPods-mediora-mobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-mediora-mobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B81C21D6CAEC9244E5C269B4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = MedioraIcon.icon; sourceTree = "<group>"; };
+		C8B71C712F2AC40200406A8C /* VideoPlayerWindow 2.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "VideoPlayerWindow 2.m"; sourceTree = "<group>"; };
+		C8B71C722F2AC40200406A8C /* VideoPlayerWindow 2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoPlayerWindow 2.swift"; sourceTree = "<group>"; };
+		C8B71C772F2AC40400406A8C /* mediora-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "mediora-Bridging-Header.h"; sourceTree = "<group>"; };
 		C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "AppIcon-tvOS.png"; sourceTree = "<group>"; };
-		CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
+		CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -68,14 +75,17 @@
 		13B07FAE1A68108700A75B9A /* mediora */ = {
 			isa = PBXGroup;
 			children = (
+				C8B71C712F2AC40200406A8C /* VideoPlayerWindow 2.m */,
+				C8B71C722F2AC40200406A8C /* VideoPlayerWindow 2.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
-				CA98A3A6B5A4DE3E2E340F78 /* LaunchScreenMobile.storyboard */,
+				CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */,
 				C84EECCB2F03EC75007E8102 /* MedioraIcon.icon */,
 				C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */,
+				C8B71C772F2AC40400406A8C /* mediora-Bridging-Header.h */,
 			);
 			name = mediora;
 			sourceTree = "<group>";
@@ -194,7 +204,10 @@
 				LastUpgradeCheck = 1210;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						LastSwiftMigration = 1120;
+						LastSwiftMigration = 2620;
+					};
+					712D486BA5FE8B6740DDFA33 = {
+						LastSwiftMigration = 2620;
 					};
 				};
 			};
@@ -237,7 +250,7 @@
 				AD41AB8D379291D627F7CCCF /* Images.xcassets in Resources */,
 				C84EECCC2F03EC75007E8102 /* MedioraIcon.icon in Resources */,
 				A5D3B02DCFCAC892858C4F3D /* PrivacyInfo.xcprivacy in Resources */,
-				D264E7DBD7186B9F7F6F0A67 /* LaunchScreenMobile.storyboard in Resources */,
+				D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -268,9 +281,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -285,9 +302,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -301,9 +322,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora-mobile/Pods-mediora-mobile-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -360,9 +385,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-mediora/Pods-mediora-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -376,6 +405,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C8B71C752F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */,
+				C8B71C762F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -384,6 +415,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C8B71C732F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */,
+				C8B71C742F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */,
 				22502BB980C96FD10B597393 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -400,7 +433,7 @@
 				ASSETCATALOG_COMPILER_TOP_SHELF_IMAGE_NAME = "App Icon & Top Shelf Image";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				ENABLE_BITCODE = NO;
@@ -416,7 +449,7 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -425,6 +458,7 @@
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = Mediora;
+				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TVOS_DEPLOYMENT_TARGET = 26.0;
@@ -441,7 +475,7 @@
 				ASSETCATALOG_COMPILER_TOP_SHELF_IMAGE_NAME = "App Icon & Top Shelf Image";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				INFOPLIST_FILE = mediora/Info.plist;
@@ -456,7 +490,7 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -465,6 +499,7 @@
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = Mediora;
+				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TVOS_DEPLOYMENT_TARGET = 26.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -508,6 +543,7 @@
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = Mediora;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "mediora-mobile-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
 				TVOS_DEPLOYMENT_TARGET = 15.1;
@@ -700,6 +736,7 @@
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = Mediora;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "mediora-mobile-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
