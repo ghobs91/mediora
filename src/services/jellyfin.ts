@@ -576,23 +576,29 @@ export class JellyfinService {
           DeviceProfile: {
             MaxStreamingBitrate: 120000000,
             MaxStaticBitrate: 100000000,
-            MusicStreamingTranscodingBitrate: 192000,
-            // tvOS/iOS only supports mp4/m4v containers directly
-            // MKV must be transcoded/remuxed
+            MusicStreamingTranscodingBitrate: 384000,
+            // Apple AVPlayer natively supports mp4/m4v/mov containers
+            // MKV/AVI/etc. must be transcoded or remuxed via HLS
             DirectPlayProfiles: [
-              { Container: 'mp4', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
-              { Container: 'm4v', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
-              { Container: 'mov', Type: 'Video', VideoCodec: 'h264,hevc', AudioCodec: 'aac,ac3,eac3' },
+              { Container: 'mp4,m4v', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
+              { Container: 'mov', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
+              { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3' },
+              { Container: 'aac', Type: 'Audio', AudioCodec: 'aac' },
+              { Container: 'm4a', Type: 'Audio', AudioCodec: 'aac,alac,flac' },
+              { Container: 'flac', Type: 'Audio', AudioCodec: 'flac' },
+              { Container: 'wav', Type: 'Audio', AudioCodec: 'pcm_s16le,pcm_s24le' },
             ],
             TranscodingProfiles: [
               {
                 Container: 'ts',
                 Type: 'Video',
-                VideoCodec: 'h264',
-                AudioCodec: 'aac',
+                VideoCodec: 'h264,hevc',
+                AudioCodec: 'aac,ac3,eac3',
                 Protocol: 'hls',
                 Context: 'Streaming',
                 MaxAudioChannels: '6',
+                MinSegments: 1,
+                SegmentLength: 6,
                 BreakOnNonKeyFrames: true,
                 CopyTimestamps: false,
               },
@@ -603,22 +609,125 @@ export class JellyfinService {
                 AudioCodec: 'aac',
                 Protocol: 'http',
                 Context: 'Streaming',
+                MaxAudioChannels: '6',
+              },
+              {
+                Container: 'aac',
+                Type: 'Audio',
+                AudioCodec: 'aac',
+                Protocol: 'http',
+                Context: 'Streaming',
+                MaxAudioChannels: '2',
               },
             ],
-            // Remove strict codec restrictions that can cause issues
-            CodecProfiles: [],
+            CodecProfiles: [
+              {
+                Type: 'Video',
+                Codec: 'h264',
+                Conditions: [
+                  {
+                    Condition: 'NotEquals',
+                    Property: 'IsAnamorphic',
+                    Value: 'true',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'LessThanEqual',
+                    Property: 'VideoLevel',
+                    Value: '52',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'EqualsAny',
+                    Property: 'VideoProfile',
+                    Value: 'high|main|baseline|constrained baseline',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'EqualsAny',
+                    Property: 'VideoRangeType',
+                    Value: 'SDR',
+                    IsRequired: false,
+                  },
+                ],
+              },
+              {
+                Type: 'Video',
+                Codec: 'hevc',
+                Conditions: [
+                  {
+                    Condition: 'NotEquals',
+                    Property: 'IsAnamorphic',
+                    Value: 'true',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'LessThanEqual',
+                    Property: 'VideoLevel',
+                    Value: '153',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'EqualsAny',
+                    Property: 'VideoProfile',
+                    Value: 'main|main 10',
+                    IsRequired: false,
+                  },
+                  {
+                    Condition: 'EqualsAny',
+                    Property: 'VideoRangeType',
+                    Value: 'SDR|HLG|HDR10|HDR10Plus|DOVI|DOVIWithSDR|DOVIWithHLG|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithELHDR10Plus',
+                    IsRequired: false,
+                  },
+                ],
+              },
+              {
+                Type: 'VideoAudio',
+                Codec: 'aac',
+                Conditions: [
+                  {
+                    Condition: 'LessThanEqual',
+                    Property: 'AudioChannels',
+                    Value: '8',
+                    IsRequired: false,
+                  },
+                ],
+              },
+              {
+                Type: 'VideoAudio',
+                Codec: 'ac3,eac3',
+                Conditions: [
+                  {
+                    Condition: 'LessThanEqual',
+                    Property: 'AudioChannels',
+                    Value: '6',
+                    IsRequired: false,
+                  },
+                ],
+              },
+            ],
             SubtitleProfiles: [
+              { Format: 'vtt', Method: 'External' },
               { Format: 'srt', Method: 'External' },
               { Format: 'sub', Method: 'External' },
-              { Format: 'vtt', Method: 'External' },
-              { Format: 'ass', Method: 'External' },
-              { Format: 'ssa', Method: 'External' },
+              { Format: 'subrip', Method: 'External' },
+              { Format: 'ass', Method: 'Hls' },
+              { Format: 'ssa', Method: 'Hls' },
+              { Format: 'pgssub', Method: 'Encode' },
+              { Format: 'dvdsub', Method: 'Encode' },
+              { Format: 'dvbsub', Method: 'Encode' },
+              { Format: 'pgs', Method: 'Encode' },
             ],
             ResponseProfiles: [
               {
                 Type: 'Video',
                 Container: 'ts',
                 MimeType: 'video/mp2t',
+              },
+              {
+                Type: 'Video',
+                Container: 'm4v',
+                MimeType: 'video/mp4',
               },
             ],
           },
@@ -653,14 +762,17 @@ export class JellyfinService {
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      // H.264/AAC for Apple compatibility
-      videoCodec: 'h264',
-      audioCodec: 'aac',
-      // Transcoding settings - lower resolution for faster initial transcode
-      maxWidth: 1280,
-      maxHeight: 720,
-      videoBitRate: 4000000,
-      audioBitRate: 128000,
+      // H.264 + HEVC for Apple compatibility (HEVC needed for HDR/DV passthrough)
+      videoCodec: 'h264,hevc',
+      audioCodec: 'aac,ac3,eac3',
+      // Allow stream copy when possible (preserves HDR metadata)
+      enableAutoStreamCopy: true,
+      // Transcoding settings
+      maxWidth: 3840,
+      maxHeight: 2160,
+      videoBitRate: 20000000,
+      audioBitRate: 384000,
+      maxAudioChannels: 6,
       // Segment settings - longer segments for faster generation
       segmentContainer: 'ts',
       minSegments: 1,

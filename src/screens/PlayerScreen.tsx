@@ -5,13 +5,18 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  Pressable,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { OnProgressData, VideoRef } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
 import { RootStackParamList, JellyfinPlaybackInfo, JellyfinItem } from '../types';
 import { playbackPositionService } from '../services/playbackPosition';
+import { videoPlayerWindowService } from '../services/videoPlayerWindow';
 
 type PlayerScreenRouteProp = RouteProp<RootStackParamList, 'Player'>;
 
@@ -32,6 +37,7 @@ export function PlayerScreen() {
   const navigation = useNavigation();
   const { jellyfin } = useServices();
   const { itemId } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [playbackInfo, setPlaybackInfo] = useState<JellyfinPlaybackInfo | null>(null);
   const [item, setItem] = useState<JellyfinItem | null>(null);
@@ -42,6 +48,15 @@ export function PlayerScreen() {
   const [streamAttempt, setStreamAttempt] = useState<'direct' | 'hls' | 'transcoded'>('hls');
   const [isRetrying, setIsRetrying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [useNativeWindow, setUseNativeWindow] = useState<boolean | null>(null);
+  const [nativeWindowOpened, setNativeWindowOpened] = useState(false);
+  
+  // Debug: Log platform info
+  console.log('[PlayerScreen] Platform.OS:', Platform.OS, 'Platform.isTV:', Platform.isTV, 'useNativeWindow:', useNativeWindow);
+  
+  // Show custom controls only if we're NOT using native window or on non-TV iOS
+  const showCustomControls = useNativeWindow === false && !Platform.isTV && Platform.OS === 'ios';
 
   const videoRef = useRef<VideoRef>(null);
   const hasRestoredPosition = useRef(false);
@@ -59,6 +74,73 @@ export function PlayerScreen() {
   useEffect(() => { itemRef.current = item; }, [item]);
   useEffect(() => { jellyfinRef.current = jellyfin; }, [jellyfin]);
   useEffect(() => { playbackInfoRef.current = playbackInfo; }, [playbackInfo]);
+
+  // Check if native window player is supported (Mac Catalyst)
+  useEffect(() => {
+    const checkNativeWindow = async () => {
+      try {
+        const supported = await videoPlayerWindowService.isSupported();
+        console.log('[PlayerScreen] Native window player supported:', supported);
+        setUseNativeWindow(supported);
+      } catch (err) {
+        console.log('[PlayerScreen] Native window check failed:', err);
+        setUseNativeWindow(false);
+      }
+    };
+    checkNativeWindow();
+  }, []);
+
+  // Open native window player when ready (Mac Catalyst)
+  // This opens video in a separate macOS window with native window controls
+  useEffect(() => {
+    const openNativePlayer = async () => {
+      if (useNativeWindow !== true || isLoading || !playbackInfo?.MediaSources[0] || !jellyfin || !item || nativeWindowOpened) {
+        return;
+      }
+
+      try {
+        const mediaSourceId = playbackInfo.MediaSources[0].Id;
+        const videoUrl = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
+        const title = item.Name || 'Video';
+        const startPosition = savedPositionToRestore.current;
+
+        console.log('[PlayerScreen] Opening native window player:', { title, videoUrl: videoUrl.substring(0, 100) });
+        setNativeWindowOpened(true); // Prevent multiple opens
+        
+        const result = await videoPlayerWindowService.openPlayer(videoUrl, title, itemId, startPosition);
+        console.log('[PlayerScreen] Native window opened:', result);
+        
+        // Navigate back immediately - native window handles its own playback and close
+        setTimeout(() => navigation.goBack(), 100);
+      } catch (err) {
+        console.error('[PlayerScreen] Failed to open native window:', err);
+        // Fallback to in-app player
+        setUseNativeWindow(false);
+        setNativeWindowOpened(false);
+      }
+    };
+
+    openNativePlayer();
+  }, [isLoading, useNativeWindow, playbackInfo, jellyfin, item, itemId, navigation, nativeWindowOpened]);
+
+  // Handle keyboard events on macOS (ESC to exit)
+  useEffect(() => {
+    if (Platform.OS !== 'macos') return;
+
+    const handleKeyPress = (e: any) => {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        navigation.goBack();
+      }
+    };
+
+    // @ts-ignore - addEventListener exists in React Native macOS
+    document?.addEventListener('keydown', handleKeyPress);
+
+    return () => {
+      // @ts-ignore
+      document?.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [navigation]);
 
   const loadPlaybackInfo = useCallback(async () => {
     if (!jellyfin) return;
@@ -278,6 +360,16 @@ export function PlayerScreen() {
     return <LoadingScreen message="Loading video..." />;
   }
 
+  // If we're waiting to check native window support or opening native window, show loading
+  if (useNativeWindow === null || (useNativeWindow === true && !nativeWindowOpened)) {
+    return <LoadingScreen message="Opening player..." />;
+  }
+
+  // If native window was opened successfully, show loading while navigating back
+  if (nativeWindowOpened) {
+    return <LoadingScreen message="Opening native player window..." />;
+  }
+
   if (error) {
     return (
       <View style={styles.errorContainer}>
@@ -306,7 +398,14 @@ export function PlayerScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <Pressable 
+      style={styles.container} 
+      onPress={() => {
+        if (showCustomControls) {
+          setIsPaused(!isPaused);
+        }
+      }}
+    >
       <Video
         ref={videoRef}
         source={{
@@ -314,9 +413,10 @@ export function PlayerScreen() {
           type: streamAttempt === 'hls' ? 'm3u8' : undefined,
         }}
         style={styles.video}
-        // Use native controls - this uses AVPlayerViewController on iOS/tvOS
-        // which provides native subtitle picker, rotation handling, PiP, AirPlay
-        controls={true}
+        // Disable native controls when we need custom back button (macOS/desktop)
+        // Native controls cover React Native views
+        controls={!showCustomControls}
+        paused={isPaused}
         resizeMode="contain"
         onProgress={handleProgress}
         onLoad={handleLoad}
@@ -374,7 +474,32 @@ export function PlayerScreen() {
           <Text style={styles.bufferingText}>Loading...</Text>
         </View>
       )}
-    </View>
+
+      {/* Custom controls overlay for macOS/desktop - back button and play/pause */}
+      {showCustomControls && (
+        <>
+          {/* Back button */}
+          <Pressable
+            style={[styles.backButton, { top: Math.max(insets.top, 20), left: Math.max(insets.left, 20) }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleBack();
+            }}
+          >
+            <Icon name="arrow-back" size={28} color="#fff" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </Pressable>
+
+          {/* Play/Pause indicator in center */}
+          {isPaused && !isBuffering && (
+            <View style={styles.pauseIndicator} pointerEvents="none">
+              <Icon name="play" size={80} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.pauseText}>Tap to play</Text>
+            </View>
+          )}
+        </>
+      )}
+    </Pressable>
   );
 }
 
@@ -437,6 +562,46 @@ const styles = StyleSheet.create({
   errorButtonText: {
     color: '#fff',
     fontSize: 18,
+  },
+  backButton: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    gap: 10,
+    zIndex: 999999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  pauseIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  pauseText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 18,
+    marginTop: 16,
+    fontWeight: '600',
   },
 });
 
