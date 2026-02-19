@@ -9,6 +9,7 @@ import { FocusableButton, FocusableInput } from '../components';
 import { RadarrService } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
 import { DEV_CONFIG } from '../config/dev';
+import { scaleFontSize, scaleSize } from '../utils/scaling';
 
 export function RadarrSettingsScreen() {
   const { settings, updateRadarrSettings } = useSettings();
@@ -268,15 +269,15 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: 'rgba(10, 132, 255, 0.95)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
     letterSpacing: 0.3,
   },
   sectionDescription: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
-    marginBottom: 24,
-    lineHeight: 24,
+    fontSize: scaleFontSize(16),
+    marginBottom: scaleSize(24),
+    lineHeight: scaleFontSize(24),
     fontWeight: '500',
   },
   buttonRow: {
@@ -286,8 +287,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   testResult: {
-    fontSize: 15,
-    marginBottom: 16,
+    fontSize: scaleFontSize(15),
+    marginBottom: scaleSize(16),
     fontWeight: '600',
     letterSpacing: 0.2,
   },

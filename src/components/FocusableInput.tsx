@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import { scaleFontSize, scaleSize } from '../utils/scaling';
 
 interface FocusableInputProps extends TextInputProps {
   label?: string;
@@ -75,12 +76,12 @@ export function FocusableInput({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   label: {
     color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 17,
-    marginBottom: 10,
+    fontSize: scaleFontSize(17),
+    marginBottom: scaleSize(10),
     fontWeight: '600',
     letterSpacing: 0.2,
   },
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     borderWidth: 2,
-    borderRadius: 10,
+    borderRadius: scaleSize(10),
     backgroundColor: 'rgba(26, 26, 26, 0.6)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -104,8 +105,8 @@ const styles = StyleSheet.create({
   },
   input: {
     color: '#fff',
-    fontSize: 17,
-    padding: 16,
+    fontSize: scaleFontSize(17),
+    padding: scaleSize(16),
     fontWeight: '500',
   },
   inputMobile: {
@@ -114,8 +115,8 @@ const styles = StyleSheet.create({
   },
   error: {
     color: 'rgba(255, 69, 58, 0.95)',
-    fontSize: 14,
-    marginTop: 6,
+    fontSize: scaleFontSize(14),
+    marginTop: scaleSize(6),
     fontWeight: '500',
   },
 });

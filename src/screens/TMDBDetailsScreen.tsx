@@ -18,6 +18,7 @@ import { useServices, useSettings } from '../context';
 import { FocusableButton, QualityProfileSelector } from '../components';
 import { RootStackParamList, TMDBMovie, TMDBTVShow, TMDBMovieDetails, TMDBTVDetails, TMDBSeasonDetails, TMDBEpisode, TMDBCast, SonarrQualityProfile, RadarrQualityProfile, SonarrQueueItem, RadarrQueueItem } from '../types';
 import { TMDBService } from '../services';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 type TMDBDetailsRouteProp = RouteProp<RootStackParamList, 'TMDBDetails'>;
 
@@ -850,14 +851,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   content: {
-    padding: 48,
+    padding: scaleSize(48),
   },
   mainContent: {
     flexDirection: 'row',
   },
   poster: {
-    borderRadius: 12,
-    marginRight: 48,
+    borderRadius: scaleSize(12),
+    marginRight: scaleSize(48),
   },
   info: {
     flex: 1,
@@ -865,74 +866,74 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#fff',
-    fontSize: 48,
+    fontSize: scaleFontSize(48),
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   metadata: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
     flexWrap: 'wrap',
   },
   metadataItem: {
     color: '#888',
-    fontSize: 18,
-    marginRight: 24,
-    marginBottom: 8,
+    fontSize: scaleFontSize(18),
+    marginRight: scaleSize(24),
+    marginBottom: scaleSize(8),
   },
   genres: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   genreTag: {
     backgroundColor: '#333',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: scaleSize(12),
+    paddingVertical: scaleSize(6),
+    borderRadius: scaleSize(4),
+    marginRight: scaleSize(8),
+    marginBottom: scaleSize(8),
   },
   genreText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   overview: {
     color: '#ccc',
-    fontSize: 18,
-    lineHeight: 28,
-    marginBottom: 24,
+    fontSize: scaleFontSize(18),
+    lineHeight: scaleFontSize(28),
+    marginBottom: scaleSize(24),
   },
   actions: {
     flexDirection: 'row',
-    gap: 16,
+    gap: scaleSize(16),
   },
   configureText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontStyle: 'italic',
   },
   section: {
-    marginTop: 48,
+    marginTop: scaleSize(48),
   },
   sectionTitle: {
     color: '#fff',
-    fontSize: 32,
+    fontSize: scaleFontSize(32),
     fontWeight: 'bold',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   castList: {
-    paddingRight: 48,
+    paddingRight: scaleSize(48),
   },
   castMember: {
-    width: 120,
-    marginRight: 16,
+    width: scaleSize(120),
+    marginRight: scaleSize(16),
   },
   castImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 8,
+    width: scaleSize(120),
+    height: scaleSize(120),
+    borderRadius: scaleSize(60),
+    marginBottom: scaleSize(8),
     backgroundColor: '#333',
   },
   castImagePlaceholder: {
@@ -941,34 +942,34 @@ const styles = StyleSheet.create({
   },
   castInitial: {
     color: '#fff',
-    fontSize: 48,
+    fontSize: scaleFontSize(48),
     fontWeight: 'bold',
   },
   castName: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   castCharacter: {
     color: '#888',
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     textAlign: 'center',
   },
   seasonTabs: {
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
   },
   seasonTabsContent: {
-    paddingRight: 48,
+    paddingRight: scaleSize(48),
   },
   seasonTabContainer: {
-    marginRight: 12,
+    marginRight: scaleSize(12),
   },
   seasonTab: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: scaleSize(24),
+    paddingVertical: scaleSize(12),
+    borderRadius: scaleSize(8),
     backgroundColor: '#222',
     flexDirection: 'row',
     alignItems: 'center',
@@ -982,7 +983,7 @@ const styles = StyleSheet.create({
   },
   seasonTabText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: '600',
   },
   seasonTabTextActive: {
@@ -998,35 +999,35 @@ const styles = StyleSheet.create({
   },
   seasonSelectionHint: {
     backgroundColor: 'rgba(33, 150, 243, 0.2)',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    padding: scaleSize(12),
+    borderRadius: scaleSize(8),
+    marginBottom: scaleSize(16),
     borderLeftWidth: 4,
     borderLeftColor: '#2196f3',
   },
   seasonSelectionHintText: {
     color: '#2196f3',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   loadingText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     textAlign: 'center',
-    paddingVertical: 24,
+    paddingVertical: scaleSize(24),
   },
   episodesList: {
-    gap: 16,
+    gap: scaleSize(16),
   },
   episodeCard: {
     flexDirection: 'row',
     backgroundColor: '#111',
-    borderRadius: 8,
+    borderRadius: scaleSize(8),
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
   },
   episodeImage: {
-    width: 240,
-    height: 135,
+    width: scaleSize(240),
+    height: scaleSize(135),
     backgroundColor: '#222',
   },
   episodeImagePlaceholder: {
@@ -1035,29 +1036,29 @@ const styles = StyleSheet.create({
   },
   episodeNumber: {
     color: '#666',
-    fontSize: 32,
+    fontSize: scaleFontSize(32),
     fontWeight: 'bold',
   },
   episodeInfo: {
     flex: 1,
-    padding: 16,
+    padding: scaleSize(16),
     justifyContent: 'center',
   },
   episodeTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   episodeRuntime: {
     color: '#888',
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: scaleFontSize(14),
+    marginBottom: scaleSize(8),
   },
   episodeOverview: {
     color: '#ccc',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: scaleFontSize(14),
+    lineHeight: scaleFontSize(20),
   },
   downloadProgressSection: {
     marginTop: 20,
@@ -1071,12 +1072,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   downloadProgressTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: '#fff',
     fontWeight: '600',
   },
   downloadProgressStats: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: 'rgba(255,255,255,0.7)',
   },
   downloadProgressBarContainer: {
@@ -1096,18 +1097,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   downloadProgressText: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: '#2196f3',
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   seasonProgressContainer: {
-    marginVertical: 8,
-    padding: 12,
+    marginVertical: scaleSize(8),
+    padding: scaleSize(12),
     backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 8,
+    borderRadius: scaleSize(8),
   },
   seasonProgressText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: '#2196f3',
     fontWeight: '500',
   },

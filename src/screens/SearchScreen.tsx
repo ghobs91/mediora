@@ -15,6 +15,7 @@ import { useServices } from '../context';
 import { MediaRow, MediaCard } from '../components';
 import { useResponsiveColumns, useDeviceType } from '../hooks';
 import { TMDBMovie, TMDBTVShow, TMDBGenre } from '../types';
+import { scaleFontSize, scaleSize } from '../utils/scaling';
 
 type ContentMode = 'movies' | 'tv';
 
@@ -326,15 +327,15 @@ const styles = StyleSheet.create({
     paddingTop: 48,
   },
   searchContainer: {
-    paddingHorizontal: 48,
-    paddingTop: 24,
-    marginBottom: 16,
+    paddingHorizontal: scaleSize(48),
+    paddingTop: scaleSize(24),
+    marginBottom: scaleSize(16),
   },
   searchInput: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 18,
+    borderRadius: scaleSize(8),
+    padding: scaleSize(16),
+    fontSize: scaleFontSize(18),
     color: '#fff',
     borderWidth: 2,
     borderColor: '#333',
@@ -345,14 +346,14 @@ const styles = StyleSheet.create({
   },
   modeContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 48,
-    marginBottom: 24,
+    paddingHorizontal: scaleSize(48),
+    marginBottom: scaleSize(24),
   },
   modeTab: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginRight: 12,
-    borderRadius: 6,
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(10),
+    marginRight: scaleSize(12),
+    borderRadius: scaleSize(6),
     backgroundColor: '#1a1a1a',
     borderWidth: 2,
     borderColor: 'transparent',
@@ -365,20 +366,20 @@ const styles = StyleSheet.create({
   },
   modeTabText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: '600',
   },
   modeTabTextSelected: {
     color: '#fff',
   },
   loadingContainer: {
-    padding: 48,
+    padding: scaleSize(48),
     alignItems: 'center',
   },
   loadingText: {
     color: '#fff',
-    fontSize: 18,
-    marginTop: 16,
+    fontSize: scaleFontSize(18),
+    marginTop: scaleSize(16),
   },
   resultsContainer: {
     width: '100%',
@@ -388,25 +389,25 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   noResults: {
-    padding: 48,
+    padding: scaleSize(48),
     alignItems: 'center',
   },
   noResultsText: {
     color: '#888',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 48,
+    padding: scaleSize(48),
     backgroundColor: '#000',
   },
   emptyTitle: {
     color: '#fff',
-    fontSize: 36,
+    fontSize: scaleFontSize(36),
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
     textAlign: 'center',
   },
   emptyTitleMobile: {
@@ -414,13 +415,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: '#888',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     textAlign: 'center',
   },
   emptyTextMobile: {
     fontSize: 15,
   },
   bottomPadding: {
-    height: 48,
+    height: scaleSize(48),
   },
 });

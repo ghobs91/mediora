@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { SonarrQualityProfile, RadarrQualityProfile } from '../types';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 interface QualityProfileSelectorProps {
   visible: boolean;
@@ -49,7 +50,7 @@ export function QualityProfileSelector({
       onPress={() => handleSelect(item.id)}>
       <Text style={styles.profileName}>{item.name}</Text>
       {localSelectedId === item.id && (
-        <Icon name="checkmark" size={24} color="#fff" />
+        <Icon name="checkmark" size={scaleSize(24)} color="#fff" />
       )}
     </TouchableOpacity>
   );
@@ -65,7 +66,7 @@ export function QualityProfileSelector({
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={28} color="#fff" />
+              <Icon name="close" size={scaleSize(28)} color="#fff" />
             </TouchableOpacity>
           </View>
 
@@ -96,9 +97,9 @@ const styles = StyleSheet.create({
   },
   modal: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    borderRadius: scaleSize(12),
     width: '80%',
-    maxWidth: 600,
+    maxWidth: scaleSize(600),
     maxHeight: '70%',
     overflow: 'hidden',
   },
@@ -106,26 +107,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: scaleSize(20),
     borderBottomWidth: 1,
     borderBottomColor: '#333',
   },
   title: {
-    fontSize: 24,
+    fontSize: scaleFontSize(24),
     fontWeight: '600',
     color: '#fff',
   },
   closeButton: {
-    padding: 8,
+    padding: scaleSize(8),
   },
   list: {
-    maxHeight: 400,
+    maxHeight: scaleSize(400),
   },
   profileItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: scaleSize(20),
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
   },
@@ -133,16 +134,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#e50914',
   },
   profileName: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: '#fff',
     flex: 1,
   },
   emptyContainer: {
-    padding: 40,
+    padding: scaleSize(40),
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: '#888',
   },
 });
