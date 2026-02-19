@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -17,6 +18,7 @@ import { LoadingScreen } from '../components';
 import { RootStackParamList, JellyfinPlaybackInfo, JellyfinItem } from '../types';
 import { playbackPositionService } from '../services/playbackPosition';
 import { videoPlayerWindowService } from '../services/videoPlayerWindow';
+import { configureDisplayForHDR } from '../services/hdrSupport';
 
 type PlayerScreenRouteProp = RouteProp<RootStackParamList, 'Player'>;
 
@@ -156,6 +158,14 @@ export function PlayerScreen() {
 
       setPlaybackInfo(info);
       setItem(itemDetails);
+
+      // Configure tvOS display for automatic HDR mode switching
+      // This works with "Match Dynamic Range" in tvOS Settings
+      if (Platform.isTV) {
+        configureDisplayForHDR().then(result => {
+          console.log('[PlayerScreen] HDR display configured:', result);
+        });
+      }
 
       // Check for saved position
       let startPositionSeconds = 0;
@@ -398,21 +408,14 @@ export function PlayerScreen() {
   }
 
   return (
-    <Pressable 
-      style={styles.container} 
-      onPress={() => {
-        if (showCustomControls) {
-          setIsPaused(!isPaused);
-        }
-      }}
-    >
+    <View style={styles.container}>
       <Video
         ref={videoRef}
         source={{
           uri: videoUrl,
           type: streamAttempt === 'hls' ? 'm3u8' : undefined,
         }}
-        style={styles.video}
+        style={Platform.isTV ? styles.videoTV : styles.video}
         // Disable native controls when we need custom back button (macOS/desktop)
         // Native controls cover React Native views
         controls={!showCustomControls}
@@ -454,7 +457,10 @@ export function PlayerScreen() {
         // Enable native features
         allowsExternalPlayback={true}
         ignoreSilentSwitch="ignore"
-        // Fullscreen configuration for proper rotation handling
+        // Do NOT use fullscreen on tvOS — it modally presents AVPlayerViewController
+        // which rips it out of the React Native view hierarchy causing a black screen
+        // (width=0 constraint warnings). controls={true} already provides inline
+        // AVPlayerViewController with native controls, which is correct for tvOS.
         fullscreen={false}
         fullscreenAutorotate={true}
         fullscreenOrientation="landscape"
@@ -478,6 +484,11 @@ export function PlayerScreen() {
       {/* Custom controls overlay for macOS/desktop - back button and play/pause */}
       {showCustomControls && (
         <>
+          {/* Tap anywhere to toggle play/pause */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setIsPaused(!isPaused)}
+          />
           {/* Back button */}
           <Pressable
             style={[styles.backButton, { top: Math.max(insets.top, 20), left: Math.max(insets.left, 20) }]}
@@ -499,9 +510,11 @@ export function PlayerScreen() {
           )}
         </>
       )}
-    </Pressable>
+    </View>
   );
 }
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -514,6 +527,14 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     right: 0,
+  },
+  videoTV: {
+    // Use explicit screen dimensions on tvOS to guarantee the native
+    // AVPlayerViewController view gets non-zero bounds from Yoga layout.
+    // flex:1 alone can result in zero-size frames on tvOS causing a black screen.
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    backgroundColor: '#000',
   },
   bufferingOverlay: {
     ...StyleSheet.absoluteFillObject,

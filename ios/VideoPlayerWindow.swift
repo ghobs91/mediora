@@ -50,14 +50,16 @@ class VideoPlayerWindow: NSObject {
     // Store item ID for progress tracking
     VideoPlayerWindow.itemId = itemId
     
-    // Create player with HDR support
-    let player = AVPlayer(url: url)
-    VideoPlayerWindow.player = player
+    // Create player item and player
+    let playerItem = AVPlayerItem(url: url)
     
     // Enable per-frame HDR display metadata for proper HDR/Dolby Vision rendering
-    if #available(iOS 11.2, tvOS 11.2, macCatalyst 13.0, *) {
-      player.currentItem?.appliesPerFrameHDRDisplayMetadata = true
+    if #available(iOS 17.4, macCatalyst 17.4, *) {
+      playerItem.appliesPerFrameHDRDisplayMetadata = true
     }
+    
+    let player = AVPlayer(playerItem: playerItem)
+    VideoPlayerWindow.player = player
     
     // Create player view controller
     let playerVC = AVPlayerViewController()
@@ -96,11 +98,6 @@ class VideoPlayerWindow: NSObject {
         if startPosition > 0 {
           let time = CMTime(seconds: startPosition, preferredTimescale: 1)
           player.seek(to: time)
-        }
-        
-        // Enable HDR display metadata now that player item is ready
-        if #available(iOS 11.2, tvOS 11.2, macCatalyst 13.0, *) {
-          player.currentItem?.appliesPerFrameHDRDisplayMetadata = true
         }
         
         // Start playback
