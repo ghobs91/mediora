@@ -6,6 +6,7 @@ import {
   JellyfinItem,
   JellyfinPlaybackInfo,
 } from '../types';
+import { getHDRCapabilities } from './hdrSupport';
 
 const APP_NAME = 'Mediora';
 const APP_VERSION = '1.0.0';
@@ -69,6 +70,8 @@ export class JellyfinService {
   private userId?: string;
   private deviceId: string;
   private playSessionId: string;
+  // Cached after buildDeviceProfile(); true when the display is in HDR/EDR output mode
+  private _isHDRActive: boolean = false;
 
   constructor(serverUrl: string, accessToken?: string, userId?: string) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
@@ -561,11 +564,195 @@ export class JellyfinService {
     return data.Items || [];
   }
 
+  // Build device profile with dynamic HDR video range detection
+  private async buildDeviceProfile(): Promise<any> {
+    // Query platform for actual HDR capabilities
+    let hdrCapabilities;
+    try {
+      hdrCapabilities = await getHDRCapabilities();
+      console.log('[Jellyfin] HDR capabilities:', JSON.stringify(hdrCapabilities));
+    } catch (e) {
+      console.log('[Jellyfin] HDR detection failed, defaulting to SDR:', e);
+      hdrCapabilities = { isHDRSupported: false, supportedVideoRanges: ['SDR'] };
+    }
+
+    this._isHDRActive = hdrCapabilities.isHDRSupported;
+    const hevcVideoRangeType = hdrCapabilities.supportedVideoRanges.join('|');
+    console.log('[Jellyfin] HDR active:', this._isHDRActive, 'HEVC ranges:', hevcVideoRangeType);
+
+    return {
+      MaxStreamingBitrate: 120000000,
+      MaxStaticBitrate: 100000000,
+      MusicStreamingTranscodingBitrate: 384000,
+      // Apple AVPlayer natively supports mp4/m4v/mov containers
+      // MKV/AVI/etc. must be transcoded or remuxed via HLS
+      DirectPlayProfiles: [
+        { Container: 'mp4,m4v', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
+        { Container: 'mov', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
+        { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3' },
+        { Container: 'aac', Type: 'Audio', AudioCodec: 'aac' },
+        { Container: 'm4a', Type: 'Audio', AudioCodec: 'aac,alac,flac' },
+        { Container: 'flac', Type: 'Audio', AudioCodec: 'flac' },
+        { Container: 'wav', Type: 'Audio', AudioCodec: 'pcm_s16le,pcm_s24le' },
+      ],
+      TranscodingProfiles: [
+        {
+          // mp4 with hls protocol = fragmented MP4 (fMP4) segments.
+          // fMP4 preserves HEVC HDR / Dolby Vision metadata in HLS.
+          // TS segments strip HDR metadata causing black video on HDR content.
+          Container: 'mp4',
+          Type: 'Video',
+          VideoCodec: 'h264,hevc',
+          AudioCodec: 'aac,ac3,eac3',
+          Protocol: 'hls',
+          Context: 'Streaming',
+          MaxAudioChannels: '6',
+          MinSegments: 1,
+          SegmentLength: 6,
+          BreakOnNonKeyFrames: false,
+          CopyTimestamps: false,
+        },
+        {
+          Container: 'mp4',
+          Type: 'Video',
+          VideoCodec: 'h264',
+          AudioCodec: 'aac',
+          Protocol: 'http',
+          Context: 'Streaming',
+          MaxAudioChannels: '6',
+        },
+        {
+          Container: 'aac',
+          Type: 'Audio',
+          AudioCodec: 'aac',
+          Protocol: 'http',
+          Context: 'Streaming',
+          MaxAudioChannels: '2',
+        },
+      ],
+      CodecProfiles: [
+        {
+          Type: 'Video',
+          Codec: 'h264',
+          Conditions: [
+            {
+              Condition: 'NotEquals',
+              Property: 'IsAnamorphic',
+              Value: 'true',
+              IsRequired: false,
+            },
+            {
+              Condition: 'LessThanEqual',
+              Property: 'VideoLevel',
+              Value: '52',
+              IsRequired: false,
+            },
+            {
+              Condition: 'EqualsAny',
+              Property: 'VideoProfile',
+              Value: 'high|main|baseline|constrained baseline',
+              IsRequired: false,
+            },
+            {
+              Condition: 'EqualsAny',
+              Property: 'VideoRangeType',
+              Value: 'SDR',
+              IsRequired: false,
+            },
+          ],
+        },
+        {
+          Type: 'Video',
+          Codec: 'hevc',
+          Conditions: [
+            {
+              Condition: 'NotEquals',
+              Property: 'IsAnamorphic',
+              Value: 'true',
+              IsRequired: false,
+            },
+            {
+              Condition: 'LessThanEqual',
+              Property: 'VideoLevel',
+              Value: '153',
+              IsRequired: false,
+            },
+            {
+              Condition: 'EqualsAny',
+              Property: 'VideoProfile',
+              Value: 'main|main 10',
+              IsRequired: false,
+            },
+            {
+              // Report actual platform HDR capabilities to the server
+              // so it knows which video ranges AVPlayer can handle natively.
+              // This enables HDR/DV passthrough in HLS streams.
+              Condition: 'EqualsAny',
+              Property: 'VideoRangeType',
+              Value: hevcVideoRangeType,
+              IsRequired: false,
+            },
+          ],
+        },
+        {
+          Type: 'VideoAudio',
+          Codec: 'aac',
+          Conditions: [
+            {
+              Condition: 'LessThanEqual',
+              Property: 'AudioChannels',
+              Value: '8',
+              IsRequired: false,
+            },
+          ],
+        },
+        {
+          Type: 'VideoAudio',
+          Codec: 'ac3,eac3',
+          Conditions: [
+            {
+              Condition: 'LessThanEqual',
+              Property: 'AudioChannels',
+              Value: '6',
+              IsRequired: false,
+            },
+          ],
+        },
+      ],
+      SubtitleProfiles: [
+        { Format: 'vtt', Method: 'External' },
+        { Format: 'srt', Method: 'External' },
+        { Format: 'sub', Method: 'External' },
+        { Format: 'subrip', Method: 'External' },
+        { Format: 'ass', Method: 'Hls' },
+        { Format: 'ssa', Method: 'Hls' },
+        { Format: 'pgssub', Method: 'Encode' },
+        { Format: 'dvdsub', Method: 'Encode' },
+        { Format: 'dvbsub', Method: 'Encode' },
+        { Format: 'pgs', Method: 'Encode' },
+      ],
+      ResponseProfiles: [
+        {
+          Type: 'Video',
+          Container: 'mp4',
+          MimeType: 'video/mp4',
+        },
+        {
+          Type: 'Video',
+          Container: 'm4v',
+          MimeType: 'video/mp4',
+        },
+      ],
+    };
+  }
+
   // Playback
   async getPlaybackInfo(itemId: string): Promise<JellyfinPlaybackInfo> {
     if (!this.userId || !this.accessToken) {
       throw new Error('Not authenticated');
     }
+
+    const deviceProfile = await this.buildDeviceProfile();
 
     const response = await fetchWithTimeout(
       `${this.serverUrl}/Items/${itemId}/PlaybackInfo?userId=${this.userId}`,
@@ -573,164 +760,7 @@ export class JellyfinService {
         method: 'POST',
         headers: getAuthHeader(this.accessToken, this.deviceId),
         body: JSON.stringify({
-          DeviceProfile: {
-            MaxStreamingBitrate: 120000000,
-            MaxStaticBitrate: 100000000,
-            MusicStreamingTranscodingBitrate: 384000,
-            // Apple AVPlayer natively supports mp4/m4v/mov containers
-            // MKV/AVI/etc. must be transcoded or remuxed via HLS
-            DirectPlayProfiles: [
-              { Container: 'mp4,m4v', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
-              { Container: 'mov', Type: 'Video', VideoCodec: 'h264,hevc,mpeg4,h263', AudioCodec: 'aac,ac3,eac3,mp3,alac,flac,opus' },
-              { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3' },
-              { Container: 'aac', Type: 'Audio', AudioCodec: 'aac' },
-              { Container: 'm4a', Type: 'Audio', AudioCodec: 'aac,alac,flac' },
-              { Container: 'flac', Type: 'Audio', AudioCodec: 'flac' },
-              { Container: 'wav', Type: 'Audio', AudioCodec: 'pcm_s16le,pcm_s24le' },
-            ],
-            TranscodingProfiles: [
-              {
-                Container: 'ts',
-                Type: 'Video',
-                VideoCodec: 'h264,hevc',
-                AudioCodec: 'aac,ac3,eac3',
-                Protocol: 'hls',
-                Context: 'Streaming',
-                MaxAudioChannels: '6',
-                MinSegments: 1,
-                SegmentLength: 6,
-                BreakOnNonKeyFrames: true,
-                CopyTimestamps: false,
-              },
-              {
-                Container: 'mp4',
-                Type: 'Video',
-                VideoCodec: 'h264',
-                AudioCodec: 'aac',
-                Protocol: 'http',
-                Context: 'Streaming',
-                MaxAudioChannels: '6',
-              },
-              {
-                Container: 'aac',
-                Type: 'Audio',
-                AudioCodec: 'aac',
-                Protocol: 'http',
-                Context: 'Streaming',
-                MaxAudioChannels: '2',
-              },
-            ],
-            CodecProfiles: [
-              {
-                Type: 'Video',
-                Codec: 'h264',
-                Conditions: [
-                  {
-                    Condition: 'NotEquals',
-                    Property: 'IsAnamorphic',
-                    Value: 'true',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'LessThanEqual',
-                    Property: 'VideoLevel',
-                    Value: '52',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'EqualsAny',
-                    Property: 'VideoProfile',
-                    Value: 'high|main|baseline|constrained baseline',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'EqualsAny',
-                    Property: 'VideoRangeType',
-                    Value: 'SDR',
-                    IsRequired: false,
-                  },
-                ],
-              },
-              {
-                Type: 'Video',
-                Codec: 'hevc',
-                Conditions: [
-                  {
-                    Condition: 'NotEquals',
-                    Property: 'IsAnamorphic',
-                    Value: 'true',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'LessThanEqual',
-                    Property: 'VideoLevel',
-                    Value: '153',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'EqualsAny',
-                    Property: 'VideoProfile',
-                    Value: 'main|main 10',
-                    IsRequired: false,
-                  },
-                  {
-                    Condition: 'EqualsAny',
-                    Property: 'VideoRangeType',
-                    Value: 'SDR|HLG|HDR10|HDR10Plus|DOVI|DOVIWithSDR|DOVIWithHLG|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithELHDR10Plus',
-                    IsRequired: false,
-                  },
-                ],
-              },
-              {
-                Type: 'VideoAudio',
-                Codec: 'aac',
-                Conditions: [
-                  {
-                    Condition: 'LessThanEqual',
-                    Property: 'AudioChannels',
-                    Value: '8',
-                    IsRequired: false,
-                  },
-                ],
-              },
-              {
-                Type: 'VideoAudio',
-                Codec: 'ac3,eac3',
-                Conditions: [
-                  {
-                    Condition: 'LessThanEqual',
-                    Property: 'AudioChannels',
-                    Value: '6',
-                    IsRequired: false,
-                  },
-                ],
-              },
-            ],
-            SubtitleProfiles: [
-              { Format: 'vtt', Method: 'External' },
-              { Format: 'srt', Method: 'External' },
-              { Format: 'sub', Method: 'External' },
-              { Format: 'subrip', Method: 'External' },
-              { Format: 'ass', Method: 'Hls' },
-              { Format: 'ssa', Method: 'Hls' },
-              { Format: 'pgssub', Method: 'Encode' },
-              { Format: 'dvdsub', Method: 'Encode' },
-              { Format: 'dvbsub', Method: 'Encode' },
-              { Format: 'pgs', Method: 'Encode' },
-            ],
-            ResponseProfiles: [
-              {
-                Type: 'Video',
-                Container: 'ts',
-                MimeType: 'video/mp2t',
-              },
-              {
-                Type: 'Video',
-                Container: 'm4v',
-                MimeType: 'video/mp4',
-              },
-            ],
-          },
+          DeviceProfile: deviceProfile,
         }),
       },
       PLAYBACK_TIMEOUT,
@@ -757,26 +787,34 @@ export class JellyfinService {
 
   getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number, startTimeTicks?: number): string {
     // Use master.m3u8 for HLS streaming with transcoding
+    //
+    // When display is SDR: request H.264 only so Jellyfin transcodes any HEVC HDR
+    // content to H.264 SDR. Otherwise AVPlayer gets HDR frames it can't render → black screen.
+    // When display is HDR: allow H.264 + HEVC with stream copy to preserve HDR metadata.
+    const videoCodec = this._isHDRActive ? 'h264,hevc' : 'h264';
+    console.log('[Jellyfin] HLS stream - HDR active:', this._isHDRActive, 'videoCodec:', videoCodec);
+
     const params: Record<string, string | number | boolean | undefined> = {
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      // H.264 + HEVC for Apple compatibility (HEVC needed for HDR/DV passthrough)
-      videoCodec: 'h264,hevc',
+      videoCodec: videoCodec,
       audioCodec: 'aac,ac3,eac3',
-      // Allow stream copy when possible (preserves HDR metadata)
-      enableAutoStreamCopy: true,
-      // Transcoding settings
+      // Allow stream copy when HDR is active (preserves HDR metadata).
+      // Force transcode when SDR to avoid HDR passthrough.
+      enableAutoStreamCopy: this._isHDRActive,
+      // Transcoding settings - allow up to 4K output for transcoded content
       maxWidth: 3840,
       maxHeight: 2160,
       videoBitRate: 20000000,
       audioBitRate: 384000,
       maxAudioChannels: 6,
-      // Segment settings - longer segments for faster generation
-      segmentContainer: 'ts',
+      // mp4 segments (fMP4) preserve HEVC HDR metadata through HLS.
+      // TS segments strip HDR colr box and SEI NAL units.
+      segmentContainer: 'mp4',
       minSegments: 1,
-      segmentLength: 6,  // Longer segments = faster to generate first one
+      segmentLength: 6,
       breakOnNonKeyFrames: false,
       // Include subtitle streams in HLS manifest for native player
       SubtitleMethod: 'Hls',

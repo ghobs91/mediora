@@ -25,6 +25,10 @@
 		C8CDF1832F0543E800EACBF9 /* AppIcon-tvOS.png in Resources */ = {isa = PBXBuildFile; fileRef = C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */; };
 		C9086F2620D993CF38BA7567 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		D264E7DBD7186B9F7F6F0A67 /* mediora/LaunchScreenMobile.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */; };
+		HDR001A12F3ABC10200HDR001 /* HDRSupportModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */; };
+		HDR001A12F3ABC10200HDR002 /* HDRSupportModule.m in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */; };
+		HDR001A12F3ABC10200HDR003 /* HDRSupportModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */; };
+		HDR001A12F3ABC10200HDR004 /* HDRSupportModule.m in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +53,8 @@
 		C8CDF1822F0543E800EACBF9 /* AppIcon-tvOS.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "AppIcon-tvOS.png"; sourceTree = "<group>"; };
 		CA98A3A6B5A4DE3E2E340F78 /* mediora/LaunchScreenMobile.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = mediora/LaunchScreenMobile.storyboard; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HDRSupportModule.swift; path = mediora/HDRSupportModule.swift; sourceTree = "<group>"; };
+		HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = HDRSupportModule.m; path = mediora/HDRSupportModule.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +83,8 @@
 			children = (
 				C8B71C712F2AC40200406A8C /* VideoPlayerWindow 2.m */,
 				C8B71C722F2AC40200406A8C /* VideoPlayerWindow 2.swift */,
+				HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */,
+				HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -407,6 +415,8 @@
 			files = (
 				C8B71C752F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */,
 				C8B71C762F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */,
+				HDR001A12F3ABC10200HDR001 /* HDRSupportModule.swift in Sources */,
+				HDR001A12F3ABC10200HDR002 /* HDRSupportModule.m in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -417,6 +427,8 @@
 			files = (
 				C8B71C732F2AC40200406A8C /* VideoPlayerWindow 2.swift in Sources */,
 				C8B71C742F2AC40200406A8C /* VideoPlayerWindow 2.m in Sources */,
+				HDR001A12F3ABC10200HDR003 /* HDRSupportModule.swift in Sources */,
+				HDR001A12F3ABC10200HDR004 /* HDRSupportModule.m in Sources */,
 				22502BB980C96FD10B597393 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
