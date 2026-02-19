@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { TMDBCast } from '../types';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 interface CastListProps {
     cast: TMDBCast[];
@@ -55,28 +56,28 @@ export function CastList({ cast, onPress }: CastListProps) {
 
 const styles = StyleSheet.create({
     container: {
-        marginVertical: 20,
+        marginVertical: scaleSize(20),
     },
     header: {
         color: '#fff',
-        fontSize: 20,
+        fontSize: scaleFontSize(20),
         fontWeight: '700',
-        marginBottom: 16,
+        marginBottom: scaleSize(16),
     },
     listContent: {
-        paddingRight: 20,
+        paddingRight: scaleSize(20),
     },
     card: {
-        width: 120,
+        width: scaleSize(120),
         alignItems: 'center',
-        marginRight: 16,
+        marginRight: scaleSize(16),
     },
     imageContainer: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
+        width: scaleSize(120),
+        height: scaleSize(120),
+        borderRadius: scaleSize(60),
         overflow: 'hidden',
-        marginBottom: 8,
+        marginBottom: scaleSize(8),
         backgroundColor: 'rgba(255,255,255,0.1)',
     },
     image: {
@@ -92,21 +93,21 @@ const styles = StyleSheet.create({
     },
     initials: {
         color: 'rgba(255,255,255,0.5)',
-        fontSize: 24,
+        fontSize: scaleFontSize(24),
         fontWeight: '600',
     },
     name: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: scaleFontSize(14),
         fontWeight: '600',
         textAlign: 'center',
         width: '100%',
     },
     character: {
         color: 'rgba(255,255,255,0.6)',
-        fontSize: 12,
+        fontSize: scaleFontSize(12),
         textAlign: 'center',
         width: '100%',
-        marginTop: 2,
+        marginTop: scaleSize(2),
     },
 });

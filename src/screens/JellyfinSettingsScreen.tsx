@@ -17,6 +17,7 @@ import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
 import { DEV_CONFIG } from '../config/dev';
+import { scaleFontSize, scaleSize } from '../utils/scaling';
 
 export function JellyfinSettingsScreen() {
   const { settings, updateJellyfinSettings, clearJellyfinSettings } = useSettings();
@@ -660,9 +661,9 @@ const styles = StyleSheet.create({
   },
   sectionDescription: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
-    marginBottom: 24,
-    lineHeight: 24,
+    fontSize: scaleFontSize(16),
+    marginBottom: scaleSize(24),
+    lineHeight: scaleFontSize(24),
     fontWeight: '500',
   },
   connectedInfo: {
@@ -679,31 +680,31 @@ const styles = StyleSheet.create({
   },
   connectedLabel: {
     color: 'rgba(48, 209, 88, 0.95)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: scaleSize(8),
     letterSpacing: 0.3,
   },
   connectedValue: {
     color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: '500',
   },
   quickConnectTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 24,
+    fontSize: scaleFontSize(24),
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: scaleSize(16),
     letterSpacing: 0.5,
   },
   quickConnectCode: {
     color: '#fff',
-    fontSize: 48,
+    fontSize: scaleFontSize(48),
     fontWeight: 'bold',
     textAlign: 'center',
     letterSpacing: 12,
-    marginBottom: 20,
+    marginBottom: scaleSize(20),
     fontFamily: 'monospace',
     textShadowColor: 'rgba(10, 132, 255, 0.5)',
     textShadowOffset: { width: 0, height: 4 },
@@ -711,10 +712,10 @@ const styles = StyleSheet.create({
   },
   quickConnectInstructions: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
+    lineHeight: scaleFontSize(22),
+    marginBottom: scaleSize(28),
     fontWeight: '500',
   },
   spinner: {
@@ -722,9 +723,9 @@ const styles = StyleSheet.create({
   },
   waitingText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: scaleSize(24),
     fontWeight: '500',
   },
   settingsSection: {
@@ -738,7 +739,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: 'rgba(10, 132, 255, 0.95)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -752,8 +753,8 @@ const styles = StyleSheet.create({
   },
   demoHint: {
     color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 13,
-    marginTop: 8,
+    fontSize: scaleFontSize(13),
+    marginTop: scaleSize(8),
     fontStyle: 'italic',
   },
   discoveryContainer: {
@@ -761,14 +762,14 @@ const styles = StyleSheet.create({
   },
   discoveryText: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 15,
-    marginTop: 12,
+    fontSize: scaleFontSize(15),
+    marginTop: scaleSize(12),
     fontStyle: 'italic',
   },
   discoveryHint: {
     color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: scaleFontSize(13),
+    marginTop: scaleSize(4),
     fontStyle: 'italic',
   },
   discoveredServersContainer: {
@@ -781,9 +782,9 @@ const styles = StyleSheet.create({
   },
   discoveredServersTitle: {
     color: 'rgba(10, 132, 255, 0.95)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: scaleSize(12),
   },
   serverItem: {
     marginBottom: 8,
@@ -801,19 +802,19 @@ const styles = StyleSheet.create({
   },
   serverName: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: scaleSize(4),
   },
   serverAddress: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   orText: {
     color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     textAlign: 'center',
-    marginVertical: 16,
+    marginVertical: scaleSize(16),
     fontWeight: '500',
   },
   testResultContainer: {
@@ -826,8 +827,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   testResult: {
-    fontSize: 15,
-    marginBottom: 16,
+    fontSize: scaleFontSize(15),
+    marginBottom: scaleSize(16),
     fontWeight: '600',
     letterSpacing: 0.2,
     color: 'rgba(255, 69, 58, 0.95)',
@@ -841,9 +842,9 @@ const styles = StyleSheet.create({
   },
   loginMethodLabel: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 15,
+    fontSize: scaleFontSize(15),
     fontWeight: '600',
-    marginBottom: 10,
+    marginBottom: scaleSize(10),
   },
   loginMethodButtons: {
     flexDirection: 'row',
@@ -859,9 +860,9 @@ const styles = StyleSheet.create({
   },
   loginMethodDescription: {
     color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-    marginBottom: 16,
-    lineHeight: 20,
+    fontSize: scaleFontSize(14),
+    marginBottom: scaleSize(16),
+    lineHeight: scaleFontSize(20),
     fontStyle: 'italic',
   },
 });

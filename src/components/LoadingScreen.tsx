@@ -8,18 +8,19 @@ interface LoadingScreenProps {
 
 export function LoadingScreen({ message = 'Loading...' }: LoadingScreenProps) {
   const GlassPanel = isLiquidGlassSupported ? LiquidGlassView : View;
-  
+
   return (
     <View style={styles.container}>
       <GlassPanel
         style={[
           styles.glassPanel,
-          !isLiquidGlassSupported && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }
+          !isLiquidGlassSupported && styles.glassPanelFallback,
         ]}
         {...(isLiquidGlassSupported && {
           effect: 'regular',
+          tintColor: 'rgba(255, 255, 255, 0.08)',
         })}>
-        <ActivityIndicator size="large" color="rgba(255, 255, 255, 0.9)" />
+        <ActivityIndicator size="large" color="rgba(255, 255, 255, 0.85)" />
         <Text style={styles.text}>{message}</Text>
       </GlassPanel>
     </View>
@@ -34,25 +35,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   glassPanel: {
-    padding: 40,
-    borderRadius: 32,
-    backgroundColor: 'rgba(28, 28, 30, 0.75)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: 'rgba(255, 255, 255, 0.3)',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 1,
-    shadowRadius: 32,
+    paddingVertical: 36,
+    paddingHorizontal: 44,
+    borderRadius: 28,
     alignItems: 'center',
-    gap: 20,
+    gap: 18,
+    // Subtle dark shadow for depth — no white glow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+  },
+  glassPanelFallback: {
+    backgroundColor: 'rgba(30, 30, 32, 0.72)',
   },
   text: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(255, 255, 255, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 17,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
 });

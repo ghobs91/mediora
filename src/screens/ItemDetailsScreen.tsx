@@ -8,7 +8,7 @@ import { useServices, useSettings } from '../context';
 import { FocusableButton, LoadingScreen, CastList } from '../components';
 import { RootStackParamList, JellyfinItem, TMDBTVDetails, TMDBEpisode, TMDBCast, TMDBMovieDetails, SonarrEpisode, SonarrQueueItem } from '../types';
 import { TMDBService } from '../services/tmdb';
-import { scaleSize } from '../utils/scaling';
+import { scaleSize, scaleFontSize } from '../utils/scaling';
 
 type ItemDetailsRouteProp = RouteProp<RootStackParamList, 'ItemDetails'>;
 
@@ -1280,8 +1280,8 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 50 },
   heroContent: { paddingHorizontal: 48, marginBottom: 40 },
-  seriesTitle: { color: '#FFD700', fontSize: 24, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
-  heroTitle: { color: '#fff', fontSize: 36, fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+  seriesTitle: { color: '#FFD700', fontSize: scaleFontSize(24), fontWeight: '700', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+  heroTitle: { color: '#fff', fontSize: scaleFontSize(36), fontWeight: '800', marginBottom: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   metaText: { color: 'rgba(255,255,255,0.8)', fontWeight: '600', marginRight: 10 },
   overview: { color: 'rgba(255,255,255,0.7)', maxWidth: 700 },
@@ -1297,7 +1297,7 @@ const styles = StyleSheet.create({
   seasonTabWrapper: { marginRight: 12 },
   seasonTab: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 24, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
   seasonTabActive: { borderColor: 'rgba(255, 215, 0, 0.6)', shadowColor: 'rgba(255, 215, 0, 0.8)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 16 },
-  seasonTabText: { color: 'rgba(255,255,255,0.6)', fontSize: 20, fontWeight: '600' },
+  seasonTabText: { color: 'rgba(255,255,255,0.6)', fontSize: scaleFontSize(20), fontWeight: '600' },
   seasonTabTextActive: { color: '#fff', fontWeight: '700' },
   seasonTabMissing: { opacity: 0.5 },
   seasonTabTextMissing: { color: 'rgba(255,255,255,0.5)' },
@@ -1311,13 +1311,13 @@ const styles = StyleSheet.create({
   episodeThumbnailMissing: { opacity: 0.5 },
   episodePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   episodeCardContent: { paddingHorizontal: 4 },
-  episodeCardTitle: { color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 4 },
-  episodeCardOverview: { color: 'rgba(255,255,255,0.5)', fontSize: 16 },
+  episodeCardTitle: { color: '#fff', fontSize: scaleFontSize(20), fontWeight: '600', marginBottom: 4 },
+  episodeCardOverview: { color: 'rgba(255,255,255,0.5)', fontSize: scaleFontSize(16) },
   textMissing: { color: 'rgba(255,255,255,0.4)' },
   progressContainer: { marginTop: 20, maxWidth: 500 },
   progressBar: { height: 4, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, marginBottom: 8, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#FFD700' },
-  progressText: { color: '#FFD700', fontSize: 12, fontWeight: '600' },
+  progressText: { color: '#FFD700', fontSize: scaleFontSize(12), fontWeight: '600' },
   watchedIndicator: {
     position: 'absolute',
     top: 8,
@@ -1371,12 +1371,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   downloadProgressTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: '#fff',
     fontWeight: '600',
   },
   downloadProgressStats: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     color: 'rgba(255,255,255,0.7)',
   },
   downloadProgressBarContainer: {
@@ -1405,7 +1405,7 @@ const styles = StyleSheet.create({
   },
   sonarrStatusText: {
     color: '#4caf50',
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     marginTop: 4,
     fontWeight: '600',
   },
@@ -1424,7 +1424,7 @@ const styles = StyleSheet.create({
   },
   ratingText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
   },
   scoreContainer: {
@@ -1435,23 +1435,23 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     fontWeight: '600',
   },
   imdbLabel: {
     color: '#FFD700',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: '700',
     marginRight: 4,
   },
   endsAtText: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     marginLeft: 10,
   },
   tagline: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 22,
+    fontSize: scaleFontSize(22),
     fontStyle: 'italic',
     marginBottom: 12,
   },
@@ -1471,7 +1471,7 @@ const styles = StyleSheet.create({
   },
   mediaInfoLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
   },
   detailsGrid: {
     marginTop: 24,
@@ -1486,13 +1486,13 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 18,
-    width: 120,
+    fontSize: scaleFontSize(18),
+    width: scaleSize(120),
     fontWeight: '600',
   },
   detailValue: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     flex: 1,
   },
   debugContainer: {

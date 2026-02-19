@@ -203,10 +203,14 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   }
 
   // Desktop/Tablet/TV: Render floating sidebar
+  // On tvOS, LiquidGlassView's 'regular' effect renders a patterned noise texture
+  // that looks wrong on TV displays — use 'none' and rely on the solid background.
+  const sidebarEffect = (Platform.isTV || !isLiquidGlassSupported) ? 'none' : 'regular';
+
   return (
     <LiquidGlassView
       style={styles.sidebar}
-      effect={isLiquidGlassSupported ? 'regular' : 'none'}
+      effect={sidebarEffect}
       tintColor={Platform.isTV ? "rgba(28, 28, 30, 0.4)" : "rgba(28, 28, 30, 0.85)"}>
       {/* macOS Window Controls (Traffic Lights) */}
       {Platform.OS === 'macos' && (
