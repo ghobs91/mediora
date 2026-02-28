@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,6 +22,7 @@ import { LoadingScreen } from '../components';
 import { LiveTVChannel, EPGChannel } from '../types';
 import { fetchChannelsFromCountries } from '../services/iptvManager';
 import { epgService } from '../services/epg';
+import { IPTV_COUNTRIES } from '../services/iptv';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
 
@@ -55,6 +56,23 @@ export function LiveTVScreen() {
   const [favoriteChannelIds, setFavoriteChannelIds] = useState<Set<string>>(new Set());
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const [selectedChannelForFavorite, setSelectedChannelForFavorite] = useState<EPGChannel | null>(null);
+  const epgPreloadStarted = useRef(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
+  const categories = useMemo(() => {
+    const cats = new Set(
+      allChannels
+        .map(c => c.group?.split(';')[0].trim())
+        .filter((g): g is string => Boolean(g))
+    );
+    return Array.from(cats).sort();
+  }, [allChannels]);
+
+  const countries = useMemo(() => {
+    const ctrs = new Set(allChannels.map(c => (c as any).countryCode).filter(Boolean) as string[]);
+    return Array.from(ctrs).sort();
+  }, [allChannels]);
 
   // Load favorites from storage
   const loadFavorites = useCallback(async () => {
@@ -110,7 +128,7 @@ export function LiveTVScreen() {
     }
 
     try {
-      // Load IPTV channels from selected countries (client-side M3U parsing)
+      // Load IPTV channels from selected countries (reads from persistent cache first)
       console.log(`[LiveTV] Loading IPTV from ${selectedCountries.length} countries: ${selectedCountries.join(', ')}`);
       const iptvChannels = await fetchChannelsFromCountries(selectedCountries);
       console.log(`[LiveTV] Loaded ${iptvChannels.length} IPTV channels`);
@@ -138,6 +156,17 @@ export function LiveTVScreen() {
     const selectedCountries = settings.iptv?.selectedCountries || [];
     
     if (selectedCountries.length === 0 || allChannels.length === 0) {
+      return;
+    }
+
+    // If EPG data was already preloaded, use it directly without showing loading state
+    if (!forceRefresh && epgService.hasData()) {
+      console.log('[LiveTV] Using preloaded EPG data');
+      const epgChannels = await epgService.fetchEPGData(
+        allChannels,
+        selectedCountries,
+      );
+      setEpgData(epgChannels);
       return;
     }
 
@@ -177,13 +206,28 @@ export function LiveTVScreen() {
     loadChannels();
   }, [loadFavorites, loadChannels]);
 
+  // Preload EPG data as soon as channels are available (before user opens guide tab)
+  useEffect(() => {
+    const selectedCountries = settings.iptv?.selectedCountries || [];
+    if (allChannels.length > 0 && selectedCountries.length > 0 && !epgPreloadStarted.current) {
+      epgPreloadStarted.current = true;
+      console.log('[LiveTV] Starting EPG preload in background...');
+      epgService.preloadEPGData(allChannels, selectedCountries).then(() => {
+        // If user is already on guide tab, update the data
+        if (viewMode === 'guide') {
+          loadProgramGuide();
+        }
+      });
+    }
+  }, [allChannels, settings.iptv?.selectedCountries, viewMode, loadProgramGuide]);
+
   useEffect(() => {
     if (viewMode === 'guide') {
       loadProgramGuide();
     }
   }, [viewMode, loadProgramGuide]);
 
-  // Filter and sort channels based on search query and favorites
+  // Filter and sort channels based on search query, category, country, and favorites
   useEffect(() => {
     let filtered: LiveTVChannel[];
     
@@ -196,6 +240,14 @@ export function LiveTVScreen() {
         channel.group?.toLowerCase().includes(query)
       );
     }
+
+    if (selectedCategory) {
+      filtered = filtered.filter(c => c.group?.split(';')[0].trim() === selectedCategory);
+    }
+
+    if (selectedCountry) {
+      filtered = filtered.filter(c => (c as any).countryCode === selectedCountry);
+    }
     
     // Sort: favorites first, then by name
     const sorted = [...filtered].sort((a, b) => {
@@ -207,9 +259,9 @@ export function LiveTVScreen() {
     });
     
     setFilteredChannels(sorted);
-    setCurrentPage(1); // Reset to first page on search
+    setCurrentPage(1); // Reset to first page
     setGuideCurrentPage(1); // Reset guide page too
-  }, [searchQuery, allChannels, favoriteChannelIds]);
+  }, [searchQuery, allChannels, favoriteChannelIds, selectedCategory, selectedCountry]);
 
   // Paginate filtered channels
   useEffect(() => {
@@ -220,10 +272,22 @@ export function LiveTVScreen() {
 
   const totalPages = Math.ceil(filteredChannels.length / CHANNELS_PER_PAGE);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    loadChannels();
-  };
+    const selectedCountries = settings.iptv?.selectedCountries || [];
+    // Force refresh: clear EPG cache and re-fetch channels
+    epgService.clearCache().then(() => {
+      fetchChannelsFromCountries(selectedCountries, { forceRefresh: true }).then(iptvChannels => {
+        if (iptvChannels.length > 0) {
+          setAllChannels(iptvChannels);
+          setFilteredChannels(iptvChannels);
+        }
+        setIsRefreshing(false);
+        // Reset preload flag so EPG re-fetches
+        epgPreloadStarted.current = false;
+      }).catch(() => setIsRefreshing(false));
+    });
+  }, [settings.iptv?.selectedCountries]);
 
   const handleChannelPress = (channel: LiveTVChannel) => {
     console.log('[LiveTV] Playing channel:', channel.name);
@@ -462,16 +526,104 @@ export function LiveTVScreen() {
         </View>
       )}
       
+      {/* Filter Bar - Desktop/TV */}
+      {!isMobile && (categories.length > 0 || countries.length > 1) && (
+        <View style={styles.filterBar}>
+          {categories.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+              <TouchableOpacity
+                style={[styles.filterChip, !selectedCategory && styles.filterChipActive]}
+                onPress={() => setSelectedCategory(null)}>
+                <Text style={[styles.filterChipText, !selectedCategory && styles.filterChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {categories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
+                  onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}>
+                  <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          {countries.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+              <TouchableOpacity
+                style={[styles.filterChip, !selectedCountry && styles.filterChipActive]}
+                onPress={() => setSelectedCountry(null)}>
+                <Text style={[styles.filterChipText, !selectedCountry && styles.filterChipTextActive]}>All Countries</Text>
+              </TouchableOpacity>
+              {countries.map(code => {
+                const country = IPTV_COUNTRIES.find(c => c.code === code);
+                return (
+                  <TouchableOpacity
+                    key={code}
+                    style={[styles.filterChip, selectedCountry === code && styles.filterChipActive]}
+                    onPress={() => setSelectedCountry(selectedCountry === code ? null : code)}>
+                    <Text style={[styles.filterChipText, selectedCountry === code && styles.filterChipTextActive]}>
+                      {country ? `${country.flag} ${country.name}` : code.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       {viewMode === 'channels' ? (
         <>
           <FlatList
             data={displayedChannels}
             renderItem={renderChannelCard}
             keyExtractor={(item) => item.id}
-            numColumns={isMobile ? 1 : 4}
-            key={isMobile ? 'mobile' : 'tv'}
+            numColumns={isMobile ? 1 : (Platform.isTV ? 4 : 3)}
+            key={isMobile ? 'mobile' : (Platform.isTV ? 'tv' : 'desktop')}
             contentContainerStyle={isMobile ? styles.mobileGridPadding : styles.grid}
             columnWrapperStyle={!isMobile ? styles.row : undefined}
+            ListHeaderComponent={isMobile && (categories.length > 0 || countries.length > 1) ? (
+              <View style={styles.filterBar}>
+                {categories.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+                    <TouchableOpacity
+                      style={[styles.filterChip, !selectedCategory && styles.filterChipActive]}
+                      onPress={() => setSelectedCategory(null)}>
+                      <Text style={[styles.filterChipText, !selectedCategory && styles.filterChipTextActive]}>All</Text>
+                    </TouchableOpacity>
+                    {categories.map(cat => (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
+                        onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}>
+                        <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>{cat}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                {countries.length > 1 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+                    <TouchableOpacity
+                      style={[styles.filterChip, !selectedCountry && styles.filterChipActive]}
+                      onPress={() => setSelectedCountry(null)}>
+                      <Text style={[styles.filterChipText, !selectedCountry && styles.filterChipTextActive]}>All</Text>
+                    </TouchableOpacity>
+                    {countries.map(code => {
+                      const country = IPTV_COUNTRIES.find(c => c.code === code);
+                      return (
+                        <TouchableOpacity
+                          key={code}
+                          style={[styles.filterChip, selectedCountry === code && styles.filterChipActive]}
+                          onPress={() => setSelectedCountry(selectedCountry === code ? null : code)}>
+                          <Text style={[styles.filterChipText, selectedCountry === code && styles.filterChipTextActive]}>
+                            {country ? `${country.flag} ${country.name}` : code.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </View>
+            ) : undefined}
             refreshControl={
               Platform.select({
                 ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
@@ -962,7 +1114,8 @@ const styles = StyleSheet.create({
   },
   // TV Channel Card Styles
   channelCard: {
-    width: scaleSize(340),
+    flex: 1,
+    maxWidth: scaleSize(400),
     backgroundColor: 'rgba(28, 28, 30, 0.72)',
     borderRadius: scaleSize(16),
     overflow: 'hidden',
@@ -1302,5 +1455,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: scaleFontSize(12),
     fontWeight: '700',
+  },
+  // Filter Bar Styles
+  filterBar: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: scaleSize(10),
+    gap: scaleSize(6),
+  },
+  filterChipsRow: {
+    paddingHorizontal: scaleSize(32),
+    flexDirection: 'row',
+    gap: scaleSize(8),
+    alignItems: 'center',
+    paddingVertical: scaleSize(4),
+  },
+  filterChip: {
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(8),
+    borderRadius: scaleSize(20),
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  filterChipActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.85)',
+    borderColor: '#e50914',
+  },
+  filterChipText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: scaleFontSize(15),
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
