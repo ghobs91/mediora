@@ -178,13 +178,17 @@ export function getCountryPlaylistUrl(countryCode: string): string {
 
 /**
  * Get the EPG URL for a country
- * Uses epghub.xyz EPG sources with format: EPG-{UPPERCASE_CODE}.xml
+ * Uses epg.pw XMLTV sources with format: epg_{UPPERCASE_CODE}.xml
  * Note: The actual fetching will use .xml.gz (compressed) version
  */
 export function getCountryEPGUrl(countryCode: string): string | null {
-  const code = countryCode.toUpperCase();
+  // Map non-standard codes to ISO 3166-1 alpha-2 used by epg.pw
+  const codeMap: Record<string, string> = {
+    uk: 'GB',
+  };
+  const code = codeMap[countryCode.toLowerCase()] || countryCode.toUpperCase();
   // Return base URL without extension - the EPG service will add .gz
-  return `https://epghub.xyz/epg/EPG-${code}.xml`;
+  return `https://www.epg.pw/xmltv/epg_${code}.xml`;
 }
 
 
