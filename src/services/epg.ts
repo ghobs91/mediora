@@ -4,9 +4,12 @@ import pako from 'pako';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuration
-const EPG_CACHE_KEY = 'epg_cache_v2_';
-const EPG_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours
-const HOURS_AHEAD_TO_KEEP = 12; // Only keep programs for next 12 hours
+const EPG_CACHE_KEY = 'epg_cache_v4_';
+const EPG_HTTP_META_KEY = 'epg_http_meta_';
+const EPG_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 hours before forced re-fetch
+const EPG_STALE_THRESHOLD = 3 * 60 * 60 * 1000; // 3 hours before background revalidation
+const HOURS_AHEAD_TO_KEEP = 48; // Parse 48 hours of programs for longer cache life
+const HOURS_BEHIND_TO_KEEP = 2; // Keep recently ended programs (accounts for minor clock drift)
 
 /**
  * Decode UTF-8 bytes to string
@@ -56,8 +59,9 @@ function decodeUtf8(bytes: Uint8Array): string {
 function parseXMLTV(xmlString: string): EPGChannel[] {
   const channels: Map<string, EPGChannel> = new Map();
   
-  // Calculate time window - only keep programs for next HOURS_AHEAD_TO_KEEP hours
+  // Calculate time window - keep programs from recent past to 48 hours ahead
   const now = new Date();
+  const pastCutoff = new Date(now.getTime() - HOURS_BEHIND_TO_KEEP * 60 * 60 * 1000);
   const cutoffTime = new Date(now.getTime() + HOURS_AHEAD_TO_KEEP * 60 * 60 * 1000);
   
   // Debug: Check XML structure
@@ -131,9 +135,11 @@ function parseXMLTV(xmlString: string): EPGChannel[] {
     
     // Parse programmes using indexOf
     console.log(`[EPG Parser] Parsing programs (this may take a moment for large EPG files)...`);
+    console.log(`[EPG Parser] Time window: ${pastCutoff.toISOString()} to ${cutoffTime.toISOString()} (now: ${now.toISOString()})`);
     let programCount = 0;
     let skippedCount = 0;
     let timeFilteredCount = 0;
+    let sampleStartDate: Date | null = null;
     pos = 0;
     const progStart = '<programme ';
     const progEnd = '</programme>';
@@ -170,8 +176,14 @@ function parseXMLTV(xmlString: string): EPGChannel[] {
         continue;
       }
       
-      // Time window filtering: skip programs that have ended or are too far in the future
-      if (stop < now || start > cutoffTime) {
+      // Track date range for diagnostics (first program)
+      if (!sampleStartDate) {
+        sampleStartDate = start;
+        console.log(`[EPG Parser] First program dates: start=${start.toISOString()}, stop=${stop.toISOString()}, raw start="${startMatch[1]}", raw stop="${stopMatch[1]}"`);
+      }
+      
+      // Time window filtering: skip programs that ended before past cutoff or start too far in the future
+      if (stop < pastCutoff || start > cutoffTime) {
         timeFilteredCount++;
         continue;
       }
@@ -257,8 +269,9 @@ function decodeXMLEntities(text: string): string {
 // Parse XMLTV date format: 20231231120000 +0000 or 20231231120000
 function parseXMLTVDate(dateStr: string): Date | null {
   try {
-    // Extract date parts (ignore timezone for now, treat as UTC)
-    const cleaned = dateStr.trim().split(' ')[0];
+    const trimmed = dateStr.trim();
+    const parts = trimmed.split(/\s+/);
+    const cleaned = parts[0];
     if (cleaned.length < 14) return null;
     
     const year = parseInt(cleaned.substring(0, 4), 10);
@@ -268,7 +281,23 @@ function parseXMLTVDate(dateStr: string): Date | null {
     const minute = parseInt(cleaned.substring(10, 12), 10);
     const second = parseInt(cleaned.substring(12, 14), 10);
     
-    return new Date(Date.UTC(year, month, day, hour, minute, second));
+    let utcMs = Date.UTC(year, month, day, hour, minute, second);
+    
+    // Parse timezone offset if present (e.g., +0000, -0500, +0530)
+    const tzStr = parts.length > 1 ? parts[1] : null;
+    if (tzStr && tzStr.length >= 5 && (tzStr[0] === '+' || tzStr[0] === '-')) {
+      const sign = tzStr[0] === '+' ? 1 : -1;
+      const tzHours = parseInt(tzStr.substring(1, 3), 10);
+      const tzMinutes = parseInt(tzStr.substring(3, 5), 10);
+      if (!isNaN(tzHours) && !isNaN(tzMinutes)) {
+        // Subtract offset to convert local time to UTC
+        // e.g., 19:00 -0500 means 19:00 local = 00:00 UTC, so subtract -5h = add 5h
+        const offsetMs = sign * (tzHours * 60 + tzMinutes) * 60 * 1000;
+        utcMs -= offsetMs;
+      }
+    }
+    
+    return new Date(utcMs);
   } catch {
     return null;
   }
@@ -294,23 +323,46 @@ export class EPGService {
   private isLoading: boolean = false;
   private loadingPromise: Promise<EPGChannel[]> | null = null;
   private lastChannelCount: number = 0; // Track if channels changed
+  private backgroundRefreshInProgress: boolean = false;
+
+  // Prune expired programs from channel list (programs whose stop time has passed)
+  private pruneExpiredPrograms(channels: EPGChannel[]): EPGChannel[] {
+    const now = new Date();
+    let pruned = 0;
+    const result = channels.map(ch => {
+      const validPrograms = ch.programs.filter(p => {
+        const stopTime = p.stop instanceof Date ? p.stop : new Date(p.stop);
+        if (stopTime < now) {
+          pruned++;
+          return false;
+        }
+        return true;
+      });
+      return { ...ch, programs: validPrograms };
+    });
+    if (pruned > 0) {
+      console.log(`[EPG] Pruned ${pruned} expired programs`);
+    }
+    return result;
+  }
 
   // Try to load cached EPG from AsyncStorage
-  private async loadFromStorage(countryCodes: string[]): Promise<EPGChannel[] | null> {
+  private async loadFromStorage(countryCodes: string[]): Promise<{ channels: EPGChannel[]; timestamp: number } | null> {
     try {
       const cacheKey = EPG_CACHE_KEY + countryCodes.sort().join('_');
       const cached = await AsyncStorage.getItem(cacheKey);
       if (!cached) return null;
       
       const parsed = JSON.parse(cached);
+      const cacheAge = Date.now() - parsed.timestamp;
       
-      // Check if cache is expired
-      if (Date.now() - parsed.timestamp > EPG_CACHE_DURATION) {
-        console.log('[EPG] Cache expired');
+      // Hard expiry - cache is truly too old
+      if (cacheAge > EPG_CACHE_DURATION) {
+        console.log(`[EPG] Cache hard-expired (${(cacheAge / 3600000).toFixed(1)}h old)`);
         return null;
       }
       
-      // Reconstruct Date objects
+      // Reconstruct Date objects and prune expired programs
       const channels: EPGChannel[] = parsed.data.map((ch: any) => ({
         ...ch,
         programs: ch.programs.map((p: any) => ({
@@ -320,8 +372,17 @@ export class EPGService {
         })),
       }));
       
-      console.log(`[EPG] Loaded ${channels.length} channels from storage cache`);
-      return channels;
+      const prunedChannels = this.pruneExpiredPrograms(channels);
+      const totalPrograms = prunedChannels.reduce((sum, ch) => sum + ch.programs.length, 0);
+      console.log(`[EPG] Loaded ${prunedChannels.length} channels (${totalPrograms} active programs) from storage cache (${(cacheAge / 3600000).toFixed(1)}h old)`);
+      
+      // If all programs have expired, treat cache as invalid
+      if (totalPrograms === 0) {
+        console.log('[EPG] All cached programs have expired, cache is stale');
+        return null;
+      }
+      
+      return { channels: prunedChannels, timestamp: parsed.timestamp };
     } catch (err) {
       console.error('[EPG] Failed to load from storage:', err);
       return null;
@@ -343,6 +404,27 @@ export class EPGService {
     }
   }
 
+  // Load HTTP metadata (ETag, Last-Modified) for conditional requests
+  private async loadHttpMeta(countryCode: string): Promise<{ etag?: string; lastModified?: string } | null> {
+    try {
+      const key = EPG_HTTP_META_KEY + countryCode;
+      const stored = await AsyncStorage.getItem(key);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Save HTTP metadata for conditional requests
+  private async saveHttpMeta(countryCode: string, etag?: string, lastModified?: string): Promise<void> {
+    try {
+      const key = EPG_HTTP_META_KEY + countryCode;
+      await AsyncStorage.setItem(key, JSON.stringify({ etag, lastModified }));
+    } catch {
+      // Ignore meta save failures
+    }
+  }
+
   async fetchEPGData(
     channels?: any[], 
     countryCodes?: string[],
@@ -350,6 +432,19 @@ export class EPGService {
   ): Promise<EPGChannel[]> {
     const channelCount = channels?.length || 0;
     const now = Date.now();
+    
+    // Prune expired programs from in-memory cache
+    if (this.rawEpgData.length > 0) {
+      this.rawEpgData = this.pruneExpiredPrograms(this.rawEpgData);
+      // Check if raw data still has any programs after pruning
+      const rawProgramCount = this.rawEpgData.reduce((sum, ch) => sum + ch.programs.length, 0);
+      if (rawProgramCount === 0) {
+        console.log('[EPG] All in-memory programs expired, clearing stale data');
+        this.rawEpgData = [];
+        this.cachedData = [];
+        this.lastFetchTime = 0;
+      }
+    }
     
     // If we have raw EPG data and channels changed, re-match without re-fetching
     if (this.rawEpgData.length > 0 && 
@@ -368,6 +463,13 @@ export class EPGService {
         now - this.lastFetchTime < EPG_CACHE_DURATION &&
         channelCount === this.lastChannelCount) {
       console.log('[EPG] Using in-memory cached data');
+      
+      // Trigger background revalidation if cache is getting stale
+      if (now - this.lastFetchTime > EPG_STALE_THRESHOLD && !this.backgroundRefreshInProgress) {
+        console.log('[EPG] Cache is stale, triggering background revalidation...');
+        this._backgroundRevalidate(channels, countryCodes);
+      }
+      
       return this.cachedData;
     }
 
@@ -390,22 +492,49 @@ export class EPGService {
     }
   }
 
+  // Background revalidation - refreshes cache without blocking the UI
+  private async _backgroundRevalidate(channels?: any[], countryCodes?: string[]): Promise<void> {
+    if (this.backgroundRefreshInProgress) return;
+    this.backgroundRefreshInProgress = true;
+    
+    try {
+      console.log('[EPG] Background revalidation starting...');
+      await this._fetchEPGDataInternal(channels, countryCodes, undefined, true);
+      this.lastChannelCount = channels?.length || 0;
+      console.log('[EPG] Background revalidation complete');
+    } catch (err) {
+      console.warn('[EPG] Background revalidation failed:', err);
+    } finally {
+      this.backgroundRefreshInProgress = false;
+    }
+  }
+
   private async _fetchEPGDataInternal(
     channels?: any[], 
     countryCodes?: string[],
-    onProgress?: (message: string) => void
+    onProgress?: (message: string) => void,
+    isBackgroundRevalidation: boolean = false
   ): Promise<EPGChannel[]> {
-    // Try to load from storage first
-    if (countryCodes && countryCodes.length > 0) {
+    // Try to load from persistent storage first
+    if (countryCodes && countryCodes.length > 0 && !isBackgroundRevalidation) {
       onProgress?.('Checking cached EPG data...');
-      const storedData = await this.loadFromStorage(countryCodes);
-      if (storedData) {
+      const stored = await this.loadFromStorage(countryCodes);
+      if (stored) {
+        const { channels: storedData, timestamp } = stored;
+        const cacheAge = Date.now() - timestamp;
         console.log(`[EPG] Loaded ${storedData.length} channels from storage, matching with ${channels?.length || 0} IPTV channels`);
-        this.rawEpgData = storedData; // Store raw data for re-matching
+        this.rawEpgData = storedData;
         this.cachedData = this.matchChannelsToEPG(channels || [], storedData);
-        this.lastFetchTime = Date.now();
+        this.lastFetchTime = timestamp; // Use original timestamp for stale checks
         const matchedWithPrograms = this.cachedData.filter(ch => ch.programs.length > 0).length;
         console.log(`[EPG] Matched ${matchedWithPrograms} channels with program data`);
+        
+        // If cache is stale, schedule background revalidation
+        if (cacheAge > EPG_STALE_THRESHOLD) {
+          console.log(`[EPG] Persistent cache is stale (${(cacheAge / 3600000).toFixed(1)}h), will revalidate in background`);
+          this._backgroundRevalidate(channels, countryCodes);
+        }
+        
         return this.cachedData;
       }
     }
@@ -438,17 +567,63 @@ export class EPGService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for large files
         
+        // Build headers with conditional request support (delta loading)
+        const headers: Record<string, string> = {
+          'Accept': 'application/gzip, application/xml, text/xml, */*',
+        };
+        
+        // Add If-Modified-Since / If-None-Match for delta loading
+        if (isBackgroundRevalidation) {
+          const httpMeta = await this.loadHttpMeta(countryCode);
+          if (httpMeta?.etag) {
+            headers['If-None-Match'] = httpMeta.etag;
+            console.log(`[EPG] Sending If-None-Match: ${httpMeta.etag}`);
+          }
+          if (httpMeta?.lastModified) {
+            headers['If-Modified-Since'] = httpMeta.lastModified;
+            console.log(`[EPG] Sending If-Modified-Since: ${httpMeta.lastModified}`);
+          }
+        }
+        
         const response = await fetch(source, {
-          headers: {
-            'Accept': 'application/gzip, application/xml, text/xml, */*',
-          },
+          headers,
           signal: controller.signal,
         });
         
         clearTimeout(timeoutId);
         
+        // Handle 304 Not Modified - existing cache is still valid
+        if (response.status === 304) {
+          console.log(`[EPG] 304 Not Modified for ${countryCode.toUpperCase()} - cache is still valid`);
+          // Extend cache timestamp since server confirmed data hasn't changed
+          if (countryCodes && countryCodes.length > 0) {
+            const cacheKey = EPG_CACHE_KEY + countryCodes.sort().join('_');
+            const cached = await AsyncStorage.getItem(cacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              parsed.timestamp = Date.now();
+              await AsyncStorage.setItem(cacheKey, JSON.stringify(parsed));
+              this.lastFetchTime = Date.now();
+              console.log(`[EPG] Extended cache timestamp for ${countryCode.toUpperCase()}`);
+            }
+          }
+          // Use existing raw data for this country
+          if (this.rawEpgData.length > 0) {
+            allEpgChannels.push(...this.rawEpgData);
+          }
+          continue;
+        }
+        
         if (response.ok) {
           console.log(`[EPG] Response OK, reading body...`);
+          
+          // Save HTTP metadata for future conditional requests
+          const etag = response.headers.get('etag') || undefined;
+          const lastModified = response.headers.get('last-modified') || undefined;
+          if (etag || lastModified) {
+            await this.saveHttpMeta(countryCode, etag, lastModified);
+            console.log(`[EPG] Saved HTTP meta - ETag: ${etag}, Last-Modified: ${lastModified}`);
+          }
           
           // Log response headers to debug auto-decompression
           const contentEncoding = response.headers.get('content-encoding');
@@ -768,6 +943,34 @@ export class EPGService {
     return this.cachedData;
   }
 
+  // Preload EPG data in background (called after channels load)
+  async preloadEPGData(channels: any[], countryCodes: string[]): Promise<void> {
+    if (this.isLoading || this.backgroundRefreshInProgress) {
+      console.log('[EPG] Preload skipped - already loading');
+      return;
+    }
+    
+    const now = Date.now();
+    // Skip if we already have fresh data
+    if (this.cachedData.length > 0 && now - this.lastFetchTime < EPG_STALE_THRESHOLD) {
+      console.log('[EPG] Preload skipped - data is fresh');
+      return;
+    }
+    
+    console.log('[EPG] Preloading EPG data in background...');
+    try {
+      await this.fetchEPGData(channels, countryCodes);
+      console.log('[EPG] Preload complete');
+    } catch (err) {
+      console.warn('[EPG] Preload failed:', err);
+    }
+  }
+
+  // Check if EPG data is already available with actual program content
+  hasData(): boolean {
+    return this.cachedData.some(ch => ch.programs.length > 0);
+  }
+
   // Clear all cached data to force a fresh fetch
   async clearCache(): Promise<void> {
     this.cachedData = [];
@@ -775,10 +978,10 @@ export class EPGService {
     this.lastFetchTime = 0;
     this.lastChannelCount = 0;
     
-    // Clear AsyncStorage cache
+    // Clear AsyncStorage cache (both data and HTTP metadata)
     try {
       const keys = await AsyncStorage.getAllKeys();
-      const epgKeys = keys.filter(k => k.startsWith(EPG_CACHE_KEY));
+      const epgKeys = keys.filter(k => k.startsWith(EPG_CACHE_KEY) || k.startsWith(EPG_HTTP_META_KEY));
       if (epgKeys.length > 0) {
         await AsyncStorage.multiRemove(epgKeys);
         console.log(`[EPG] Cleared ${epgKeys.length} cache entries`);

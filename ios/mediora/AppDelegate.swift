@@ -33,6 +33,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 }
 
+  func applicationDidBecomeActive(_ application: UIApplication) {
+    #if targetEnvironment(macCatalyst)
+    window?.windowScene?.titlebar?.titleVisibility = .hidden
+    #endif
+  }
+}
+
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     self.bundleURL()
