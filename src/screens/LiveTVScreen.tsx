@@ -11,15 +11,18 @@ import {
   TextInput,
   ScrollView,
   Modal,
+  ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Video, { VideoRef } from 'react-native-video';
 import { useServices, useSettings } from '../context';
 import { LoadingScreen } from '../components';
-import { LiveTVChannel, EPGChannel } from '../types';
+import { LiveTVChannel, EPGChannel, EPGProgram } from '../types';
 import { fetchChannelsFromCountries } from '../services/iptvManager';
 import { epgService } from '../services/epg';
 import { IPTV_COUNTRIES } from '../services/iptv';
@@ -27,10 +30,90 @@ import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
 
 const CHANNELS_PER_PAGE = 50;
-const GUIDE_CHANNELS_PER_PAGE = 30;
 const FAVORITES_STORAGE_KEY = 'livetv_favorites';
 
-type ViewMode = 'channels' | 'guide';
+// Self-contained filter chip with focus state for TV navigation
+const FilterChip = React.memo(function FilterChip({
+  label,
+  isActive,
+  onPress,
+}: {
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  return (
+    <TouchableOpacity
+      style={[
+        styles.filterChip,
+        isActive && styles.filterChipActive,
+        isFocused && styles.filterChipFocused,
+      ]}
+      onPress={onPress}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      focusable={true}
+      activeOpacity={0.8}>
+      <Text
+        style={[
+          styles.filterChipText,
+          isActive && styles.filterChipTextActive,
+          isFocused && styles.filterChipTextFocused,
+        ]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Parse resolution from parentheses in channel name e.g. "CNN (HD)" → { cleanName: "CNN", resolution: "HD" }
+// Also strips noise tags like [Not 24/7] and [Geo-Blocked]
+function parseChannelName(name: string): { cleanName: string; resolution: string | null } {
+  // Remove noise bracket tags
+  let cleaned = name
+    .replace(/\s*\[Not\s+24\/7\]\s*/gi, ' ')
+    .replace(/\s*\[Geo[- ]?Blocked\]\s*/gi, ' ')
+    .trim();
+
+  // Extract resolution from parentheses
+  const match = cleaned.match(/\s*\((UHD|FHD|HD|SD|8K|4K|2160[pi]?|1080[pi]|720[pi]?|576[pi]|480[pi]?)\)\s*/i);
+  if (match) {
+    return { cleanName: cleaned.replace(match[0], '').trim(), resolution: match[1].toUpperCase() };
+  }
+  return { cleanName: cleaned, resolution: null };
+}
+
+function getResolutionColors(resolution: string): { bg: string; textColor: string } {
+  const r = resolution.toUpperCase();
+  if (r === '4K' || r === 'UHD' || r === '8K' || r.startsWith('2160')) {
+    return { bg: 'rgba(251, 191, 36, 0.9)', textColor: '#1a1000' };
+  }
+  if (r === 'FHD' || r.startsWith('1080')) {
+    return { bg: 'rgba(99, 102, 241, 0.9)', textColor: '#fff' };
+  }
+  if (r === 'HD' || r.startsWith('720')) {
+    return { bg: 'rgba(16, 185, 129, 0.85)', textColor: '#fff' };
+  }
+  return { bg: 'rgba(120, 120, 130, 0.85)', textColor: '#fff' };
+}
+
+const ResolutionBadge = React.memo(function ResolutionBadge({
+  resolution,
+  isMobile = false,
+}: {
+  resolution: string;
+  isMobile?: boolean;
+}) {
+  const { bg, textColor } = getResolutionColors(resolution);
+  return (
+    <View style={[isMobile ? styles.resolutionBadgeSmall : styles.resolutionBadge, { backgroundColor: bg }]}>
+      <Text style={[isMobile ? styles.resolutionBadgeSmallText : styles.resolutionBadgeText, { color: textColor }]}>
+        {resolution}
+      </Text>
+    </View>
+  );
+});
 
 export function LiveTVScreen() {
   const navigation = useNavigation();
@@ -38,27 +121,41 @@ export function LiveTVScreen() {
   const { settings } = useSettings();
   const insets = useSafeAreaInsets();
   const { isMobile } = useDeviceType();
+  const { height: windowHeight } = useWindowDimensions();
+  // Channel data state
   const [allChannels, setAllChannels] = useState<LiveTVChannel[]>([]);
   const [filteredChannels, setFilteredChannels] = useState<LiveTVChannel[]>([]);
-  const [displayedChannels, setDisplayedChannels] = useState<LiveTVChannel[]>([]);
+  const [channelDisplayCount, setChannelDisplayCount] = useState(CHANNELS_PER_PAGE);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focusedChannelId, setFocusedChannelId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [viewMode, setViewMode] = useState<ViewMode>('guide');
+
+  // EPG state
   const [epgData, setEpgData] = useState<EPGChannel[]>([]);
   const [isLoadingGuide, setIsLoadingGuide] = useState(false);
   const [epgLoadingMessage, setEpgLoadingMessage] = useState<string>('');
   const [epgError, setEpgError] = useState<string | null>(null);
-  const [guideCurrentPage, setGuideCurrentPage] = useState(1);
-  const [favoriteChannelIds, setFavoriteChannelIds] = useState<Set<string>>(new Set());
-  const [showFavoriteModal, setShowFavoriteModal] = useState(false);
-  const [selectedChannelForFavorite, setSelectedChannelForFavorite] = useState<EPGChannel | null>(null);
   const epgPreloadStarted = useRef(false);
+
+  // Filter state
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+
+  // Favorites state
+  const [favoriteChannelIds, setFavoriteChannelIds] = useState<Set<string>>(new Set());
+  const [showFavoriteModal, setShowFavoriteModal] = useState(false);
+  const [selectedChannelForFavorite, setSelectedChannelForFavorite] = useState<{ id: string; displayName: string } | null>(null);
+
+  // Selected channel & inline player state (desktop/TV combined view)
+  const [selectedChannel, setSelectedChannel] = useState<LiveTVChannel | null>(null);
+  const [isStreamLoading, setIsStreamLoading] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [isPlayerMuted, setIsPlayerMuted] = useState(false);
+  const [rightFocusedEl, setRightFocusedEl] = useState<'player' | 'mute' | 'fullscreen' | null>(null);
+  const videoRef = useRef<VideoRef>(null);
+
+  // ----- MEMOS -----
 
   const categories = useMemo(() => {
     const cats = new Set(
@@ -73,6 +170,41 @@ export function LiveTVScreen() {
     const ctrs = new Set(allChannels.map(c => (c as any).countryCode).filter(Boolean) as string[]);
     return Array.from(ctrs).sort();
   }, [allChannels]);
+
+  const displayedChannels = useMemo(
+    () => filteredChannels.slice(0, channelDisplayCount),
+    [filteredChannels, channelDisplayCount]
+  );
+
+  // Current program for each channel (used in channel list subtitles)
+  const channelCurrentPrograms = useMemo(() => {
+    const map = new Map<string, EPGProgram>();
+    const now = new Date();
+    for (const epgCh of epgData) {
+      const current = epgCh.programs.find(p => p.start <= now && p.stop > now);
+      if (current) map.set(epgCh.id, current);
+    }
+    return map;
+  }, [epgData]);
+
+  // EPG data for selected channel
+  const selectedChannelEpg = useMemo(() => {
+    if (!selectedChannel) return null;
+    return epgData.find(ch => ch.id === selectedChannel.id) || null;
+  }, [selectedChannel, epgData]);
+
+  // Current + upcoming programs for selected channel
+  const selectedChannelPrograms = useMemo(() => {
+    if (!selectedChannelEpg) return [];
+    const now = new Date();
+    return selectedChannelEpg.programs.filter(p => p.stop > now);
+  }, [selectedChannelEpg]);
+
+  // Current program for the selected channel
+  const selectedChannelCurrentProgram = useMemo(() => {
+    if (!selectedChannel) return null;
+    return channelCurrentPrograms.get(selectedChannel.id) || null;
+  }, [selectedChannel, channelCurrentPrograms]);
 
   // Load favorites from storage
   const loadFavorites = useCallback(async () => {
@@ -213,19 +345,15 @@ export function LiveTVScreen() {
       epgPreloadStarted.current = true;
       console.log('[LiveTV] Starting EPG preload in background...');
       epgService.preloadEPGData(allChannels, selectedCountries).then(() => {
-        // If user is already on guide tab, update the data
-        if (viewMode === 'guide') {
-          loadProgramGuide();
-        }
+        loadProgramGuide();
       });
     }
-  }, [allChannels, settings.iptv?.selectedCountries, viewMode, loadProgramGuide]);
+  }, [allChannels, settings.iptv?.selectedCountries, loadProgramGuide]);
 
+  // Always load guide data (needed for channel list subtitles + right panel)
   useEffect(() => {
-    if (viewMode === 'guide') {
-      loadProgramGuide();
-    }
-  }, [viewMode, loadProgramGuide]);
+    loadProgramGuide();
+  }, [loadProgramGuide]);
 
   // Filter and sort channels based on search query, category, country, and favorites
   useEffect(() => {
@@ -248,6 +376,8 @@ export function LiveTVScreen() {
     if (selectedCountry) {
       filtered = filtered.filter(c => (c as any).countryCode === selectedCountry);
     }
+
+    setChannelDisplayCount(CHANNELS_PER_PAGE);
     
     // Sort: favorites first, then by name
     const sorted = [...filtered].sort((a, b) => {
@@ -259,18 +389,22 @@ export function LiveTVScreen() {
     });
     
     setFilteredChannels(sorted);
-    setCurrentPage(1); // Reset to first page
-    setGuideCurrentPage(1); // Reset guide page too
   }, [searchQuery, allChannels, favoriteChannelIds, selectedCategory, selectedCountry]);
 
-  // Paginate filtered channels
+  // Auto-select first channel on desktop/TV when filtered list changes
   useEffect(() => {
-    const startIndex = (currentPage - 1) * CHANNELS_PER_PAGE;
-    const endIndex = startIndex + CHANNELS_PER_PAGE;
-    setDisplayedChannels(filteredChannels.slice(startIndex, endIndex));
-  }, [filteredChannels, currentPage]);
-
-  const totalPages = Math.ceil(filteredChannels.length / CHANNELS_PER_PAGE);
+    if (isMobile) return;
+    if (filteredChannels.length === 0) {
+      setSelectedChannel(null);
+      return;
+    }
+    setSelectedChannel(prev => {
+      if (!prev || !filteredChannels.find(ch => ch.id === prev.id)) {
+        return filteredChannels[0];
+      }
+      return prev;
+    });
+  }, [filteredChannels, isMobile]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -289,7 +423,7 @@ export function LiveTVScreen() {
     });
   }, [settings.iptv?.selectedCountries]);
 
-  const handleChannelPress = (channel: LiveTVChannel) => {
+  const handleChannelPress = useCallback((channel: LiveTVChannel) => {
     console.log('[LiveTV] Playing channel:', channel.name);
     (navigation as any).navigate('LivePlayer', {
       channelId: channel.id,
@@ -297,107 +431,75 @@ export function LiveTVScreen() {
       streamUrl: channel.url,
       logo: channel.logo,
     });
-  };
+  }, [navigation]);
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const renderChannelCard = ({ item: channel }: { item: LiveTVChannel }) => {
-    const isFocused = focusedChannelId === channel.id;
-    const isFavorite = favoriteChannelIds.has(channel.id);
-    
+  // Select a channel: on mobile navigate to full player, on desktop/TV update inline player
+  const handleChannelSelect = useCallback((channel: LiveTVChannel) => {
     if (isMobile) {
-      return (
-        <TouchableOpacity
-          style={styles.mobileChannelCard}
-          onPress={() => handleChannelPress(channel)}
-          activeOpacity={0.7}>
-          <View style={styles.mobileChannelLeft}>
-            {channel.logo ? (
-              <Image
-                source={{ uri: channel.logo }}
-                style={styles.mobileChannelLogo}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.mobilePlaceholderLogo}>
-                <Icon name="tv" size={24} color="rgba(255, 255, 255, 0.4)" />
-              </View>
-            )}
-            <View style={styles.mobileChannelInfo}>
-              <Text style={styles.mobileChannelName} numberOfLines={1}>
-                {channel.name}
-              </Text>
-              {channel.group && (
-                <Text style={styles.mobileChannelGroup} numberOfLines={1}>
-                  {channel.group}
-                </Text>
-              )}
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.mobileFavoriteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              toggleFavorite(channel.id);
-            }}>
-            <Icon 
-              name={isFavorite ? "heart" : "heart-outline"} 
-              size={22} 
-              color={isFavorite ? "#e50914" : "rgba(255, 255, 255, 0.5)"} 
-            />
-          </TouchableOpacity>
-        </TouchableOpacity>
-      );
+      handleChannelPress(channel);
+    } else {
+      setSelectedChannel(channel);
+      setStreamError(null);
+      setIsStreamLoading(true);
     }
-    
+  }, [isMobile, handleChannelPress]);
+
+  // Navigate to full-screen player from inline player
+  const handleFullscreen = useCallback(() => {
+    if (selectedChannel) {
+      handleChannelPress(selectedChannel);
+    }
+  }, [selectedChannel, handleChannelPress]);
+
+  // Render a channel list item (shared between mobile and desktop)
+  const renderChannelItem = useCallback(({ item: channel, index }: { item: LiveTVChannel; index: number }) => {
+    const isSelected = selectedChannel?.id === channel.id;
+    const isFavorite = favoriteChannelIds.has(channel.id);
+    const { cleanName, resolution } = parseChannelName(channel.name);
+    const currentProgram = channelCurrentPrograms.get(channel.id);
+    const subtitle = currentProgram
+      ? `${currentProgram.title}${currentProgram.category ? '. ' + currentProgram.category + '.' : ''}`
+      : channel.group || '';
+
     return (
       <TouchableOpacity
-        style={[styles.channelCard, isFocused && styles.channelCardFocused]}
-        onPress={() => handleChannelPress(channel)}
-        onFocus={() => setFocusedChannelId(channel.id)}
-        onBlur={() => setFocusedChannelId(null)}
-        activeOpacity={0.7}
-        focusable={true}>
-        <View style={styles.channelImageContainer}>
-          {channel.logo ? (
-            <Image
-              source={{ uri: channel.logo }}
-              style={styles.channelLogo}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={styles.placeholderLogo}>
-              <Icon name="tv" size={scaleSize(56)} color="rgba(255, 255, 255, 0.4)" />
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.favoriteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              toggleFavorite(channel.id);
-            }}>
-            <Icon 
-              name={isFavorite ? "heart" : "heart-outline"} 
-              size={scaleSize(32)} 
-              color={isFavorite ? "#e50914" : "rgba(255, 255, 255, 0.7)"} 
-            />
-          </TouchableOpacity>
+        style={[
+          styles.channelItem,
+          isSelected && !isMobile && styles.channelItemSelected,
+        ]}
+        onPress={() => handleChannelSelect(channel)}
+        onLongPress={() => {
+          setSelectedChannelForFavorite({ id: channel.id, displayName: channel.name });
+          setShowFavoriteModal(true);
+        }}
+        delayLongPress={500}
+        focusable={true}
+        activeOpacity={0.7}>
+        <Text style={styles.channelNumber}>{index + 1}.</Text>
+        {channel.logo ? (
+          <Image source={{ uri: channel.logo }} style={styles.channelItemLogo} resizeMode="contain" />
+        ) : (
+          <View style={styles.channelItemLogoPlaceholder}>
+            <Icon name="tv" size={isMobile ? 20 : scaleSize(22)} color="rgba(255, 255, 255, 0.3)" />
+          </View>
+        )}
+        <View style={styles.channelItemInfo}>
+          <View style={styles.channelItemNameRow}>
+            <Text style={styles.channelItemName} numberOfLines={1}>{cleanName}</Text>
+            {resolution && <ResolutionBadge resolution={resolution} isMobile />}
+          </View>
+          {subtitle ? (
+            <Text style={styles.channelItemSubtitle} numberOfLines={1}>{subtitle}</Text>
+          ) : null}
         </View>
-        <View style={styles.channelInfo}>
-          <Text style={styles.channelName} numberOfLines={2}>
-            {channel.name}
-          </Text>
-          {channel.group && (
-            <Text style={styles.channelGroup} numberOfLines={1}>
-              {channel.group}
-            </Text>
-          )}
-        </View>
+        {isFavorite && (
+          <Icon name="heart" size={isMobile ? 16 : scaleSize(18)} color="#e50914" style={{ marginLeft: 4 }} />
+        )}
       </TouchableOpacity>
     );
-  };
+  }, [selectedChannel, favoriteChannelIds, channelCurrentPrograms, isMobile, handleChannelSelect]);
+
+  // ----- EARLY RETURNS -----
 
   if (isLoading) {
     return <LoadingScreen message="Loading channels..." />;
@@ -429,55 +531,16 @@ export function LiveTVScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {/* Search Bar - Desktop at top, Mobile floating */}
-      {!isMobile && (
-        <View style={styles.desktopSearchContainer}>
-          <View style={styles.desktopSearchInner}>
-            <Icon name="search" size={scaleSize(24)} color="rgba(255, 255, 255, 0.6)" style={styles.searchIcon} />
-            <TextInput
-              style={styles.desktopSearchInput}
-              placeholder="Search channels..."
-              placeholderTextColor="rgba(255, 255, 255, 0.4)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Icon name="close-circle" size={scaleSize(24)} color="rgba(255, 255, 255, 0.6)" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.desktopViewToggle}>
-            <TouchableOpacity
-              style={[styles.desktopViewToggleButton, viewMode === 'channels' && styles.desktopViewToggleActive]}
-              onPress={() => setViewMode('channels')}>
-              <Icon name="grid" size={scaleSize(22)} color="rgba(255, 255, 255, 0.8)" />
-              <Text style={styles.desktopViewToggleText}>Channels</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.desktopViewToggleButton, viewMode === 'guide' && styles.desktopViewToggleActive]}
-              onPress={() => setViewMode('guide')}>
-              <Icon name="list" size={scaleSize(22)} color="rgba(255, 255, 255, 0.8)" />
-              <Text style={styles.desktopViewToggleText}>Guide</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-      {/* Floating Search Bar for Mobile */}
-      {isMobile && (
-        <View style={[styles.floatingSearchContainer, { top: insets.top + 8 }]}>
-          <LiquidGlassView
-            style={styles.searchGlass}
-            effect="regular"
-            tintColor="rgba(255, 255, 255, 0.25)">
+  // ----- MOBILE RENDER -----
+  if (isMobile) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.mobileSearchContainer, { paddingTop: insets.top + 8 }]}>
+          <LiquidGlassView style={styles.mobileSearchGlass} effect="regular" tintColor="rgba(255, 255, 255, 0.25)">
             <View style={styles.searchInner}>
-              <Icon name="search" size={20} color="rgba(0, 0, 0, 0.6)" style={styles.searchIcon} />
+              <Icon name="search" size={20} color="rgba(0, 0, 0, 0.6)" style={{ marginRight: 8 }} />
               <TextInput
-                style={styles.searchInput}
+                style={styles.mobileSearchInput}
                 placeholder="Search channels..."
                 placeholderTextColor="rgba(0, 0, 0, 0.4)"
                 value={searchQuery}
@@ -486,389 +549,373 @@ export function LiveTVScreen() {
                 autoCorrect={false}
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
                   <Icon name="close-circle" size={20} color="rgba(0, 0, 0, 0.6)" />
                 </TouchableOpacity>
               )}
             </View>
           </LiquidGlassView>
         </View>
-      )}
-
-      {/* Stats and View Toggle Row */}
-      {isMobile && (
-        <View style={[styles.floatingControlsRow, { top: insets.top + 64 }]}>
-          <View style={styles.statsContainer}>
-            <Text style={styles.statsText}>
-              Showing {viewMode === 'guide' ? epgData.length : displayedChannels.length} of {filteredChannels.length} channels
-            </Text>
-          </View>
-          
-          <View style={styles.floatingViewToggle}>
-            <LiquidGlassView
-              style={styles.viewToggleGlass}
-              effect="regular"
-              tintColor="rgba(255, 255, 255, 0.25)">
-              <TouchableOpacity
-                style={styles.viewToggleButton}
-                onPress={() => setViewMode(viewMode === 'channels' ? 'guide' : 'channels')}>
-                <Icon 
-                  name={viewMode === 'channels' ? 'grid' : 'list'} 
-                  size={18} 
-                  color="rgba(0, 0, 0, 0.85)" 
-                />
-                <Text style={styles.viewToggleText}>
-                  {viewMode === 'channels' ? 'Channels' : 'Guide'}
-                </Text>
-              </TouchableOpacity>
-            </LiquidGlassView>
-          </View>
-        </View>
-      )}
-      
-      {/* Filter Bar - Desktop/TV */}
-      {!isMobile && (categories.length > 0 || countries.length > 1) && (
-        <View style={styles.filterBar}>
-          {categories.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
-              <TouchableOpacity
-                style={[styles.filterChip, !selectedCategory && styles.filterChipActive]}
-                onPress={() => setSelectedCategory(null)}>
-                <Text style={[styles.filterChipText, !selectedCategory && styles.filterChipTextActive]}>All</Text>
-              </TouchableOpacity>
-              {categories.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
-                  onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}>
-                  <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>{cat}</Text>
-                </TouchableOpacity>
+        <FlatList
+          data={displayedChannels}
+          renderItem={renderChannelItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: 160 }}
+          ListHeaderComponent={(categories.length > 0 || countries.length > 1) ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow} style={{ marginBottom: 8 }}>
+              <FilterChip label="All" isActive={!selectedCategory} onPress={() => setSelectedCategory(null)} />
+              {categories.slice(0, 20).map(cat => (
+                <FilterChip key={cat} label={cat} isActive={selectedCategory === cat}
+                  onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)} />
               ))}
             </ScrollView>
-          )}
-          {countries.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
-              <TouchableOpacity
-                style={[styles.filterChip, !selectedCountry && styles.filterChipActive]}
-                onPress={() => setSelectedCountry(null)}>
-                <Text style={[styles.filterChipText, !selectedCountry && styles.filterChipTextActive]}>All Countries</Text>
-              </TouchableOpacity>
-              {countries.map(code => {
-                const country = IPTV_COUNTRIES.find(c => c.code === code);
-                return (
-                  <TouchableOpacity
-                    key={code}
-                    style={[styles.filterChip, selectedCountry === code && styles.filterChipActive]}
-                    onPress={() => setSelectedCountry(selectedCountry === code ? null : code)}>
-                    <Text style={[styles.filterChipText, selectedCountry === code && styles.filterChipTextActive]}>
-                      {country ? `${country.flag} ${country.name}` : code.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
-        </View>
-      )}
-
-      {viewMode === 'channels' ? (
-        <>
-          <FlatList
-            data={displayedChannels}
-            renderItem={renderChannelCard}
-            keyExtractor={(item) => item.id}
-            numColumns={isMobile ? 1 : (Platform.isTV ? 4 : 3)}
-            key={isMobile ? 'mobile' : (Platform.isTV ? 'tv' : 'desktop')}
-            contentContainerStyle={isMobile ? styles.mobileGridPadding : styles.grid}
-            columnWrapperStyle={!isMobile ? styles.row : undefined}
-            ListHeaderComponent={isMobile && (categories.length > 0 || countries.length > 1) ? (
-              <View style={styles.filterBar}>
-                {categories.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
-                    <TouchableOpacity
-                      style={[styles.filterChip, !selectedCategory && styles.filterChipActive]}
-                      onPress={() => setSelectedCategory(null)}>
-                      <Text style={[styles.filterChipText, !selectedCategory && styles.filterChipTextActive]}>All</Text>
-                    </TouchableOpacity>
-                    {categories.map(cat => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
-                        onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}>
-                        <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>{cat}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-                {countries.length > 1 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
-                    <TouchableOpacity
-                      style={[styles.filterChip, !selectedCountry && styles.filterChipActive]}
-                      onPress={() => setSelectedCountry(null)}>
-                      <Text style={[styles.filterChipText, !selectedCountry && styles.filterChipTextActive]}>All</Text>
-                    </TouchableOpacity>
-                    {countries.map(code => {
-                      const country = IPTV_COUNTRIES.find(c => c.code === code);
-                      return (
-                        <TouchableOpacity
-                          key={code}
-                          style={[styles.filterChip, selectedCountry === code && styles.filterChipActive]}
-                          onPress={() => setSelectedCountry(selectedCountry === code ? null : code)}>
-                          <Text style={[styles.filterChipText, selectedCountry === code && styles.filterChipTextActive]}>
-                            {country ? `${country.flag} ${country.name}` : code.toUpperCase()}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-            ) : undefined}
-            refreshControl={
-              Platform.select({
-                ios: (Platform.constants as any).interfaceIdiom === 'phone' ? (
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor="#fff"
-                  />
-                ) : undefined,
-                default: (
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor="#fff"
-                  />
-                ),
-              })
+          ) : undefined}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#fff" />
+          }
+          onEndReached={() => {
+            if (channelDisplayCount < filteredChannels.length) {
+              setChannelDisplayCount(c => Math.min(c + CHANNELS_PER_PAGE, filteredChannels.length));
             }
-          />
-
-          {/* Pagination Controls */}
-          {!isMobile && totalPages > 1 && (
-            <View style={styles.pagination}>
+          }}
+          onEndReachedThreshold={0.4}
+        />
+        {/* Favorite Modal */}
+        <Modal
+          visible={showFavoriteModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFavoriteModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{selectedChannelForFavorite?.displayName}</Text>
               <TouchableOpacity
-                style={[styles.pageButton, currentPage === 1 && styles.pageButtonDisabled]}
-                onPress={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}>
-                <Icon name="chevron-back" size={scaleSize(28)} color={currentPage === 1 ? '#666' : '#fff'} />
-              </TouchableOpacity>
-              
-              <View style={styles.pageInfo}>
-                <Text style={styles.pageText}>
-                  Page {currentPage} of {totalPages}
+                style={styles.modalButton}
+                onPress={() => {
+                  if (selectedChannelForFavorite) {
+                    toggleFavorite(selectedChannelForFavorite.id);
+                    setShowFavoriteModal(false);
+                  }
+                }}>
+                <Icon
+                  name={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? '#e50914' : '#fff'}
+                />
+                <Text style={styles.modalButtonText}>
+                  {selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id)
+                    ? 'Remove from Favorites' : 'Add to Favorites'}
                 </Text>
-              </View>
-
+              </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.pageButton, currentPage === totalPages && styles.pageButtonDisabled]}
-                onPress={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}>
-                <Icon name="chevron-forward" size={scaleSize(28)} color={currentPage === totalPages ? '#666' : '#fff'} />
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowFavoriteModal(false)}>
+                <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  }
+
+  // ----- DESKTOP / TV COMBINED LAYOUT -----
+  const { cleanName: selectedCleanName } = selectedChannel ? parseChannelName(selectedChannel.name) : { cleanName: '' };
+
+  return (
+    <View style={[styles.splitContainer, { height: windowHeight }]}>
+      {/* ===== LEFT PANEL: Search + Filters + Channel List ===== */}
+      <View style={styles.leftPanel}>
+        {/* Search Bar */}
+        <View style={styles.leftSearchContainer}>
+          <Icon name="search" size={scaleSize(20)} color="rgba(255, 255, 255, 0.5)" style={{ marginRight: scaleSize(8) }} />
+          <TextInput
+            style={styles.leftSearchInput}
+            placeholder="Search channels..."
+            placeholderTextColor="rgba(255, 255, 255, 0.35)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Icon name="close-circle" size={scaleSize(20)} color="rgba(255, 255, 255, 0.5)" />
+            </TouchableOpacity>
           )}
-        </>
-      ) : (
-        <View style={styles.guideContainer}>
-          {isLoadingGuide ? (
-            <View style={styles.guideLoading}>
-              <Icon name="hourglass-outline" size={48} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.guideLoadingTitle}>Loading Program Guide</Text>
-              <Text style={styles.guideLoadingText}>{epgLoadingMessage || 'Please wait...'}</Text>
-            </View>
-          ) : epgError ? (
-            <View style={styles.guideNotAvailable}>
-              <Icon name="alert-circle-outline" size={48} color="rgba(255,100,100,0.5)" />
-              <Text style={styles.guideNotAvailableTitle}>Failed to Load Guide</Text>
-              <Text style={styles.guideNotAvailableText}>{epgError}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={() => loadProgramGuide(true)}>
-                <Text style={styles.retryButtonText}>Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          ) : epgData.length === 0 ? (
-            <View style={styles.guideNotAvailable}>
-              <Icon name="calendar-outline" size={48} color="rgba(255,255,255,0.3)" />
-              <Text style={styles.guideNotAvailableTitle}>No Guide Data</Text>
-              <Text style={styles.guideNotAvailableText}>
-                Tap the refresh button to load the program guide.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.guideContent}>
-              <ScrollView 
-                style={styles.guideScrollView}
-                contentContainerStyle={isMobile ? styles.mobileGuidePadding : undefined}>
-                {epgData
-                  .filter(ch => {
-                    // Filter by search query
-                    if (!searchQuery.trim()) return ch.programs.length > 0;
-                    const query = searchQuery.toLowerCase();
-                    return ch.programs.length > 0 && 
-                      (ch.displayName.toLowerCase().includes(query) || 
-                       ch.id.toLowerCase().includes(query));
-                  })
-                  // Sort: favorites first
-                  .sort((a, b) => {
-                    const aFav = favoriteChannelIds.has(a.id);
-                    const bFav = favoriteChannelIds.has(b.id);
-                    if (aFav && !bFav) return -1;
-                    if (!aFav && bFav) return 1;
-                    return a.displayName.localeCompare(b.displayName);
-                  })
-                  .slice(
-                    (guideCurrentPage - 1) * GUIDE_CHANNELS_PER_PAGE,
-                    guideCurrentPage * GUIDE_CHANNELS_PER_PAGE
-                  )
-                  .map(channel => (
-                <View key={channel.id} style={styles.guideChannel}>
-                  <TouchableOpacity 
-                    style={styles.guideChannelHeader}
-                    onPress={() => {
-                      // Find the original channel to get the stream URL
-                      const originalChannel = allChannels.find(c => c.id === channel.id);
-                      if (originalChannel) {
-                        handleChannelPress(originalChannel);
-                      }
-                    }}
-                    onLongPress={() => {
-                      setSelectedChannelForFavorite(channel);
-                      setShowFavoriteModal(true);
-                    }}
-                    delayLongPress={500}>
-                    {channel.icon ? (
-                      <Image source={{ uri: channel.icon }} style={styles.guideChannelLogo} />
-                    ) : (
-                      <View style={styles.guideChannelLogoPlaceholder}>
-                        <Icon 
-                          name="tv-outline" 
-                          size={isMobile ? 20 : scaleSize(24)} 
-                          color="#666" 
-                        />
-                      </View>
-                    )}
-                    <Text style={styles.guideChannelName} numberOfLines={1}>
-                      {channel.displayName}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.guideFavoriteButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(channel.id);
-                      }}>
-                      <Icon 
-                        name={favoriteChannelIds.has(channel.id) ? "heart" : "heart-outline"} 
-                        size={isMobile ? 20 : scaleSize(28)} 
-                        color={favoriteChannelIds.has(channel.id) ? "#e50914" : "rgba(255, 255, 255, 0.5)"} 
-                      />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.guideProgramsRow}>
-                    {channel.programs.slice(0, 10).map((program, idx) => {
-                      const now = new Date();
-                      const isCurrentlyAiring = program.start <= now && program.stop > now;
-                      const startTime = program.start.toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit',
-                        hour12: true 
-                      });
-                      const endTime = program.stop.toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit',
-                        hour12: true 
-                      });
-                      
-                      return (
-                        <TouchableOpacity 
-                          key={`${program.channelId}-${idx}`} 
-                          style={[
-                            styles.guideProgram,
-                            isCurrentlyAiring && styles.guideProgramNow
-                          ]}
-                          onPress={() => {
-                            // Find the original channel to get the stream URL
-                            const originalChannel = allChannels.find(c => c.id === channel.id);
-                            if (originalChannel) {
-                              handleChannelPress(originalChannel);
-                            }
-                          }}
-                          activeOpacity={0.7}>
-                          <Text style={styles.guideProgramTime}>
-                            {startTime} - {endTime}
-                          </Text>
-                          <Text style={styles.guideProgramTitle} numberOfLines={2}>
-                            {program.title}
-                          </Text>
-                          {program.category && (
-                            <Text style={styles.guideProgramCategory} numberOfLines={1}>
-                              {program.category}
-                            </Text>
-                          )}
-                          {isCurrentlyAiring && (
-                            <View style={styles.nowBadge}>
-                              <Text style={styles.nowBadgeText}>NOW</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
+        </View>
+
+        {/* Filter Chips */}
+        {(categories.length > 0 || countries.length > 1) && (
+          <View style={styles.leftFilterContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+              <FilterChip label="All" isActive={!selectedCategory} onPress={() => setSelectedCategory(null)} />
+              {categories.map(cat => (
+                <FilterChip key={cat} label={cat} isActive={selectedCategory === cat}
+                  onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)} />
               ))}
-              {epgData.filter(ch => ch.programs.length > 0).length === 0 && (
-                <View style={styles.guideNotAvailable}>
-                  <Text style={styles.guideNotAvailableText}>
-                    No program data found for your channels.
-                  </Text>
+            </ScrollView>
+            {countries.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRow}>
+                <FilterChip label="All Countries" isActive={!selectedCountry} onPress={() => setSelectedCountry(null)} />
+                {countries.map(code => {
+                  const country = IPTV_COUNTRIES.find(c => c.code === code);
+                  return (
+                    <FilterChip key={code}
+                      label={country ? `${country.flag} ${country.name}` : code.toUpperCase()}
+                      isActive={selectedCountry === code}
+                      onPress={() => setSelectedCountry(selectedCountry === code ? null : code)} />
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* Channel Header */}
+        <View style={styles.channelListHeader}>
+          <Text style={styles.channelListHeaderText}>All channels</Text>
+          <Text style={styles.channelListCount}>{filteredChannels.length}</Text>
+        </View>
+
+        {/* Channel List — ScrollView + map avoids FlatList virtualization measurement issues on macOS Catalyst */}
+        <ScrollView
+          style={styles.channelListWrapper}
+          contentContainerStyle={styles.channelListContent}
+          showsVerticalScrollIndicator={true}
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 200) {
+              if (channelDisplayCount < filteredChannels.length) {
+                setChannelDisplayCount(c => Math.min(c + CHANNELS_PER_PAGE, filteredChannels.length));
+              }
+            }
+          }}
+          scrollEventThrottle={400}>
+          {displayedChannels.map((channel, index) => (
+            <React.Fragment key={channel.id}>
+              {renderChannelItem({ item: channel, index } as any)}
+            </React.Fragment>
+          ))}
+          <View style={styles.channelListFooter} />
+        </ScrollView>
+      </View>
+
+      {/* ===== RIGHT PANEL: Player + Info + Guide ===== */}
+      <View style={styles.rightPanel}>
+        {/* Video Player — tapping the player goes fullscreen */}
+        <TouchableOpacity
+          style={[styles.playerContainer, rightFocusedEl === 'player' && styles.focusRingPlayer]}
+          activeOpacity={0.9}
+          onPress={handleFullscreen}
+          onFocus={() => setRightFocusedEl('player')}
+          onBlur={() => setRightFocusedEl(null)}
+          focusable={true}
+          accessible={false}>
+          {selectedChannel ? (
+            <>
+              {/* Video layer — pointerEvents box-none so the TouchableOpacity above catches taps */}
+              <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                <Video
+                  key={selectedChannel.id}
+                  ref={videoRef}
+                  source={{
+                    uri: selectedChannel.url,
+                    headers: { 'Accept': '*/*' },
+                  }}
+                  style={styles.videoPlayer}
+                  resizeMode="contain"
+                  paused={false}
+                  volume={isPlayerMuted ? 0 : 1}
+                  onLoad={() => setIsStreamLoading(false)}
+                  onReadyForDisplay={() => setIsStreamLoading(false)}
+                  onBuffer={(data) => setIsStreamLoading(data.isBuffering)}
+                  onError={(err) => {
+                    const errorCode = err.error?.code;
+                    let msg = 'Failed to load stream.';
+                    if (errorCode === -1200) {
+                      msg = 'SSL/TLS connection failed. Try whitelisting the domain.';
+                    } else if (err.error?.localizedDescription) {
+                      msg = err.error.localizedDescription;
+                    }
+                    setStreamError(msg);
+                    setIsStreamLoading(false);
+                  }}
+                  bufferConfig={{
+                    minBufferMs: 15000,
+                    maxBufferMs: 50000,
+                    bufferForPlaybackMs: 2500,
+                    bufferForPlaybackAfterRebufferMs: 5000,
+                  }}
+                />
+              </View>
+              {/* Loading overlay */}
+              {isStreamLoading && (
+                <View style={styles.playerLoadingOverlay} pointerEvents="none">
+                  <ActivityIndicator size="large" color="#fff" />
+                  <Text style={styles.playerLoadingText}>Loading {selectedCleanName}...</Text>
                 </View>
               )}
-              </ScrollView>
-              
-              {/* Guide Pagination */}
-              {(() => {
-                const filteredGuideChannels = epgData.filter(ch => {
-                  if (!searchQuery.trim()) return ch.programs.length > 0;
-                  const query = searchQuery.toLowerCase();
-                  return ch.programs.length > 0 && 
-                    (ch.displayName.toLowerCase().includes(query) || 
-                     ch.id.toLowerCase().includes(query));
+              {/* Error overlay — needs its own button so stop propagation with dedicated handler */}
+              {streamError && (
+                <View style={styles.playerErrorOverlay}>
+                  <Icon name="alert-circle-outline" size={scaleSize(48)} color="rgba(255, 255, 255, 0.4)" />
+                  <Text style={styles.playerErrorText}>{streamError}</Text>
+                  <TouchableOpacity
+                    style={styles.playerRetryButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setStreamError(null);
+                      setIsStreamLoading(true);
+                      const ch = selectedChannel;
+                      setSelectedChannel(null);
+                      setTimeout(() => setSelectedChannel(ch), 50);
+                    }}>
+                    <Text style={styles.playerRetryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {/* Expand hint overlay */}
+              {!streamError && !isStreamLoading && (
+                <View style={styles.playerExpandHint} pointerEvents="none">
+                  <Icon name="expand" size={scaleSize(16)} color="rgba(255,255,255,0.5)" />
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.playerPlaceholder}>
+              <Icon name="tv-outline" size={scaleSize(64)} color="rgba(255, 255, 255, 0.15)" />
+              <Text style={styles.playerPlaceholderText}>Select a channel to start watching</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Player control bar — OUTSIDE overflow:hidden container so touches always work */}
+        {selectedChannel && (
+          <View style={styles.playerControlBar}>
+            <TouchableOpacity
+              onPress={() => setIsPlayerMuted(m => !m)}
+              style={[styles.playerControlButton, rightFocusedEl === 'mute' && styles.playerControlButtonFocused]}
+              onFocus={() => setRightFocusedEl('mute')}
+              onBlur={() => setRightFocusedEl(null)}
+              focusable={true}
+              activeOpacity={0.7}>
+              <Icon name={isPlayerMuted ? 'volume-mute' : 'volume-high'} size={scaleSize(18)} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+            <View style={styles.playerLiveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+            <View style={styles.playerControlBarSpacer} />
+            <TouchableOpacity
+              onPress={handleFullscreen}
+              style={[styles.playerControlButton, rightFocusedEl === 'fullscreen' && styles.playerControlButtonFocused]}
+              onFocus={() => setRightFocusedEl('fullscreen')}
+              onBlur={() => setRightFocusedEl(null)}
+              focusable={true}
+              activeOpacity={0.7}>
+              <Icon name="expand" size={scaleSize(18)} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Channel Info Bar */}
+        {selectedChannel && (
+          <View style={styles.infoBar}>
+            <View style={styles.infoBarLeft}>
+              {selectedChannel.logo ? (
+                <Image source={{ uri: selectedChannel.logo }} style={styles.infoBarLogo} resizeMode="contain" />
+              ) : (
+                <View style={styles.infoBarLogoPlaceholder}>
+                  <Icon name="tv" size={scaleSize(22)} color="rgba(255, 255, 255, 0.3)" />
+                </View>
+              )}
+              <View style={styles.infoBarText}>
+                <Text style={styles.infoBarChannelName}>{selectedCleanName}</Text>
+                {selectedChannelCurrentProgram && (
+                  <Text style={styles.infoBarProgramTitle} numberOfLines={1}>
+                    {selectedChannelCurrentProgram.title}
+                    {selectedChannelCurrentProgram.category ? `. ${selectedChannelCurrentProgram.category}.` : ''}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <View style={styles.infoBarRight}>
+              {selectedChannelCurrentProgram && (
+                <>
+                  <View style={styles.infoBarLiveBadge}>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.infoBarLiveText}>Live</Text>
+                  </View>
+                  <Text style={styles.infoBarTimeRange}>
+                    {selectedChannelCurrentProgram.start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    {' - '}
+                    {selectedChannelCurrentProgram.stop.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Program Guide */}
+        <View style={styles.programGuide}>
+          <Text style={styles.programGuideTitle}>TV program</Text>
+          {isLoadingGuide ? (
+            <View style={styles.programGuideLoading}>
+              <ActivityIndicator size="small" color="rgba(255, 255, 255, 0.5)" />
+              <Text style={styles.programGuideLoadingText}>{epgLoadingMessage || 'Loading guide...'}</Text>
+            </View>
+          ) : selectedChannelPrograms.length > 0 ? (
+            <ScrollView
+              style={styles.programList}
+              contentContainerStyle={{ paddingBottom: scaleSize(20) }}
+              scrollEnabled={true}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}>
+              {selectedChannelPrograms.slice(0, 15).map((program, idx) => {
+                const now = new Date();
+                const isCurrent = program.start <= now && program.stop > now;
+                const timeStr = program.start.toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false,
                 });
-                const totalGuidePages = Math.ceil(filteredGuideChannels.length / GUIDE_CHANNELS_PER_PAGE);
-                
-                return !isMobile && totalGuidePages > 1 ? (
-                  <View style={styles.pagination}>
-                    <TouchableOpacity
-                      style={[styles.pageButton, guideCurrentPage === 1 && styles.pageButtonDisabled]}
-                      onPress={() => setGuideCurrentPage(guideCurrentPage - 1)}
-                      disabled={guideCurrentPage === 1}>
-                      <Icon name="chevron-back" size={scaleSize(28)} color={guideCurrentPage === 1 ? '#666' : '#fff'} />
-                    </TouchableOpacity>
-                    
-                    <View style={styles.pageInfo}>
-                      <Text style={styles.pageText}>
-                        Page {guideCurrentPage} of {totalGuidePages}
-                      </Text>
-                      <Text style={styles.pageSubtext}>
-                        Showing {filteredGuideChannels.slice(
-                          (guideCurrentPage - 1) * GUIDE_CHANNELS_PER_PAGE,
-                          guideCurrentPage * GUIDE_CHANNELS_PER_PAGE
-                        ).length} of {filteredGuideChannels.length} channels
+                return (
+                  <View key={`${program.channelId}-${idx}`} style={[styles.programRow, isCurrent && styles.programRowCurrent]}>
+                    <View style={[styles.programDot, isCurrent && styles.programDotCurrent]} />
+                    <View style={styles.programInfo}>
+                      <Text style={[styles.programTitle, isCurrent && styles.programTitleCurrent]} numberOfLines={1}>
+                        {program.title}
+                        {program.category ? `. ${program.category}.` : ''}
+                        {program.description ? ` ${program.description}` : ''}
                       </Text>
                     </View>
-
-                    <TouchableOpacity
-                      style={[styles.pageButton, guideCurrentPage === totalGuidePages && styles.pageButtonDisabled]}
-                      onPress={() => setGuideCurrentPage(guideCurrentPage + 1)}
-                      disabled={guideCurrentPage === totalGuidePages}>
-                      <Icon name="chevron-forward" size={scaleSize(28)} color={guideCurrentPage === totalGuidePages ? '#666' : '#fff'} />
-                    </TouchableOpacity>
+                    <Text style={styles.programTime}>{timeStr}</Text>
                   </View>
-                ) : null;
-              })()}
+                );
+              })}
+              {/* Date bar at bottom */}
+              <View style={styles.programDateBar}>
+                <Text style={styles.programDateText}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </Text>
+              </View>
+            </ScrollView>
+          ) : (
+            <View style={styles.programGuideEmpty}>
+              <Text style={styles.programGuideEmptyText}>
+                {epgError ? 'Failed to load guide data' : 'No program data available for this channel'}
+              </Text>
+              {epgError && (
+                <TouchableOpacity style={styles.retryButton} onPress={() => loadProgramGuide(true)}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
-      )}
+      </View>
 
       {/* Favorite Modal */}
       <Modal
@@ -878,11 +925,7 @@ export function LiveTVScreen() {
         onRequestClose={() => setShowFavoriteModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedChannelForFavorite?.displayName}
-              </Text>
-            </View>
+            <Text style={styles.modalTitle}>{selectedChannelForFavorite?.displayName}</Text>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => {
@@ -892,24 +935,21 @@ export function LiveTVScreen() {
                 }
               }}
               hasTVPreferredFocus={true}
-              focusable={true}
-              activeOpacity={0.7}>
-              <Icon 
-                name={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? "heart" : "heart-outline"} 
-                size={scaleSize(28)} 
-                color={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? "#e50914" : "#fff"} 
+              focusable={true}>
+              <Icon
+                name={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? 'heart' : 'heart-outline'}
+                size={scaleSize(28)}
+                color={selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) ? '#e50914' : '#fff'}
               />
               <Text style={styles.modalButtonText}>
-                {selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id) 
-                  ? 'Remove from Favorites' 
-                  : 'Add to Favorites'}
+                {selectedChannelForFavorite && favoriteChannelIds.has(selectedChannelForFavorite.id)
+                  ? 'Remove from Favorites' : 'Add to Favorites'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonCancel]}
               onPress={() => setShowFavoriteModal(false)}
-              focusable={true}
-              activeOpacity={0.7}>
+              focusable={true}>
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -920,302 +960,17 @@ export function LiveTVScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ----- SHARED -----
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#0d0d14',
   },
-  desktopSearchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scaleSize(280),
-    paddingVertical: scaleSize(20),
-    paddingTop: scaleSize(24),
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    gap: scaleSize(20),
-  },
-  desktopSearchInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: scaleSize(12),
-    paddingHorizontal: scaleSize(16),
-    paddingVertical: scaleSize(12),
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  desktopSearchInput: {
-    flex: 1,
-    fontSize: scaleFontSize(18),
-    color: '#ffffff',
-    paddingVertical: 0,
-  },
-  desktopViewToggle: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: scaleSize(12),
-    padding: scaleSize(4),
-    gap: scaleSize(4),
-  },
-  desktopViewToggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scaleSize(20),
-    paddingVertical: scaleSize(10),
-    borderRadius: scaleSize(8),
-    gap: scaleSize(8),
-  },
-  desktopViewToggleActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  desktopViewToggleText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: scaleFontSize(17),
-    fontWeight: '600',
-  },
-  floatingSearchContainer: {
-    position: 'absolute',
-    left: 68,
-    right: 16,
-    zIndex: 1000,
-    pointerEvents: 'box-none',
-  },
-  searchGlass: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  searchInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 17,
-    color: 'rgba(0, 0, 0, 0.9)',
-    paddingVertical: 0,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  floatingControlsRow: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    zIndex: 999,
-    pointerEvents: 'box-none',
-  },
-  statsContainer: {
-    flex: 1,
-  },
-  statsText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '500',
-  },
-  floatingViewToggle: {
-    pointerEvents: 'auto',
-  },
-  viewToggleGlass: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  viewToggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  viewToggleText: {
-    fontSize: 15,
-    color: 'rgba(0, 0, 0, 0.85)',
-    fontWeight: '600',
-  },
-  // Channel Grid Styles
-  grid: {
-    padding: scaleSize(32),
-  },
-  mobileGridPadding: {
-    paddingTop: 132,
-    paddingBottom: 100,
-  },
-  mobileGuidePadding: {
-    paddingTop: 132,
-    paddingBottom: 100,
-  },
-  row: {
-    justifyContent: 'flex-start',
-    gap: scaleSize(32),
-    marginBottom: scaleSize(32),
-  },
-  // Mobile Channel Card Styles
-  mobileChannelCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(28, 28, 30, 0.6)',
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  mobileChannelLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  mobileChannelLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-  },
-  mobilePlaceholderLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mobileChannelInfo: {
-    flex: 1,
-  },
-  mobileChannelName: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  mobileChannelGroup: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 13,
-  },
-  mobileFavoriteButton: {
-    padding: 8,
-  },
-  // TV Channel Card Styles
-  channelCard: {
-    flex: 1,
-    maxWidth: scaleSize(400),
-    backgroundColor: 'rgba(28, 28, 30, 0.72)',
-    borderRadius: scaleSize(16),
-    overflow: 'hidden',
-    borderWidth: scaleSize(4),
-    borderColor: 'transparent',
-  },
-  channelCardFocused: {
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: scaleSize(6) },
-    shadowOpacity: 0.4,
-    shadowRadius: scaleSize(16),
-  },
-  channelImageContainer: {
-    width: '100%',
-    height: scaleSize(190),
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  favoriteButton: {
-    position: 'absolute',
-    top: scaleSize(12),
-    right: scaleSize(12),
-    padding: scaleSize(10),
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: scaleSize(24),
-  },
-  channelLogo: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderLogo: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  channelInfo: {
-    padding: scaleSize(20),
-    minHeight: scaleSize(100),
-  },
-  channelName: {
-    color: '#fff',
-    fontSize: scaleFontSize(20),
-    fontWeight: '600',
-    marginBottom: scaleSize(6),
-    lineHeight: scaleFontSize(28),
-  },
-  channelGroup: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: scaleFontSize(16),
-    fontWeight: '500',
-  },
-  // Pagination
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: scaleSize(28),
-    paddingHorizontal: scaleSize(32),
-    backgroundColor: 'rgba(28, 28, 30, 0.95)',
-    borderTopWidth: 2,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    gap: scaleSize(24),
-  },
-  pageButton: {
-    padding: scaleSize(16),
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: scaleSize(12),
-    minWidth: scaleSize(60),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pageButtonDisabled: {
-    opacity: 0.3,
-  },
-  pageInfo: {
-    paddingHorizontal: scaleSize(28),
-  },
-  pageText: {
-    color: '#fff',
-    fontSize: scaleFontSize(20),
-    fontWeight: '600',
-  },
-  pageSubtext: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: scaleFontSize(16),
-    marginTop: scaleSize(4),
-  },
-  // Empty/Error states
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: scaleSize(64),
-    backgroundColor: '#000',
+    backgroundColor: '#0d0d14',
   },
   emptyTitle: {
     color: 'rgba(255, 255, 255, 0.95)',
@@ -1251,98 +1006,543 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(20),
     fontWeight: '600',
   },
-  // View Toggle
-  // Guide View Styles
-  guideContainer: {
-    flex: 1,
-  },
-  guideContent: {
-    flex: 1,
-  },
-  guideList: {
-    flex: 1,
-  },
-  guideChannelRow: {
+
+  // ----- FILTER CHIPS -----
+  filterChipsRow: {
+    paddingHorizontal: scaleSize(16),
     flexDirection: 'row',
-    padding: 16,
+    gap: scaleSize(6),
+    alignItems: 'center',
+    paddingVertical: scaleSize(4),
+  },
+  filterChip: {
+    paddingHorizontal: scaleSize(14),
+    paddingVertical: scaleSize(6),
+    borderRadius: scaleSize(16),
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterChipActive: {
+    backgroundColor: 'rgba(229, 9, 20, 0.85)',
+    borderColor: '#e50914',
+  },
+  filterChipFocused: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderColor: '#ffffff',
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: scaleSize(10),
+    transform: [{ scale: 1.1 }],
+  },
+  filterChipText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: scaleFontSize(13),
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  filterChipTextFocused: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+
+  // ----- RESOLUTION BADGES -----
+  resolutionBadge: {
+    borderRadius: scaleSize(4),
+    paddingHorizontal: scaleSize(6),
+    paddingVertical: scaleSize(2),
+    flexShrink: 0,
+  },
+  resolutionBadgeText: {
+    fontSize: scaleFontSize(11),
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  resolutionBadgeSmall: {
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    flexShrink: 0,
+  },
+  resolutionBadgeSmallText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // ----- CHANNEL LIST ITEM (shared) -----
+  channelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 10 : scaleSize(10),
+      default: scaleSize(10),
+    }),
+    paddingHorizontal: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 12 : scaleSize(14),
+      default: scaleSize(14),
+    }),
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-    gap: 16,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    gap: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 10 : scaleSize(10),
+      default: scaleSize(10),
+    }),
   },
-  guideChannelInfo: {
+  channelItemSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderLeftWidth: scaleSize(3),
+    borderLeftColor: '#e50914',
+  },
+  channelNumber: {
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontSize: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 14 : scaleFontSize(15),
+      default: scaleFontSize(15),
+    }),
+    fontWeight: '600',
+    width: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 28 : scaleSize(30),
+      default: scaleSize(30),
+    }),
+    textAlign: 'right',
+  },
+  channelItemLogo: {
+    width: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(46),
+      default: scaleSize(46),
+    }),
+    height: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(46),
+      default: scaleSize(46),
+    }),
+    borderRadius: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 10 : scaleSize(10),
+      default: scaleSize(10),
+    }),
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  channelItemLogoPlaceholder: {
+    width: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(46),
+      default: scaleSize(46),
+    }),
+    height: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(46),
+      default: scaleSize(46),
+    }),
+    borderRadius: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 10 : scaleSize(10),
+      default: scaleSize(10),
+    }),
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  channelItemInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  channelItemNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: 200,
-    gap: 12,
+    gap: 6,
   },
-  guideChannelLogo: {
-    width: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(56), default: scaleSize(56) }),
-    height: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(56), default: scaleSize(56) }),
-    borderRadius: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 8 : scaleSize(8), default: scaleSize(8) }),
+  channelItemName: {
+    color: '#fff',
+    fontSize: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 16 : scaleFontSize(16),
+      default: scaleFontSize(16),
+    }),
+    fontWeight: '600',
+    flexShrink: 1,
   },
-  guideChannelLogoPlaceholder: {
-    width: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(56), default: scaleSize(56) }),
-    height: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 44 : scaleSize(56), default: scaleSize(56) }),
-    borderRadius: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 8 : scaleSize(8), default: scaleSize(8) }),
+  channelItemSubtitle: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: Platform.select({
+      ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 13 : scaleFontSize(13),
+      default: scaleFontSize(13),
+    }),
+    marginTop: 2,
+  },
+
+  // ----- MOBILE -----
+  mobileSearchContainer: {
+    position: 'absolute',
+    left: 68,
+    right: 16,
+    zIndex: 1000,
+    pointerEvents: 'box-none',
+  },
+  mobileSearchGlass: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  searchInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  mobileSearchInput: {
+    flex: 1,
+    fontSize: 17,
+    color: 'rgba(0, 0, 0, 0.9)',
+    paddingVertical: 0,
+  },
+
+  // ----- SPLIT LAYOUT (Desktop/TV) -----
+  splitContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#0d0d14',
+  },
+  leftPanel: {
+    flex: 3,
+    backgroundColor: '#0f0f18',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  rightPanel: {
+    flex: 7,
+    backgroundColor: '#0d0d14',
+  },
+
+  // ----- LEFT PANEL -----
+  leftSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: scaleSize(10),
+    paddingHorizontal: scaleSize(12),
+    paddingVertical: scaleSize(10),
+    marginHorizontal: scaleSize(14),
+    marginTop: scaleSize(16),
+    marginBottom: scaleSize(8),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  guideChannelName: {
+  leftSearchInput: {
+    flex: 1,
+    fontSize: scaleFontSize(15),
     color: '#fff',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 16 : scaleFontSize(20), default: scaleFontSize(20) }),
-    fontWeight: '600',
-    flex: 1,
+    paddingVertical: 0,
   },
-  guideFavoriteButton: {
-    padding: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 6 : scaleSize(10), default: scaleSize(10) }),
-    marginLeft: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 8 : scaleSize(12), default: scaleSize(12) }),
+  leftFilterContainer: {
+    paddingBottom: scaleSize(6),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    gap: scaleSize(4),
   },
-  guideProgramList: {
-    flex: 1,
-    gap: 8,
-  },
-  guideProgramItem: {
+  channelListHeader: {
     flexDirection: 'row',
-    gap: 12,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(10),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
   },
-  guideProgramTime: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 13 : scaleFontSize(16), default: scaleFontSize(16) }),
+  channelListHeaderText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: scaleFontSize(14),
     fontWeight: '600',
-    width: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 90 : scaleSize(90), default: scaleSize(90) }),
   },
-  guideProgramTitle: {
-    color: '#fff',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 15 : scaleFontSize(18), default: scaleFontSize(18) }),
+  channelListCount: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: scaleFontSize(13),
+  },
+  channelListWrapper: {
     flex: 1,
   },
-  noGuideData: {
-    color: 'rgba(255, 255, 255, 0.3)',
-    fontSize: scaleFontSize(18),
-    fontStyle: 'italic',
+  channelListContent: {
+    paddingBottom: scaleSize(20),
   },
-  guideNotAvailable: {
+  channelListFooter: {
+    height: scaleSize(80),
+  },
+
+  // ----- RIGHT PANEL: PLAYER -----
+  playerContainer: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    maxHeight: '55%',
+    backgroundColor: '#000',
+    borderRadius: scaleSize(12),
+    overflow: 'hidden',
+    margin: scaleSize(16),
+    marginBottom: 0,
+    position: 'relative',
+  },
+  videoPlayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  playerLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: scaleSize(12),
+  },
+  playerLoadingText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: scaleFontSize(15),
+  },
+  playerErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: scaleSize(12),
+    padding: scaleSize(24),
+  },
+  playerErrorText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: scaleFontSize(14),
+    textAlign: 'center',
+  },
+  playerRetryButton: {
+    backgroundColor: '#e50914',
+    paddingHorizontal: scaleSize(24),
+    paddingVertical: scaleSize(10),
+    borderRadius: scaleSize(8),
+  },
+  playerRetryButtonText: {
+    color: '#fff',
+    fontSize: scaleFontSize(14),
+    fontWeight: '600',
+  },
+  playerControlBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scaleSize(16),
+    paddingVertical: scaleSize(8),
+    marginHorizontal: scaleSize(16),
+    marginBottom: scaleSize(4),
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: scaleSize(8),
+  },
+  playerControlBarSpacer: {
+    flex: 1,
+  },
+  playerExpandHint: {
+    position: 'absolute',
+    top: scaleSize(8),
+    right: scaleSize(8),
+    opacity: 0.6,
+  },
+  playerControlButton: {
+    padding: scaleSize(6),
+    borderRadius: scaleSize(8),
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  playerControlButtonFocused: {
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  focusRingPlayer: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  playerLiveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scaleSize(6),
+    marginLeft: scaleSize(10),
+  },
+  liveDot: {
+    width: scaleSize(8),
+    height: scaleSize(8),
+    borderRadius: scaleSize(4),
+    backgroundColor: '#e50914',
+  },
+  liveText: {
+    color: '#e50914',
+    fontSize: scaleFontSize(12),
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  playerPlaceholder: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: scaleSize(44),
-    gap: scaleSize(20),
+    gap: scaleSize(12),
   },
-  guideNotAvailableTitle: {
+  playerPlaceholderText: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: scaleFontSize(16),
+  },
+
+  // ----- RIGHT PANEL: INFO BAR -----
+  infoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: scaleSize(20),
+    paddingVertical: scaleSize(14),
+    marginHorizontal: scaleSize(16),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  infoBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: scaleSize(12),
+  },
+  infoBarLogo: {
+    width: scaleSize(44),
+    height: scaleSize(44),
+    borderRadius: scaleSize(10),
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  infoBarLogoPlaceholder: {
+    width: scaleSize(44),
+    height: scaleSize(44),
+    borderRadius: scaleSize(10),
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoBarText: {
+    flex: 1,
+  },
+  infoBarChannelName: {
     color: '#fff',
-    fontSize: scaleFontSize(28),
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  guideNotAvailableText: {
-    color: 'rgba(255, 255, 255, 0.6)',
     fontSize: scaleFontSize(18),
-    textAlign: 'center',
-    lineHeight: scaleFontSize(28),
+    fontWeight: '700',
   },
-  // Modal styles
+  infoBarProgramTitle: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: scaleFontSize(14),
+    marginTop: 2,
+  },
+  infoBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scaleSize(14),
+  },
+  infoBarLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    paddingHorizontal: scaleSize(10),
+    paddingVertical: scaleSize(5),
+    borderRadius: scaleSize(6),
+    gap: scaleSize(6),
+  },
+  infoBarLiveText: {
+    color: '#e50914',
+    fontSize: scaleFontSize(13),
+    fontWeight: '700',
+  },
+  infoBarTimeRange: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: scaleFontSize(14),
+    fontWeight: '600',
+  },
+
+  // ----- RIGHT PANEL: PROGRAM GUIDE -----
+  programGuide: {
+    flex: 1,
+    marginHorizontal: scaleSize(16),
+    marginTop: scaleSize(4),
+  },
+  programGuideTitle: {
+    color: '#fff',
+    fontSize: scaleFontSize(18),
+    fontWeight: '700',
+    paddingHorizontal: scaleSize(4),
+    paddingVertical: scaleSize(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  programGuideLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: scaleSize(24),
+    gap: scaleSize(10),
+  },
+  programGuideLoadingText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: scaleFontSize(14),
+  },
+  programList: {
+    flex: 1,
+  },
+  programRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: scaleSize(12),
+    paddingHorizontal: scaleSize(4),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
+    gap: scaleSize(10),
+  },
+  programRowCurrent: {
+    backgroundColor: 'rgba(229, 9, 20, 0.06)',
+  },
+  programDot: {
+    width: scaleSize(6),
+    height: scaleSize(6),
+    borderRadius: scaleSize(3),
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  programDotCurrent: {
+    backgroundColor: '#e50914',
+  },
+  programInfo: {
+    flex: 1,
+  },
+  programTitle: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: scaleFontSize(14),
+  },
+  programTitleCurrent: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  programTime: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: scaleFontSize(14),
+    fontWeight: '600',
+    minWidth: scaleSize(50),
+    textAlign: 'right',
+  },
+  programDateBar: {
+    alignItems: 'center',
+    paddingVertical: scaleSize(14),
+    marginTop: scaleSize(8),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  programDateText: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: scaleFontSize(13),
+    fontWeight: '500',
+  },
+  programGuideEmpty: {
+    padding: scaleSize(32),
+    alignItems: 'center',
+    gap: scaleSize(12),
+  },
+  programGuideEmptyText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: scaleFontSize(14),
+    textAlign: 'center',
+  },
+
+  // ----- MODAL -----
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -1362,15 +1562,12 @@ const styles = StyleSheet.create({
     shadowRadius: scaleSize(20),
     elevation: 20,
   },
-  modalHeader: {
-    marginBottom: scaleSize(24),
-    alignItems: 'center',
-  },
   modalTitle: {
     color: '#fff',
     fontSize: scaleFontSize(24),
     fontWeight: '700',
     textAlign: 'center',
+    marginBottom: scaleSize(24),
   },
   modalButton: {
     flexDirection: 'row',
@@ -1389,107 +1586,6 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontSize: scaleFontSize(20),
-    fontWeight: '600',
-  },
-  guideLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 16 : scaleSize(20), default: scaleSize(20) }),
-    padding: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 32 : scaleSize(44), default: scaleSize(44) }),
-  },
-  guideLoadingTitle: {
-    color: '#fff',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 20 : scaleFontSize(24), default: scaleFontSize(24) }),
-    fontWeight: '600',
-  },
-  guideLoadingText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 15 : scaleFontSize(18), default: scaleFontSize(18) }),
-  },
-  guideScrollView: {
-    flex: 1,
-  },
-  guideChannel: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-    paddingVertical: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 12 : scaleSize(16), default: scaleSize(16) }),
-  },
-  guideChannelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 16 : scaleSize(24), default: scaleSize(24) }),
-    marginBottom: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 8 : scaleSize(12), default: scaleSize(12) }),
-    gap: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 10 : scaleSize(14), default: scaleSize(14) }),
-  },
-  guideProgramsRow: {
-    paddingHorizontal: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 12 : scaleSize(20), default: scaleSize(20) }),
-  },
-  guideProgram: {
-    width: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 200 : scaleSize(240), default: scaleSize(240) }),
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 8 : scaleSize(10), default: scaleSize(10) }),
-    padding: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 12 : scaleSize(16), default: scaleSize(16) }),
-    marginHorizontal: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 4 : scaleSize(6), default: scaleSize(6) }),
-  },
-  guideProgramNow: {
-    backgroundColor: 'rgba(229, 9, 20, 0.3)',
-    borderWidth: 2,
-    borderColor: '#e50914',
-  },
-  guideProgramCategory: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 12 : scaleFontSize(14), default: scaleFontSize(14) }),
-    marginTop: Platform.select({ ios: (Platform.constants as any).interfaceIdiom === 'phone' ? 4 : scaleSize(6), default: scaleSize(6) }),
-  },
-  nowBadge: {
-    position: 'absolute',
-    top: scaleSize(6),
-    right: scaleSize(6),
-    backgroundColor: '#e50914',
-    paddingHorizontal: scaleSize(8),
-    paddingVertical: scaleSize(4),
-    borderRadius: scaleSize(6),
-  },
-  nowBadgeText: {
-    color: '#fff',
-    fontSize: scaleFontSize(12),
-    fontWeight: '700',
-  },
-  // Filter Bar Styles
-  filterBar: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: scaleSize(10),
-    gap: scaleSize(6),
-  },
-  filterChipsRow: {
-    paddingHorizontal: scaleSize(32),
-    flexDirection: 'row',
-    gap: scaleSize(8),
-    alignItems: 'center',
-    paddingVertical: scaleSize(4),
-  },
-  filterChip: {
-    paddingHorizontal: scaleSize(16),
-    paddingVertical: scaleSize(8),
-    borderRadius: scaleSize(20),
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  filterChipActive: {
-    backgroundColor: 'rgba(229, 9, 20, 0.85)',
-    borderColor: '#e50914',
-  },
-  filterChipText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: scaleFontSize(15),
-    fontWeight: '500',
-  },
-  filterChipTextActive: {
-    color: '#fff',
     fontWeight: '600',
   },
 });

@@ -318,12 +318,21 @@ function generateSampleEPG(channels: any[]): EPGChannel[] {
 
 export class EPGService {
   private cachedData: EPGChannel[] = [];
+  private cachedDataMap: Map<string, EPGChannel> = new Map(); // O(1) lookup index
   private rawEpgData: EPGChannel[] = []; // Raw EPG data before channel matching
   private lastFetchTime: number = 0;
   private isLoading: boolean = false;
   private loadingPromise: Promise<EPGChannel[]> | null = null;
   private lastChannelCount: number = 0; // Track if channels changed
   private backgroundRefreshInProgress: boolean = false;
+
+  // Rebuild the O(1) lookup map whenever cachedData changes
+  private rebuildCachedDataMap(): void {
+    this.cachedDataMap = new Map();
+    for (const ch of this.cachedData) {
+      this.cachedDataMap.set(ch.id, ch);
+    }
+  }
 
   // Prune expired programs from channel list (programs whose stop time has passed)
   private pruneExpiredPrograms(channels: EPGChannel[]): EPGChannel[] {
@@ -442,6 +451,7 @@ export class EPGService {
         console.log('[EPG] All in-memory programs expired, clearing stale data');
         this.rawEpgData = [];
         this.cachedData = [];
+        this.cachedDataMap = new Map();
         this.lastFetchTime = 0;
       }
     }
@@ -452,6 +462,7 @@ export class EPGService {
         channelCount !== this.lastChannelCount) {
       console.log(`[EPG] Re-matching EPG data with ${channelCount} channels (was ${this.lastChannelCount})`);
       this.cachedData = this.matchChannelsToEPG(channels || [], this.rawEpgData);
+      this.rebuildCachedDataMap();
       this.lastChannelCount = channelCount;
       const matchedWithPrograms = this.cachedData.filter(ch => ch.programs.length > 0).length;
       console.log(`[EPG] Matched ${matchedWithPrograms} channels with program data`);
@@ -525,6 +536,7 @@ export class EPGService {
         console.log(`[EPG] Loaded ${storedData.length} channels from storage, matching with ${channels?.length || 0} IPTV channels`);
         this.rawEpgData = storedData;
         this.cachedData = this.matchChannelsToEPG(channels || [], storedData);
+        this.rebuildCachedDataMap();
         this.lastFetchTime = timestamp; // Use original timestamp for stale checks
         const matchedWithPrograms = this.cachedData.filter(ch => ch.programs.length > 0).length;
         console.log(`[EPG] Matched ${matchedWithPrograms} channels with program data`);
@@ -742,6 +754,7 @@ export class EPGService {
       onProgress?.('Matching channels...');
       console.log(`[EPG] Matching ${allEpgChannels.length} EPG channels with ${channels?.length || 0} IPTV channels`);
       this.cachedData = this.matchChannelsToEPG(channels || [], allEpgChannels);
+      this.rebuildCachedDataMap();
       this.lastFetchTime = Date.now();
       const matchedWithPrograms = this.cachedData.filter(ch => ch.programs.length > 0).length;
       console.log(`[EPG] Matched ${matchedWithPrograms} channels with program data`);
@@ -752,6 +765,7 @@ export class EPGService {
     console.log('[EPG] No EPG data available, using empty data...');
     if (channels && channels.length > 0) {
       this.cachedData = generateSampleEPG(channels);
+      this.rebuildCachedDataMap();
       this.lastFetchTime = Date.now();
       console.log(`[EPG] Generated empty EPG for ${this.cachedData.length} channels`);
       return this.cachedData;
@@ -791,12 +805,27 @@ export class EPGService {
     // Create normalized lookup map for faster matching
     const epgMap = new Map<string, EPGChannel>();
     const epgNormalizedMap = new Map<string, EPGChannel>();
+    // Prefix index: maps each normalized prefix (3+ chars) to an EPGChannel for strategy 5
+    const epgPrefixMap = new Map<string, EPGChannel>();
+    // First-word index: maps first significant word to EPGChannel for strategy 6
+    const epgFirstWordMap = new Map<string, EPGChannel>();
     
     for (const epg of epgChannels) {
       epgMap.set(epg.id.toLowerCase(), epg);
       epgMap.set(epg.displayName.toLowerCase(), epg);
-      epgNormalizedMap.set(this.normalizeChannelName(epg.displayName), epg);
-      epgNormalizedMap.set(this.normalizeChannelName(epg.id), epg);
+      const normalizedDisplay = this.normalizeChannelName(epg.displayName);
+      const normalizedId = this.normalizeChannelName(epg.id);
+      epgNormalizedMap.set(normalizedDisplay, epg);
+      epgNormalizedMap.set(normalizedId, epg);
+      // Build prefix index (store by normalized name as a prefix key)
+      if (normalizedDisplay.length > 2) {
+        epgPrefixMap.set(normalizedDisplay, epg);
+      }
+      // Build first-word index
+      const words = epg.displayName.toLowerCase().split(/[\s\-_]+/).filter((w: string) => w.length > 2);
+      if (words.length > 0 && !epgFirstWordMap.has(words[0])) {
+        epgFirstWordMap.set(words[0], epg);
+      }
     }
     
     for (const channel of ourChannels) {
@@ -833,12 +862,11 @@ export class EPGService {
         if (epgMatch) matchType = 'normalized';
       }
       
-      // 5. Partial match - channel name starts with EPG name
-      if (!epgMatch) {
-        for (const epg of epgChannels) {
-          const epgNormalized = this.normalizeChannelName(epg.displayName);
-          if (epgNormalized.length > 2 && 
-              (normalizedName.startsWith(epgNormalized) || epgNormalized.startsWith(normalizedName))) {
+      // 5. Prefix match - use indexed prefix lookup instead of O(N) scan
+      if (!epgMatch && normalizedName.length > 2) {
+        // Check if any EPG normalized name starts with our name (or vice versa)
+        for (const [epgNorm, epg] of epgPrefixMap) {
+          if (normalizedName.startsWith(epgNorm) || epgNorm.startsWith(normalizedName)) {
             epgMatch = epg;
             matchType = 'partial';
             break;
@@ -846,18 +874,12 @@ export class EPGService {
         }
       }
       
-      // 6. Word-based matching - first significant word matches
+      // 6. Word-based matching - first significant word matches (O(1) lookup)
       if (!epgMatch) {
         const channelWords = channelName.toLowerCase().split(/[\s\-_]+/).filter((w: string) => w.length > 2);
         if (channelWords.length > 0) {
-          for (const epg of epgChannels) {
-            const epgWords = epg.displayName.toLowerCase().split(/[\s\-_]+/).filter((w: string) => w.length > 2);
-            if (epgWords.length > 0 && channelWords[0] === epgWords[0]) {
-              epgMatch = epg;
-              matchType = 'word';
-              break;
-            }
-          }
+          epgMatch = epgFirstWordMap.get(channelWords[0]);
+          if (epgMatch) matchType = 'word';
         }
       }
       
@@ -889,7 +911,7 @@ export class EPGService {
 
   // Get current and upcoming programs for a channel
   getCurrentProgram(channelId: string): EPGProgram | null {
-    const channel = this.cachedData.find(c => c.id === channelId);
+    const channel = this.cachedDataMap.get(channelId);
     if (!channel) return null;
 
     const now = new Date();
@@ -897,7 +919,7 @@ export class EPGService {
   }
 
   getUpcomingPrograms(channelId: string, limit: number = 5): EPGProgram[] {
-    const channel = this.cachedData.find(c => c.id === channelId);
+    const channel = this.cachedDataMap.get(channelId);
     if (!channel) return [];
 
     const now = new Date();
@@ -908,7 +930,7 @@ export class EPGService {
 
   // Get all programs for a channel within a time range
   getProgramsForChannel(channelId: string, startTime: Date, endTime: Date): EPGProgram[] {
-    const channel = this.cachedData.find(c => c.id === channelId);
+    const channel = this.cachedDataMap.get(channelId);
     if (!channel) return [];
 
     return channel.programs.filter(p => 
@@ -922,8 +944,12 @@ export class EPGService {
   findChannelGuide(channelName: string): EPGChannel | null {
     const normalized = channelName.toLowerCase().trim();
     
-    // Try exact match first
-    let match = this.cachedData.find(c => 
+    // Try exact match via map first
+    let match = this.cachedDataMap.get(normalized);
+    if (match) return match;
+    
+    // Try by display name / id
+    match = this.cachedData.find(c => 
       c.id.toLowerCase() === normalized || 
       c.displayName.toLowerCase() === normalized
     );
@@ -974,6 +1000,7 @@ export class EPGService {
   // Clear all cached data to force a fresh fetch
   async clearCache(): Promise<void> {
     this.cachedData = [];
+    this.cachedDataMap = new Map();
     this.rawEpgData = [];
     this.lastFetchTime = 0;
     this.lastChannelCount = 0;
