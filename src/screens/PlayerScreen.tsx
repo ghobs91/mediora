@@ -450,8 +450,9 @@ export function PlayerScreen() {
         // Note: textTracks prop not used - subtitles are embedded in HLS stream via SubtitleMethod=Hls
         // AVPlayerViewController will automatically detect and display subtitle options from HLS manifest
         repeat={false}
-        playInBackground={false}
-        playWhenInactive={false}
+        playInBackground={true}
+        playWhenInactive={true}
+        enterPictureInPictureOnLeave={true}
         automaticallyWaitsToMinimizeStalling={true}
         preferredForwardBufferDuration={30}
         // Enable native features

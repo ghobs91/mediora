@@ -12,6 +12,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { VideoRef, SelectedTrackType } from 'react-native-video';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 import { LoadingScreen } from '../components';
 import { RootStackParamList } from '../types';
 
@@ -34,6 +35,8 @@ export function LivePlayerScreen() {
   const videoRef = useRef<VideoRef>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
+  const isFocused = useIsFocused();
+  const [isPiPActive, setIsPiPActive] = useState(false);
 
   const showControlsWithTimeout = useCallback(() => {
     setShowControls(true);
@@ -136,7 +139,7 @@ export function LivePlayerScreen() {
         }}
         style={styles.video}
         resizeMode="contain"
-        paused={false}
+        paused={!isFocused && !isPiPActive}
         volume={isMuted ? 0 : volume}
         rate={1}
         selectedTextTrack={selectedSubtitleTrack !== undefined ? { type: SelectedTrackType.INDEX, value: selectedSubtitleTrack } : undefined}
@@ -158,8 +161,10 @@ export function LivePlayerScreen() {
           setIsLoading(data.isBuffering);
         }}
         repeat={false}
-        playInBackground={false}
-        playWhenInactive={false}
+        playInBackground={true}
+        playWhenInactive={true}
+        enterPictureInPictureOnLeave={true}
+        onPictureInPictureStatusChanged={({ isActive }) => setIsPiPActive(isActive)}
         bufferConfig={{
           minBufferMs: 15000,
           maxBufferMs: 50000,
@@ -218,6 +223,17 @@ export function LivePlayerScreen() {
                 <Text style={styles.channelName}>{channelName}</Text>
               </View>
             </View>
+            {Platform.OS === 'ios' && !Platform.isTV && (
+              <TouchableOpacity
+                onPress={() => videoRef.current?.enterPictureInPicture()}
+                style={styles.topIconButton}>
+                <Icon
+                  name="browsers-outline"
+                  size={26}
+                  color={isPiPActive ? '#1c8aff' : '#fff'}
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Bottom Controls */}

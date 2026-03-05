@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -122,6 +122,8 @@ export function LiveTVScreen() {
   const insets = useSafeAreaInsets();
   const { isMobile } = useDeviceType();
   const { height: windowHeight } = useWindowDimensions();
+  const isFocused = useIsFocused();
+  const [isPiPActive, setIsPiPActive] = useState(false);
   // Channel data state
   const [allChannels, setAllChannels] = useState<LiveTVChannel[]>([]);
   const [filteredChannels, setFilteredChannels] = useState<LiveTVChannel[]>([]);
@@ -152,7 +154,7 @@ export function LiveTVScreen() {
   const [isStreamLoading, setIsStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isPlayerMuted, setIsPlayerMuted] = useState(false);
-  const [rightFocusedEl, setRightFocusedEl] = useState<'player' | 'mute' | 'fullscreen' | null>(null);
+  const [rightFocusedEl, setRightFocusedEl] = useState<'player' | 'mute' | 'pip' | 'fullscreen' | null>(null);
   const videoRef = useRef<VideoRef>(null);
 
   // ----- MEMOS -----
@@ -725,8 +727,12 @@ export function LiveTVScreen() {
                   }}
                   style={styles.videoPlayer}
                   resizeMode="contain"
-                  paused={false}
+                  paused={(!isFocused && !isPiPActive)}
                   volume={isPlayerMuted ? 0 : 1}
+                  playInBackground={true}
+                  playWhenInactive={true}
+                  enterPictureInPictureOnLeave={true}
+                  onPictureInPictureStatusChanged={({ isActive }) => setIsPiPActive(isActive)}
                   onLoad={() => setIsStreamLoading(false)}
                   onReadyForDisplay={() => setIsStreamLoading(false)}
                   onBuffer={(data) => setIsStreamLoading(data.isBuffering)}
@@ -807,6 +813,17 @@ export function LiveTVScreen() {
               <Text style={styles.liveText}>LIVE</Text>
             </View>
             <View style={styles.playerControlBarSpacer} />
+            {Platform.OS === 'ios' && !Platform.isTV && (
+              <TouchableOpacity
+                onPress={() => videoRef.current?.enterPictureInPicture()}
+                style={[styles.playerControlButton, rightFocusedEl === 'pip' && styles.playerControlButtonFocused]}
+                onFocus={() => setRightFocusedEl('pip')}
+                onBlur={() => setRightFocusedEl(null)}
+                focusable={true}
+                activeOpacity={0.7}>
+                <Icon name="browsers-outline" size={scaleSize(18)} color={isPiPActive ? '#1c8aff' : 'rgba(255,255,255,0.85)'} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={handleFullscreen}
               style={[styles.playerControlButton, rightFocusedEl === 'fullscreen' && styles.playerControlButtonFocused]}
