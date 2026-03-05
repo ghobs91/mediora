@@ -790,24 +790,26 @@ export class JellyfinService {
   }
 
   getHlsStreamUrl(itemId: string, mediaSourceId: string, subtitleStreamIndex?: number, startTimeTicks?: number): string {
-    // Use master.m3u8 for HLS streaming with transcoding
+    // HLS streaming strategy:
     //
-    // When display is SDR: request H.264 only so Jellyfin transcodes any HEVC HDR
-    // content to H.264 SDR. Otherwise AVPlayer gets HDR frames it can't render → black screen.
-    // When display is HDR: allow H.264 + HEVC with stream copy to preserve HDR metadata.
-    const videoCodec = this._isHDRActive ? 'h264,hevc' : 'h264';
-    console.log('[Jellyfin] HLS stream - HDR active:', this._isHDRActive, 'videoCodec:', videoCodec);
+    // When display is HDR: use master.m3u8 (ABR master playlist) with H.264 + HEVC stream copy
+    // to preserve HDR metadata for native HDR playback.
+    //
+    // When display is SDR: use main.m3u8 (media playlist with video segments) with H.264 + HEVC
+    // and stream copy enabled. Passing the media playlist directly triggers AVPlayer's built-in
+    // hardware HDR-to-SDR tone mapping, eliminating the need for server-side transcoding.
+    console.log('[Jellyfin] HLS stream - HDR active:', this._isHDRActive);
 
     const params: Record<string, string | number | boolean | undefined> = {
       api_key: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
-      videoCodec: videoCodec,
+      videoCodec: 'h264,hevc',
       audioCodec: 'aac,ac3,eac3',
-      // Allow stream copy when HDR is active (preserves HDR metadata).
-      // Force transcode when SDR to avoid HDR passthrough.
-      enableAutoStreamCopy: this._isHDRActive,
+      // Always allow stream copy - AVPlayer performs HDR-to-SDR tone mapping on SDR displays
+      // via hardware decoder when receiving main.m3u8, so no server transcoding is needed.
+      enableAutoStreamCopy: true,
       // Transcoding settings - allow up to 4K output for transcoded content
       maxWidth: 3840,
       maxHeight: 2160,
@@ -836,7 +838,12 @@ export class JellyfinService {
 
     const queryString = buildQueryString(params);
 
-    return `${this.serverUrl}/Videos/${itemId}/master.m3u8?${queryString}`;
+    // On SDR displays, use main.m3u8 (the media/segments playlist) so AVPlayer applies its
+    // built-in hardware HDR-to-SDR tone mapping instead of relying on server transcoding.
+    // On HDR displays, use master.m3u8 (the ABR master playlist) for adaptive bitrate streaming
+    // with native HDR playback.
+    const playlist = this._isHDRActive ? 'master.m3u8' : 'main.m3u8';
+    return `${this.serverUrl}/Videos/${itemId}/${playlist}?${queryString}`;
   }
 
   getTranscodedStreamUrl(itemId: string, mediaSourceId: string): string {
