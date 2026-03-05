@@ -720,10 +720,14 @@ export class JellyfinService {
         },
       ],
       SubtitleProfiles: [
-        { Format: 'vtt', Method: 'External' },
-        { Format: 'srt', Method: 'External' },
-        { Format: 'sub', Method: 'External' },
-        { Format: 'subrip', Method: 'External' },
+        // Text-based subtitles delivered as WebVTT HLS segments so Jellyfin
+        // includes the X-TIMESTAMP-MAP header, keeping subtitles in sync with
+        // the HLS media timeline.  'External' (sideloaded whole-file) lacks
+        // this header and drifts relative to the video.
+        { Format: 'vtt', Method: 'Hls' },
+        { Format: 'srt', Method: 'Hls' },
+        { Format: 'sub', Method: 'Hls' },
+        { Format: 'subrip', Method: 'Hls' },
         { Format: 'ass', Method: 'Hls' },
         { Format: 'ssa', Method: 'Hls' },
         { Format: 'pgssub', Method: 'Encode' },
