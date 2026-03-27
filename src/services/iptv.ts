@@ -11,6 +11,11 @@ export interface IPTVCountry {
 // Comprehensive list of countries with IPTV channels from iptv-org
 // URL pattern: https://iptv-org.github.io/iptv/countries/{code}.m3u
 export const IPTV_COUNTRIES: IPTVCountry[] = [
+  // International — pan-Arab channels (Al Arabiya, Sky News Arabia, etc.) live here,
+  // not in country-specific playlists. Listed first so it appears at the top of the
+  // Middle East region in the country picker.
+  { code: 'int', name: 'International (Pan-Arab, Global)', flag: '🌐' },
+
   // North America
   { code: 'us', name: 'United States', flag: '🇺🇸' },
   { code: 'ca', name: 'Canada', flag: '🇨🇦' },
@@ -109,9 +114,6 @@ export const IPTV_COUNTRIES: IPTVCountry[] = [
   { code: 'jm', name: 'Jamaica', flag: '🇯🇲' },
   { code: 'tt', name: 'Trinidad and Tobago', flag: '🇹🇹' },
   { code: 'ht', name: 'Haiti', flag: '🇭🇹' },
-  
-  // Other
-  { code: 'int', name: 'International', flag: '🌐' },
 ];
 
 // Group countries by region for better UI organization
@@ -139,8 +141,10 @@ export const IPTV_REGIONS: IPTVRegion[] = [
   },
   {
     name: 'Middle East',
-    countries: IPTV_COUNTRIES.filter(c => 
-      ['ae', 'sa', 'il', 'tr', 'eg', 'ir', 'iq', 'kw', 'qa', 'lb', 'jo'].includes(c.code)
+    // 'int' is listed here because pan-Arab channels (Al Arabiya, Sky News Arabia, etc.)
+    // are categorised as International in iptv-org and live in int.m3u, not country playlists.
+    countries: IPTV_COUNTRIES.filter(c =>
+      ['int', 'ae', 'sa', 'il', 'tr', 'eg', 'ir', 'iq', 'kw', 'qa', 'lb', 'jo'].includes(c.code)
     ),
   },
   {
@@ -162,10 +166,6 @@ export const IPTV_REGIONS: IPTVRegion[] = [
   {
     name: 'Caribbean',
     countries: IPTV_COUNTRIES.filter(c => ['jm', 'tt', 'ht'].includes(c.code)),
-  },
-  {
-    name: 'Other',
-    countries: IPTV_COUNTRIES.filter(c => ['int'].includes(c.code)),
   },
 ];
 
