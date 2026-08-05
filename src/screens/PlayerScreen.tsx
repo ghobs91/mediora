@@ -19,6 +19,7 @@ import { RootStackParamList, JellyfinPlaybackInfo, JellyfinItem } from '../types
 import { playbackPositionService } from '../services/playbackPosition';
 import { videoPlayerWindowService } from '../services/videoPlayerWindow';
 import { configureDisplayForHDR } from '../services/hdrSupport';
+import { LocalMediaService } from '../services/localMedia';
 
 type PlayerScreenRouteProp = RouteProp<RootStackParamList, 'Player'>;
 
@@ -38,8 +39,10 @@ export function PlayerScreen() {
   const route = useRoute<PlayerScreenRouteProp>();
   const navigation = useNavigation();
   const { jellyfin } = useServices();
-  const { itemId } = route.params;
+  const { itemId, localPath, title: routeTitle } = route.params;
   const insets = useSafeAreaInsets();
+
+  const isLocalFile = !!localPath;
 
   const [playbackInfo, setPlaybackInfo] = useState<JellyfinPlaybackInfo | null>(null);
   const [item, setItem] = useState<JellyfinItem | null>(null);
@@ -145,6 +148,19 @@ export function PlayerScreen() {
   }, [navigation]);
 
   const loadPlaybackInfo = useCallback(async () => {
+    // Local file playback - no need for Jellyfin playback info
+    if (isLocalFile && localPath) {
+      console.log('[PlayerScreen] Playing local file:', localPath);
+      setItem({
+        Id: itemId,
+        Name: routeTitle || 'Local Video',
+        Type: 'Movie',
+        ServerId: 'local',
+      });
+      setIsLoading(false);
+      return;
+    }
+
     if (!jellyfin) return;
 
     try {
@@ -331,6 +347,11 @@ export function PlayerScreen() {
 
   // Generate stream URL
   const videoUrl = useMemo(() => {
+    if (isLocalFile && localPath) {
+      const fileUrl = LocalMediaService.getFileUrl(localPath);
+      console.log('[PlayerScreen] Local file URL:', fileUrl);
+      return fileUrl;
+    }
     if (!playbackInfo?.MediaSources[0] || !jellyfin) return '';
 
     const mediaSourceId = playbackInfo.MediaSources[0].Id;
@@ -396,7 +417,7 @@ export function PlayerScreen() {
     );
   }
 
-  if (!jellyfin || !playbackInfo?.MediaSources[0] || !videoUrl) {
+  if (!videoUrl) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>No playable media found</Text>

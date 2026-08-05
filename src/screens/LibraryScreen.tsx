@@ -16,7 +16,7 @@ import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
 import { useResponsiveColumns } from '../hooks';
 import { useDeviceType } from '../hooks/useResponsive';
-import { JellyfinLibrary, JellyfinItem, SonarrSeries, RadarrMovie, TMDBTVShow } from '../types';
+import { JellyfinLibrary, JellyfinItem, SonarrSeries, RadarrMovie, TMDBTVShow, LocalMediaItem } from '../types';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 
@@ -24,17 +24,18 @@ interface LibraryScreenProps {
   filterType?: 'movies' | 'tvshows';
 }
 
-// Combined item type that can be either Jellyfin or Sonarr/Radarr
+// Combined item type that can be either Jellyfin or Sonarr/Radarr or local
 interface CombinedLibraryItem {
   id: string;
   title: string;
   imageUrl: string | null;
   year?: string;
   overview?: string;
-  source: 'jellyfin' | 'sonarr' | 'radarr';
-  originalItem: JellyfinItem | SonarrSeries | RadarrMovie;
+  source: 'jellyfin' | 'sonarr' | 'radarr' | 'local';
+  originalItem: JellyfinItem | SonarrSeries | RadarrMovie | LocalMediaItem;
   downloadProgress?: number; // 0-1 for download progress
   isDownloading?: boolean;
+  localPath?: string; // For local file playback
 }
 
 interface SeriesDownloadProgress {
@@ -52,7 +53,7 @@ type FilterOption = 'all' | 'watched' | 'unwatched' | 'favorites';
 
 export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const navigation = useNavigation();
-  const { jellyfin, sonarr, radarr, tmdb, isJellyfinConnected, isSonarrConnected, isRadarrConnected } = useServices();
+  const { jellyfin, sonarr, radarr, tmdb, localMedia, isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled } = useServices();
   const [_libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
   const [selectedLibrary, setSelectedLibrary] = useState<JellyfinLibrary | null>(null);
   const [items, setItems] = useState<CombinedLibraryItem[]>([]);
@@ -199,6 +200,27 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
         }
       }
 
+      // Load local media files if enabled
+      if (localMedia && isLocalFilesEnabled) {
+        try {
+          const localItems = await localMedia.scanAllDirectories();
+
+          const localMediaItems: CombinedLibraryItem[] = localItems.map(item => ({
+            id: item.id,
+            title: item.name,
+            imageUrl: null,
+            source: 'local' as const,
+            originalItem: item,
+            localPath: item.path,
+          }));
+
+          combinedItems.push(...localMediaItems);
+          console.log(`[LibraryScreen] Loaded ${localMediaItems.length} local media items`);
+        } catch (error) {
+          console.error('[LibraryScreen] Failed to load local media:', error);
+        }
+      }
+
       // Remove duplicates (prefer Jellyfin items)
       const uniqueItems = Array.from(
         combinedItems.reduce((map, item) => {
@@ -223,7 +245,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     } finally {
       setIsLoadingItems(false);
     }
-  }, [jellyfin, sonarr, radarr, isJellyfinConnected, isSonarrConnected, isRadarrConnected, selectedLibrary, filterType]);
+  }, [jellyfin, sonarr, radarr, localMedia, isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled, selectedLibrary, filterType]);
 
   // Apply download progress to items without causing re-fetches
   const itemsWithProgress = useMemo(() => {
@@ -353,19 +375,19 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   }, [itemsWithProgress, sortBy, sortOrder, filterBy]);
 
   useEffect(() => {
-    if (isJellyfinConnected || isSonarrConnected || isRadarrConnected) {
+    if (isJellyfinConnected || isSonarrConnected || isRadarrConnected || isLocalFilesEnabled) {
       loadLibraries();
       loadLibraryItemsBase();
     } else {
       setIsLoadingLibraries(false);
     }
-  }, [isJellyfinConnected, isSonarrConnected, isRadarrConnected, loadLibraries, loadLibraryItemsBase]);
+  }, [isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled, loadLibraries, loadLibraryItemsBase]);
 
   useEffect(() => {
-    if (selectedLibrary || isSonarrConnected || isRadarrConnected) {
+    if (selectedLibrary || isSonarrConnected || isRadarrConnected || isLocalFilesEnabled) {
       loadLibraryItemsBase();
     }
-  }, [selectedLibrary, isSonarrConnected, isRadarrConnected, loadLibraryItemsBase]);
+  }, [selectedLibrary, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled, loadLibraryItemsBase]);
 
   // Load and refresh download progress for Sonarr
   useEffect(() => {
@@ -385,6 +407,14 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     if (item.source === 'jellyfin') {
       // @ts-ignore - navigation typing
       navigation.navigate('ItemDetails', { item: item.originalItem });
+    } else if (item.source === 'local') {
+      const localItem = item.originalItem as LocalMediaItem;
+      // @ts-ignore - navigation typing
+      navigation.navigate('Player', {
+        itemId: localItem.id,
+        localPath: localItem.path,
+        title: localItem.name,
+      });
     } else if (item.source === 'sonarr') {
       // Try to find the series in Jellyfin by TVDB ID
       const sonarrSeries = item.originalItem as SonarrSeries;
@@ -538,13 +568,13 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     checkmarkSize: isMobile ? 16 : scaleSize(20),
   };
 
-  if (!isJellyfinConnected && !isSonarrConnected && !isRadarrConnected) {
+  if (!isJellyfinConnected && !isSonarrConnected && !isRadarrConnected && !isLocalFilesEnabled) {
     const title = filterType === 'movies' ? 'Movies' : filterType === 'tvshows' ? 'TV Shows' : 'Library';
     return (
       <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
         <Text style={[styles.emptyTitle, dynamicStyles.emptyTitle]}>{title}</Text>
         <Text style={[styles.emptyText, dynamicStyles.emptyText]}>
-          Connect to Jellyfin, Sonarr, or Radarr in Settings to browse your library
+          Connect to Jellyfin, Sonarr, Radarr, or add local files in Settings to browse your library
         </Text>
       </View>
     );
@@ -699,7 +729,7 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
             <MediaCard
               title={item.title}
               imageUrl={item.imageUrl}
-              subtitle={item.year}
+              subtitle={item.source === 'local' ? 'Local File' : item.year}
               onPress={() => handleItemPress(item)}
               onToggleFavorite={item.source === 'jellyfin' ? (isFavorite) => handleToggleFavorite(item, isFavorite) : undefined}
               item={item.source === 'jellyfin' ? item.originalItem as JellyfinItem : undefined}

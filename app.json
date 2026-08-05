@@ -1,4 +1,9 @@
 {
   "name": "mediora",
-  "displayName": "Mediora"
+  "displayName": "Mediora",
+  "extra": {
+    "eas": {
+      "projectId": "26c4a88e-1078-4efe-85ec-08701006d2a8"
+    }
+  }
 }

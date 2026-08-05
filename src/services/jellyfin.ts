@@ -73,11 +73,14 @@ export class JellyfinService {
   // Cached after buildDeviceProfile(); true when the display is in HDR/EDR output mode
   private _isHDRActive: boolean = false;
 
-  constructor(serverUrl: string, accessToken?: string, userId?: string) {
+  constructor(serverUrl: string, accessToken?: string, userId?: string, deviceId?: string) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
     this.accessToken = accessToken;
     this.userId = userId;
-    this.deviceId = generateDeviceId();
+    // Use the persisted deviceId so Jellyfin recognises the same device across
+    // restarts. Generating a new one each launch creates a new server session
+    // every time and can cause auth/session conflicts.
+    this.deviceId = deviceId || generateDeviceId();
     this.playSessionId = this.generatePlaySessionId();
   }
 

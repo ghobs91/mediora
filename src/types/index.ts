@@ -488,6 +488,17 @@ export interface RadarrQueueItem {
   movie: RadarrMovie;
 }
 
+// Local Media Types
+export interface LocalMediaItem {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  mimeType?: string;
+  type: 'movie' | 'episode' | 'unknown';
+  duration?: number; // in seconds, if detectable
+}
+
 // App Settings Types
 export interface AppSettings {
   jellyfin: {
@@ -515,6 +526,9 @@ export interface AppSettings {
   iptv: {
     selectedCountries: string[]; // Array of country codes
   } | null;
+  localFiles: {
+    directories: string[];
+  } | null;
 }
 
 // Navigation Types
@@ -526,7 +540,7 @@ export type RootStackParamList = {
   LiveTV: undefined;
   Search: undefined;
   Settings: undefined;
-  Player: { itemId: string };
+  Player: { itemId: string; localPath?: string; title?: string };
   LivePlayer: { channelId: string; channelName: string; streamUrl: string; logo?: string };
   ItemDetails: { item: JellyfinItem };
   TMDBDetails: { item: TMDBMovie | TMDBTVShow; mediaType: 'movie' | 'tv' };

@@ -25,7 +25,8 @@ export interface RadarrSettings {
 }
 
 class ICloudService {
-  private isAvailable(): boolean {
+  /** Check whether the iCloud native module is present on this platform. */
+  isAvailable(): boolean {
     // iCloud is only available on iOS, macOS, and tvOS
     const hasNative = ICloudSyncModule != null;
     const isApplePlatform = Platform.OS === 'ios' || Platform.OS === 'macos' || Platform.OS === 'tvos' || Platform.isTV;

@@ -14,10 +14,10 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
-import { JellyfinService, SonarrService, RadarrService, IPTV_REGIONS, IPTVCountry } from '../services';
+import { JellyfinService, SonarrService, RadarrService, LocalMediaService, IPTV_REGIONS, IPTVCountry } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
 
-type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv';
+type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv' | 'localfiles';
 
 export function SettingsScreen() {
   const {
@@ -26,9 +26,10 @@ export function SettingsScreen() {
     updateSonarrSettings,
     updateRadarrSettings,
     updateIPTVSettings,
+    updateLocalFilesSettings,
     clearJellyfinSettings,
   } = useSettings();
-  const { isJellyfinConnected, isSonarrConnected, isRadarrConnected } =
+  const { isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled } =
     useServices();
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
@@ -104,6 +105,13 @@ export function SettingsScreen() {
             onPress={() => setActiveSection('livetv')}
             isMobile={isMobile}
           />
+          <SettingsTab
+            title="Local Files"
+            isSelected={activeSection === 'localfiles'}
+            isConnected={isLocalFilesEnabled}
+            onPress={() => setActiveSection('localfiles')}
+            isMobile={isMobile}
+          />
         </View>
 
         {/* Section Content */}
@@ -131,6 +139,12 @@ export function SettingsScreen() {
             <LiveTVSettings
               settings={settings.iptv}
               onUpdate={updateIPTVSettings}
+            />
+          )}
+          {activeSection === 'localfiles' && (
+            <LocalFilesSettings
+              settings={settings.localFiles}
+              onUpdate={updateLocalFilesSettings}
             />
           )}
         </View>
@@ -1314,6 +1328,321 @@ function LiveTVSettings({ settings, onUpdate }: LiveTVSettingsProps) {
   );
 }
 
+// Local Files Settings Section
+interface LocalFilesSettingsProps {
+  settings: {
+    directories: string[];
+  } | null;
+  onUpdate: (settings: { directories: string[] } | null) => Promise<void>;
+}
+
+function LocalFilesSettings({ settings, onUpdate }: LocalFilesSettingsProps) {
+  const [directories, setDirectories] = useState<string[]>(settings?.directories || []);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isPicking, setIsPicking] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scannedCount, setScannedCount] = useState<number | null>(null);
+
+  const isSupported = LocalMediaService.isPlatformSupported();
+
+  const handleAddDocumentsDir = () => {
+    const docsDir = LocalMediaService.getDocumentsDirectory();
+    if (!directories.includes(docsDir)) {
+      const updated = [...directories, docsDir];
+      setDirectories(updated);
+      autoSave({ directories: updated });
+    }
+  };
+
+  const handlePickDirectory = async () => {
+    if (isPicking) return;
+    setIsPicking(true);
+
+    try {
+      const dirUri = await LocalMediaService.pickDirectory();
+      if (dirUri && !directories.includes(dirUri)) {
+        const updated = [...directories, dirUri];
+        setDirectories(updated);
+        autoSave({ directories: updated });
+      }
+    } catch (err) {
+      console.error('[LocalFiles] Error picking directory:', err);
+      Alert.alert('Error', 'Failed to pick directory. Please try again.');
+    } finally {
+      setIsPicking(false);
+    }
+  };
+
+  const handleRemoveDirectory = (index: number) => {
+    const dir = directories[index];
+    Alert.alert(
+      'Remove Directory',
+      `Remove "${dir}" from local files?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            const updated = directories.filter((_, i) => i !== index);
+            setDirectories(updated);
+            autoSave(updated.length > 0 ? { directories: updated } : null);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleScan = async () => {
+    if (directories.length === 0) return;
+    setIsScanning(true);
+    setScanResult(null);
+    setScannedCount(null);
+
+    try {
+      const service = new LocalMediaService(directories);
+      const items = await service.scanAllDirectories();
+      setScannedCount(items.length);
+      if (items.length > 0) {
+        setScanResult(`Found ${items.length} video file${items.length === 1 ? '' : 's'}`);
+        // Log a sample of found files
+        console.log(`[LocalFiles] Scan found ${items.length} videos:`);
+        items.slice(0, 10).forEach(item => {
+          console.log(`  - ${item.name} (${item.path})`);
+        });
+      } else {
+        setScanResult('No video files found in selected directories');
+      }
+    } catch (err) {
+      console.error('[LocalFiles] Scan error:', err);
+      setScanResult('Scan failed. Check directory permissions.');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const autoSave = async (dirSettings: { directories: string[] } | null) => {
+    try {
+      await onUpdate(dirSettings);
+    } catch (err) {
+      console.error('[LocalFiles] Failed to save settings:', err);
+    }
+  };
+
+  if (!isSupported) {
+    return (
+      <View style={styles.sectionForm}>
+        <View style={styles.sectionHeader}>
+          <Icon name="folder-open-outline" size={24} color="rgba(10, 132, 255, 0.95)" />
+          <Text style={styles.sectionTitle}>Local Files</Text>
+        </View>
+        <Text style={styles.sectionDescription}>
+          Local file browsing is only supported on iOS and iPadOS.
+          On tvOS, media must be streamed from a Jellyfin server.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.sectionForm}>
+      <View style={styles.sectionHeader}>
+        <Icon name="folder-open-outline" size={24} color="rgba(10, 132, 255, 0.95)" />
+        <Text style={styles.sectionTitle}>Local Files</Text>
+      </View>
+      <Text style={styles.sectionDescription}>
+        Browse and play video files stored locally on your device.
+        Add directories to scan for media files.
+      </Text>
+
+      {/* Add Directory Buttons */}
+      <View style={localStyles.buttonRow}>
+        <FocusableButton
+          title="Add Documents Folder"
+          onPress={handleAddDocumentsDir}
+          disabled={directories.includes(LocalMediaService.getDocumentsDirectory())}
+          variant="secondary"
+          size="medium"
+          icon="document-outline"
+        />
+        <FocusableButton
+          title="Pick Folder"
+          onPress={handlePickDirectory}
+          loading={isPicking}
+          disabled={isPicking}
+          variant="secondary"
+          size="medium"
+          icon="folder-outline"
+        />
+      </View>
+
+      {/* Directory List */}
+      {directories.length > 0 && (
+        <View style={localStyles.directoriesContainer}>
+          <Text style={localStyles.directoriesTitle}>
+            {directories.length} {directories.length === 1 ? 'Directory' : 'Directories'}
+          </Text>
+          {directories.map((dir, index) => (
+            <View key={index} style={localStyles.directoryItem}>
+              <View style={localStyles.directoryInfo}>
+                <Icon name="folder" size={20} color="rgba(10, 132, 255, 0.8)" />
+                <Text style={localStyles.directoryPath} numberOfLines={2}>
+                  {dir}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => handleRemoveDirectory(index)}
+                style={localStyles.removeButton}>
+                <Icon name="close-circle" size={22} color="rgba(255, 69, 58, 0.8)" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Scan Button */}
+      {directories.length > 0 && (
+        <View style={localStyles.scanSection}>
+          <FocusableButton
+            title={isScanning ? 'Scanning...' : 'Scan for Videos'}
+            onPress={handleScan}
+            loading={isScanning}
+            disabled={isScanning}
+            variant="primary"
+            size="large"
+            icon="search"
+          />
+        </View>
+      )}
+
+      {/* Scan Results */}
+      {scanResult && (
+        <View style={[
+          localStyles.scanResultContainer,
+          scannedCount && scannedCount > 0 ? localStyles.scanResultSuccess : localStyles.scanResultWarning,
+        ]}>
+          <Icon
+            name={scannedCount && scannedCount > 0 ? 'checkmark-circle' : 'information-circle'}
+            size={20}
+            color={scannedCount && scannedCount > 0 ? '#30d158' : '#ff9500'}
+          />
+          <Text style={[
+            localStyles.scanResultText,
+            scannedCount && scannedCount > 0 ? localStyles.scanResultTextSuccess : null,
+          ]}>
+            {scanResult}
+          </Text>
+        </View>
+      )}
+
+      {/* Empty state */}
+      {directories.length === 0 && (
+        <View style={localStyles.emptyState}>
+          <Icon name="folder-open-outline" size={48} color="rgba(255, 255, 255, 0.2)" />
+          <Text style={localStyles.emptyStateText}>
+            Add directories to start browsing local video files
+          </Text>
+          <Text style={localStyles.emptyStateHint}>
+            Tip: Use the Files app to copy videos to the Mediora Documents folder,
+            then add it above.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const localStyles = StyleSheet.create({
+  buttonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  directoriesContainer: {
+    marginBottom: 20,
+  },
+  directoriesTitle: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  directoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  directoryInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginRight: 10,
+  },
+  directoryPath: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+  },
+  removeButton: {
+    padding: 4,
+  },
+  scanSection: {
+    marginBottom: 16,
+  },
+  scanResultContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 10,
+    gap: 10,
+  },
+  scanResultSuccess: {
+    backgroundColor: 'rgba(48, 209, 88, 0.1)',
+  },
+  scanResultWarning: {
+    backgroundColor: 'rgba(255, 149, 0, 0.1)',
+  },
+  scanResultText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  scanResultTextSuccess: {
+    color: '#30d158',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyStateText: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
+  },
+  emptyStateHint: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+});
+
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
@@ -1345,9 +1674,6 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 10,
     backgroundColor: 'transparent',
-  },
-  contentContainer: {
-    paddingTop: 48,
   },
   discoveryContainer: {
     marginBottom: 24,

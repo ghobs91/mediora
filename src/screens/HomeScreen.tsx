@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
+  FlatList,
   StyleSheet,
   Text,
   RefreshControl,
@@ -11,21 +12,22 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
-import { MediaRow, LoadingScreen } from '../components';
-import { JellyfinItem } from '../types';
+import { MediaRow, MediaCard, LoadingScreen } from '../components';
+import { JellyfinItem, LocalMediaItem } from '../types';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
 import { TMDBService } from '../services';
 
 export function HomeScreen() {
   const navigation = useNavigation();
-  const { jellyfin, isJellyfinConnected } = useServices();
+  const { jellyfin, localMedia, isJellyfinConnected, isLocalFilesEnabled } = useServices();
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
   const [resumeItems, setResumeItems] = useState<JellyfinItem[]>([]);
   const [nextUpItems, setNextUpItems] = useState<JellyfinItem[]>([]);
   const [latestMovies, setLatestMovies] = useState<JellyfinItem[]>([]);
   const [latestShows, setLatestShows] = useState<JellyfinItem[]>([]);
+  const [localItems, setLocalItems] = useState<LocalMediaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,17 @@ export function HomeScreen() {
       padding: isMobile ? 24 : scaleSize(52),
     },
   };
+
+  const loadLocalMedia = useCallback(async () => {
+    if (!localMedia) return;
+    try {
+      const items = await localMedia.scanAllDirectories();
+      setLocalItems(items);
+      console.log(`[HomeScreen] Loaded ${items.length} local media items`);
+    } catch (err) {
+      console.error('[HomeScreen] Failed to load local media:', err);
+    }
+  }, [localMedia]);
 
   const loadData = useCallback(async () => {
     if (!jellyfin) return;
@@ -158,24 +171,48 @@ export function HomeScreen() {
   useEffect(() => {
     if (isJellyfinConnected) {
       loadData();
+    } else if (isLocalFilesEnabled) {
+      // No Jellyfin but local files available - load local media
+      setIsLoading(true);
+      loadLocalMedia().finally(() => setIsLoading(false));
     } else {
       setIsLoading(false);
     }
-  }, [isJellyfinConnected, loadData]);
+  }, [isJellyfinConnected, isLocalFilesEnabled, loadData, loadLocalMedia]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    loadData();
+    if (isJellyfinConnected) {
+      loadData();
+    } else if (isLocalFilesEnabled) {
+      loadLocalMedia().finally(() => setIsRefreshing(false));
+    }
   };
 
-  const handleItemPress = (item: JellyfinItem) => {
-    // @ts-ignore - navigation typing
-    navigation.navigate('ItemDetails', { item });
+  const handleItemPress = (item: JellyfinItem | LocalMediaItem) => {
+    if ('ServerId' in item) {
+      // JellyfinItem - navigate to details
+      // @ts-ignore - navigation typing
+      navigation.navigate('ItemDetails', { item });
+    } else {
+      // LocalMediaItem - navigate to player directly with local path
+      // @ts-ignore - navigation typing
+      navigation.navigate('Player', {
+        itemId: item.id,
+        localPath: item.path,
+        title: item.name,
+      });
+    }
   };
 
-  const getImageUrl = (item: JellyfinItem): string | null => {
-    if (!jellyfin) return null;
-    return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+  const getImageUrl = (item: JellyfinItem | LocalMediaItem): string | null => {
+    if ('ServerId' in item) {
+      // JellyfinItem
+      if (!jellyfin) return null;
+      return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
+    }
+    // LocalMediaItem - no image available
+    return null;
   };
 
   const getImageUrlWithBackdrop = (item: JellyfinItem): string | null => {
@@ -356,7 +393,7 @@ export function HomeScreen() {
   };
 
 
-  if (!isJellyfinConnected) {
+  if (!isJellyfinConnected && !isLocalFilesEnabled) {
     return (
       <View style={[styles.emptyContainer, dynamicStyles.emptyContainer]}>
         <Text style={[styles.emptyTitle, isMobile && styles.emptyTitleMobile]}>Welcome to Mediora</Text>
@@ -385,7 +422,8 @@ export function HomeScreen() {
     resumeItems.length > 0 ||
     nextUpItems.length > 0 ||
     latestMovies.length > 0 ||
-    latestShows.length > 0;
+    latestShows.length > 0 ||
+    localItems.length > 0;
 
 
   return (
@@ -421,41 +459,78 @@ export function HomeScreen() {
       {!hasContent && (
         <View style={styles.emptyContentContainer}>
           <Text style={[styles.emptyText, isMobile && styles.emptyTextMobile]}>
-            No media found. Add some content to your Jellyfin server.
+            {isJellyfinConnected
+              ? 'No media found. Add some content to your Jellyfin server.'
+              : 'No media found. Add video files to your device or connect a Jellyfin server.'}
           </Text>
         </View>
       )}
 
-      <MediaRow
-        title="Continue Watching"
-        items={resumeItems}
-        onItemPress={handleItemPress}
-        onItemRemove={handleRemoveFromContinueWatching}
-        onItemMarkWatched={handleMarkAsWatched}
-        onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrlWithBackdrop}
-        landscape={true}
-        useSeriesThumbnail={true}
-      />
+      {isJellyfinConnected && (
+        <>
+          <MediaRow
+            title="Continue Watching"
+            items={resumeItems}
+            onItemPress={handleItemPress}
+            onItemRemove={handleRemoveFromContinueWatching}
+            onItemMarkWatched={handleMarkAsWatched}
+            onItemToggleFavorite={handleToggleFavorite}
+            getImageUrl={getImageUrlWithBackdrop}
+            landscape={true}
+            useSeriesThumbnail={true}
+          />
 
-      <MediaRow
-        title="New Episodes"
-        items={latestShows}
-        onItemPress={handleItemPress}
-        onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrlWithBackdrop}
-        landscape={true}
-        useSeriesThumbnail={true}
-      />
+          <MediaRow
+            title="New Episodes"
+            items={latestShows}
+            onItemPress={handleItemPress}
+            onItemToggleFavorite={handleToggleFavorite}
+            getImageUrl={getImageUrlWithBackdrop}
+            landscape={true}
+            useSeriesThumbnail={true}
+          />
 
-      <MediaRow
-        title="New Movies"
-        items={latestMovies}
-        onItemPress={handleItemPress}
-        onItemToggleFavorite={handleToggleFavorite}
-        getImageUrl={getImageUrlWithBackdrop}
-        landscape={true}
-      />
+          <MediaRow
+            title="New Movies"
+            items={latestMovies}
+            onItemPress={handleItemPress}
+            onItemToggleFavorite={handleToggleFavorite}
+            getImageUrl={getImageUrlWithBackdrop}
+            landscape={true}
+          />
+        </>
+      )}
+
+      {isLocalFilesEnabled && localItems.length > 0 && (
+        <View style={[localMediaStyles.container, isMobile && localMediaStyles.containerMobile]}>
+          <View style={[localMediaStyles.titleContainer, isMobile && localMediaStyles.titleContainerMobile]}>
+            <Text style={[localMediaStyles.title, isMobile && localMediaStyles.titleMobile]}>
+              Local Files ({localItems.length})
+            </Text>
+          </View>
+          <FlatList
+            horizontal
+            data={localItems.slice(0, 50)}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <MediaCard
+                title={item.name}
+                imageUrl={null}
+                subtitle={item.type === 'episode' ? 'TV Episode' : item.type === 'movie' ? 'Movie' : 'Video'}
+                onPress={() => handleItemPress(item)}
+                landscape={false}
+              />
+            )}
+            showsHorizontalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={{ width: isMobile ? 12 : scaleSize(16) }} />}
+            contentContainerStyle={[
+              localMediaStyles.listContent,
+              isMobile && localMediaStyles.listContentMobile,
+            ]}
+            removeClippedSubviews={true}
+          />
+        </View>
+      )}
       </ScrollView>
     </View>
   );
@@ -524,5 +599,41 @@ const styles = StyleSheet.create({
   emptyTextMobile: {
     fontSize: 16,
     lineHeight: 24,
+  },
+});
+
+const localMediaStyles = StyleSheet.create({
+  container: {
+    marginBottom: scaleSize(36),
+    marginTop: scaleSize(10),
+  },
+  containerMobile: {
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  titleContainer: {
+    marginLeft: scaleSize(52),
+    marginBottom: scaleSize(24),
+  },
+  titleContainerMobile: {
+    marginLeft: 16,
+    marginBottom: 16,
+  },
+  title: {
+    color: '#ffffff',
+    fontSize: scaleFontSize(28),
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  titleMobile: {
+    fontSize: 20,
+  },
+  listContent: {
+    paddingLeft: scaleSize(52),
+    paddingRight: scaleSize(52),
+  },
+  listContentMobile: {
+    paddingLeft: 16,
+    paddingRight: 16,
   },
 });

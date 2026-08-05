@@ -13,6 +13,7 @@ import {
   TMDBService,
   SonarrService,
   RadarrService,
+  LocalMediaService,
 } from '../services';
 import { DEV_CONFIG } from '../config/dev';
 
@@ -21,10 +22,12 @@ interface ServicesContextType {
   tmdb: TMDBService | null;
   sonarr: SonarrService | null;
   radarr: RadarrService | null;
+  localMedia: LocalMediaService | null;
   isJellyfinConnected: boolean;
   isTMDBConnected: boolean;
   isSonarrConnected: boolean;
   isRadarrConnected: boolean;
+  isLocalFilesEnabled: boolean;
 }
 
 const ServicesContext = createContext<ServicesContextType | undefined>(
@@ -40,6 +43,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       settings.jellyfin.serverUrl,
       settings.jellyfin.accessToken,
       settings.jellyfin.userId,
+      settings.jellyfin.deviceId,
     );
     return service;
   }, [settings.jellyfin]);
@@ -81,6 +85,14 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     );
   }, [settings.radarr]);
 
+  const localMedia = useMemo(() => {
+    if (!settings.localFiles?.directories || settings.localFiles.directories.length === 0) {
+      return null;
+    }
+    console.log('[ServicesContext] Creating LocalMediaService with', settings.localFiles.directories.length, 'directories');
+    return new LocalMediaService(settings.localFiles.directories);
+  }, [settings.localFiles?.directories]);
+
   return (
     <ServicesContext.Provider
       value={{
@@ -88,10 +100,12 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
         tmdb,
         sonarr,
         radarr,
+        localMedia,
         isJellyfinConnected: !!jellyfin,
         isTMDBConnected: !!tmdb,
         isSonarrConnected: !!sonarr,
         isRadarrConnected: !!radarr,
+        isLocalFilesEnabled: !!localMedia,
       }}>
       {children}
     </ServicesContext.Provider>
