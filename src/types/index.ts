@@ -29,9 +29,9 @@ export interface JellyfinAuthResponse {
 }
 
 export interface JellyfinUserPolicy {
-  IsAdministrator: boolean;
-  IsDisabled: boolean;
-  EnableAllFolders: boolean;
+  IsAdministrator?: boolean;
+  IsDisabled?: boolean;
+  EnableAllFolders?: boolean;
   EnabledFolders?: string[];
   [key: string]: unknown;
 }
