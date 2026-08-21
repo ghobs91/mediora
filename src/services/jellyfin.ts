@@ -5,6 +5,8 @@ import {
   JellyfinLibrary,
   JellyfinItem,
   JellyfinPlaybackInfo,
+  JellyfinUser,
+  JellyfinUserPolicy,
 } from '../types';
 import { getHDRCapabilities } from './hdrSupport';
 
@@ -252,6 +254,99 @@ export class JellyfinService {
       console.error('[Jellyfin] Authentication error:', error);
       throw error;
     }
+  }
+
+  // ── User management (requires an administrator account) ──────────────
+
+  /** Fetch the currently authenticated user (includes Policy). */
+  async getCurrentUser(): Promise<JellyfinUser> {
+    const response = await fetchWithTimeout(`${this.serverUrl}/Users/Me`, {
+      method: 'GET',
+      headers: getAuthHeader(this.accessToken, this.deviceId),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get current user: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /** Whether the currently authenticated account is a server administrator. */
+  async isCurrentUserAdmin(): Promise<boolean> {
+    try {
+      const user = await this.getCurrentUser();
+      return !!user.Policy?.IsAdministrator;
+    } catch (error) {
+      console.error('[Jellyfin] Failed to check admin status:', error);
+      return false;
+    }
+  }
+
+  /** Create a new Jellyfin user (admin-only endpoint). */
+  async createUser(name: string, password: string): Promise<JellyfinUser> {
+    const response = await fetchWithTimeout(`${this.serverUrl}/Users/New`, {
+      method: 'POST',
+      headers: getAuthHeader(this.accessToken, this.deviceId),
+      body: JSON.stringify({ Name: name, Password: password }),
+    });
+
+    if (!response.ok) {
+      let message = `Failed to create user (HTTP ${response.status})`;
+      try {
+        const errorText = await response.text();
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.Message) {
+          message = errorJson.Message;
+        }
+      } catch {
+        // Keep the default message if the body isn't JSON.
+      }
+      throw new Error(message);
+    }
+
+    return response.json();
+  }
+
+  /** Update a user's policy (admin-only endpoint). */
+  async updateUserPolicy(
+    userId: string,
+    policy: JellyfinUserPolicy,
+  ): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${this.serverUrl}/Users/${encodeURIComponent(userId)}/Policy`,
+      {
+        method: 'POST',
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+        body: JSON.stringify(policy),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to update user policy: ${response.status}`);
+    }
+  }
+
+  /** Grant a user access to all media libraries (EnableAllFolders). */
+  async grantUserAllLibraries(userId: string): Promise<void> {
+    const response = await fetchWithTimeout(
+      `${this.serverUrl}/Users/${encodeURIComponent(userId)}`,
+      {
+        method: 'GET',
+        headers: getAuthHeader(this.accessToken, this.deviceId),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user: ${response.status}`);
+    }
+
+    const user: JellyfinUser = await response.json();
+    const policy: JellyfinUserPolicy = {
+      ...(user.Policy || {}),
+      EnableAllFolders: true,
+    };
+    await this.updateUserPolicy(userId, policy);
   }
 
   // Library browsing

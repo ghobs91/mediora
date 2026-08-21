@@ -37,6 +37,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window?.windowScene?.titlebar?.titleVisibility = .hidden
     #endif
   }
+
+  // Forward deep links (mediora://invite?c=...) to React Native's Linking API.
+  // Used by the invite-code flow on iOS and macOS (Catalyst).
+  func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    return RCTLinkingManager.application(app, open: url, options: options)
+  }
 }
 
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { NavigationContainer, useNavigation, useNavigationState } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, StyleSheet, Platform, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Linking } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { LiquidGlassView } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
   HomeScreen,
@@ -19,11 +19,14 @@ import {
   TMDBDetailsScreen,
   LiveTVScreen,
   LivePlayerScreen,
+  InvitesScreen,
+  InviteRedeemScreen,
 } from '../screens';
-import { Sidebar, MobileHeader } from '../components';
+import { Sidebar } from '../components';
 import { RootStackParamList } from '../types';
 import { useDeviceType } from '../hooks/useResponsive';
 import { scaleSize } from '../utils/scaling';
+import { consumeInviteUrl } from '../utils/inviteCode';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -79,6 +82,8 @@ function DesktopStackNavigator() {
           animation: 'slide_from_right',
         }}
       />
+      <Stack.Screen name="Invites" component={InvitesScreen} />
+      <Stack.Screen name="InviteRedeem" component={InviteRedeemScreen} />
     </Stack.Navigator>
   );
 }
@@ -259,6 +264,8 @@ const tabBarStyles = StyleSheet.create({
   },
 });
 
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 export function AppNavigator() {
   const { isMobile, showSidebar } = useDeviceType();
   const [currentRoute, setCurrentRoute] = useState('Home');
@@ -273,9 +280,41 @@ export function AppNavigator() {
     }
   };
 
+  // Deep-link handling: when a mediora://invite URL is opened (iOS/macOS),
+  // navigate to the redeem screen with the code pre-filled. Onboarding
+  // handles deep links itself when no setup exists yet.
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      const code = consumeInviteUrl(url);
+      if (!code) return;
+      // Give the navigator a moment to be ready (cold start via link).
+      const navigate = () => {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('InviteRedeem', { code });
+        } else {
+          setTimeout(navigate, 150);
+        }
+      };
+      navigate();
+    };
+
+    Linking.getInitialURL()
+      .then(handleUrl)
+      .catch(err => console.error('[Nav] Failed to read initial URL:', err));
+
+    const subscription = Linking.addEventListener('url', event =>
+      handleUrl(event.url),
+    );
+
+    return () => subscription.remove();
+  }, []);
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer onStateChange={handleNavigationStateChange}>
+      <NavigationContainer
+        ref={navigationRef}
+        onStateChange={handleNavigationStateChange}>
         {isMobile ? (
           <Stack.Navigator
             initialRouteName="MainTabs"
@@ -317,6 +356,8 @@ export function AppNavigator() {
                 animation: 'slide_from_right',
               }}
             />
+            <Stack.Screen name="Invites" component={InvitesScreen} />
+            <Stack.Screen name="InviteRedeem" component={InviteRedeemScreen} />
           </Stack.Navigator>
         ) : (
           <View style={styles.container}>

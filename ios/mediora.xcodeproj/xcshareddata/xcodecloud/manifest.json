@@ -1,0 +1,9 @@
+{
+  "id" : "81cdb3e7-1a27-4a3b-a158-cb4add6963eb",
+  "targets" : [
+    {
+      "id" : "f85b0367-1564-4905-88ba-7577d700a9bd",
+      "name" : "mediora-mobile"
+    }
+  ]
+}

@@ -70,6 +70,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
     { name: 'Sonarr', route: 'SonarrSettings', icon: 'albums-outline', showInTabs: false },
     { name: 'Radarr', route: 'RadarrSettings', icon: 'film-outline', showInTabs: false },
     { name: 'Live TV Settings', route: 'LiveTVSettings', icon: 'settings-outline', showInTabs: false },
+    { name: 'Invites', route: 'Invites', icon: 'ticket-outline', showInTabs: false },
   ];
 
   const allNavItems = [...mainNavItems, ...libraryItems, ...settingsItems];

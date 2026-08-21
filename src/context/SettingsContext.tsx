@@ -34,6 +34,11 @@ interface SettingsContextType {
   updateRadarrSettings: (settings: AppSettings['radarr']) => Promise<void>;
   updateIPTVSettings: (settings: AppSettings['iptv']) => Promise<void>;
   updateLocalFilesSettings: (settings: AppSettings['localFiles']) => Promise<void>;
+  applyInviteSettings: (settings: {
+    jellyfin: NonNullable<AppSettings['jellyfin']>;
+    sonarr?: AppSettings['sonarr'];
+    radarr?: AppSettings['radarr'];
+  }) => Promise<void>;
   clearAllSettings: () => Promise<void>;
   clearJellyfinSettings: () => Promise<void>;
 }
@@ -246,6 +251,38 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [saveSettings],
   );
 
+  // Apply a full invite in a single state update so onboarding doesn't
+  // unmount mid-redemption (three sequential updates would each trigger a
+  // re-render and the first one would swap onboarding out for the main app).
+  const applyInviteSettings = useCallback(
+    async (inviteSettings: {
+      jellyfin: NonNullable<AppSettings['jellyfin']>;
+      sonarr?: AppSettings['sonarr'];
+      radarr?: AppSettings['radarr'];
+    }) => {
+      const currentSettings = settingsRef.current;
+      const newSettings: AppSettings = {
+        ...currentSettings,
+        jellyfin: inviteSettings.jellyfin,
+        // Invites without arr settings leave any existing ones untouched.
+        sonarr: inviteSettings.sonarr ?? currentSettings.sonarr,
+        radarr: inviteSettings.radarr ?? currentSettings.radarr,
+      };
+      await saveSettings(newSettings);
+
+      // Sync to iCloud on all Apple platforms so tvOS can recover these
+      // credentials if AsyncStorage is purged.
+      await iCloudService.saveJellyfinSettings(inviteSettings.jellyfin);
+      if (inviteSettings.sonarr) {
+        await iCloudService.saveSonarrSettings(inviteSettings.sonarr);
+      }
+      if (inviteSettings.radarr) {
+        await iCloudService.saveRadarrSettings(inviteSettings.radarr);
+      }
+    },
+    [saveSettings],
+  );
+
   const clearAllSettings = useCallback(async () => {
     await saveSettings(DEFAULT_SETTINGS);
   }, [saveSettings]);
@@ -272,6 +309,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateRadarrSettings,
         updateIPTVSettings,
         updateLocalFilesSettings,
+        applyInviteSettings,
         clearAllSettings,
         clearJellyfinSettings,
       }}>

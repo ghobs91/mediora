@@ -16,8 +16,9 @@ import { useSettings, useServices } from '../context';
 import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService, LocalMediaService, IPTV_REGIONS, IPTVCountry } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
+import { InvitesSection } from './InvitesScreen';
 
-type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv' | 'localfiles';
+type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv' | 'localfiles' | 'invites';
 
 export function SettingsScreen() {
   const {
@@ -112,6 +113,15 @@ export function SettingsScreen() {
             onPress={() => setActiveSection('localfiles')}
             isMobile={isMobile}
           />
+          {isJellyfinConnected && (
+            <SettingsTab
+              title="Invites"
+              isSelected={activeSection === 'invites'}
+              isConnected={false}
+              onPress={() => setActiveSection('invites')}
+              isMobile={isMobile}
+            />
+          )}
         </View>
 
         {/* Section Content */}
@@ -147,6 +157,7 @@ export function SettingsScreen() {
               onUpdate={updateLocalFilesSettings}
             />
           )}
+          {activeSection === 'invites' && <InvitesSection />}
         </View>
       </ScrollView>
     </View>

@@ -28,6 +28,14 @@ export interface JellyfinAuthResponse {
   ServerId: string;
 }
 
+export interface JellyfinUserPolicy {
+  IsAdministrator: boolean;
+  IsDisabled: boolean;
+  EnableAllFolders: boolean;
+  EnabledFolders?: string[];
+  [key: string]: unknown;
+}
+
 export interface JellyfinUser {
   Id: string;
   Name: string;
@@ -35,6 +43,7 @@ export interface JellyfinUser {
   HasPassword: boolean;
   HasConfiguredPassword: boolean;
   EnableAutoLogin: boolean;
+  Policy?: JellyfinUserPolicy;
 }
 
 export interface JellyfinSession {
@@ -534,17 +543,70 @@ export interface AppSettings {
 // Navigation Types
 export type RootStackParamList = {
   MainMenu: undefined;
+  MainTabs: undefined;
   Home: undefined;
   TVShows: undefined;
   Movies: undefined;
   LiveTV: undefined;
   Search: undefined;
   Settings: undefined;
+  JellyfinSettings: undefined;
+  SonarrSettings: undefined;
+  RadarrSettings: undefined;
+  LiveTVSettings: undefined;
+  Invites: undefined;
+  InviteRedeem: { code?: string };
   Player: { itemId: string; localPath?: string; title?: string };
   LivePlayer: { channelId: string; channelName: string; streamUrl: string; logo?: string };
   ItemDetails: { item: JellyfinItem };
   TMDBDetails: { item: TMDBMovie | TMDBTVShow; mediaType: 'movie' | 'tv' };
 };
+
+// Invite Code Types
+/**
+ * Payload embedded in an invite code. Everything needed for a device to
+ * replicate the owner's setup. The code itself is gzip + base64url — it is
+ * obfuscated, not encrypted, so it must be treated as a secret.
+ */
+export interface InvitePayload {
+  v: 1;
+  name: string;
+  jellyfin: {
+    serverUrl: string;
+    username: string;
+    password: string;
+  };
+  sonarr: {
+    serverUrl: string;
+    apiKey: string;
+    rootFolderPath: string;
+    qualityProfileId: number;
+  } | null;
+  radarr: {
+    serverUrl: string;
+    apiKey: string;
+    rootFolderPath: string;
+    qualityProfileId: number;
+  } | null;
+}
+
+/**
+ * A generated invite, persisted on the admin's device so they can review
+ * credentials and re-share codes later. The passphrase is stored locally
+ * (like the username/password) so it can be re-shared; it is never included
+ * in the code/link itself.
+ */
+export interface GeneratedInvite {
+  id: string;
+  name: string;
+  username: string;
+  password: string;
+  passphrase: string;
+  serverUrl: string;
+  code: string;
+  inviteUrl: string;
+  createdAt: string;
+}
 
 // Live TV Types
 export interface LiveTVChannel {

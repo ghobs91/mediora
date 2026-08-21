@@ -7,3 +7,5 @@ export { CastList } from './CastList';
 export { Sidebar } from './Sidebar';
 export { MobileHeader } from './MobileHeader';
 export { QualityProfileSelector } from './QualityProfileSelector';
+export { QRCode } from './QRCode';
+export { InviteRedeemForm } from './InviteRedeemForm';
