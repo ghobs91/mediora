@@ -32,16 +32,23 @@ fi
 NODE_BIN="$(command -v node)"
 echo "Node: $($NODE_BIN --version) at $NODE_BIN"
 
-# Xcode build phases run with a minimal PATH. Symlink node into
-# /usr/local/bin so the "Bundle React Native code and images" phase and
-# ios/.xcode.env's `command -v node` resolve it during the build.
+# Xcode build phases run with a minimal PATH and may not see the Homebrew
+# node. Write the resolved binary into the local Xcode environment file
+# (which is gitignored) so React Native's "Bundle React Native code and
+# images" phase uses it directly.
+XCODE_ENV_LOCAL="${CI_PRIMARY_REPOSITORY_PATH:-.}/ios/.xcode.env.local"
+echo "export NODE_BINARY=\"$NODE_BIN\"" > "$XCODE_ENV_LOCAL"
+echo "Wrote NODE_BINARY=$NODE_BIN to $XCODE_ENV_LOCAL"
+
+# Also try to make node available globally; this is best-effort because
+# /usr/local/bin may not be writable on Xcode Cloud runners.
 if [ ! -e "/usr/local/bin/node" ]; then
-  echo "Symlinking node into /usr/local/bin..."
-  mkdir -p /usr/local/bin
-  ln -s "$NODE_BIN" /usr/local/bin/node
+  echo "Symlinking node into /usr/local/bin (best-effort)..."
+  mkdir -p /usr/local/bin 2>/dev/null || true
+  ln -s "$NODE_BIN" /usr/local/bin/node 2>/dev/null || true
 fi
 if [ ! -e "/usr/local/bin/npm" ] && command -v npm >/dev/null 2>&1; then
-  ln -s "$(command -v npm)" /usr/local/bin/npm
+  ln -s "$(command -v npm)" /usr/local/bin/npm 2>/dev/null || true
 fi
 export NODE_BINARY="$NODE_BIN"
 
