@@ -22,14 +22,21 @@ error: Unable to open base configuration reference file
 
 ## What the repo provides
 
-- `ci_scripts/ci_post_clone.sh` — runs after every checkout: installs Node 20,
-  runs `npm ci` (applies patch-package patches), installs CocoaPods, and runs
-  `pod install`. Symlinks node into `/usr/local/bin` so the "Bundle React
-  Native code and images" build phase can find it.
+- `ios/ci_scripts/ci_post_clone.sh` — runs after every checkout: installs
+  Node 20, runs `npm ci` (applies patch-package patches), installs CocoaPods,
+  and runs `pod install`. Symlinks node into `/usr/local/bin` so the "Bundle
+  React Native code and images" build phase can find it.
+- `ci_scripts/ci_post_clone.sh` — a thin wrapper around the script above.
+
+  **Why two copies:** the Xcode project/workspace lives in the `ios/`
+  subfolder, and Xcode Cloud looks for `ci_scripts` in the folder containing
+  the workspace — i.e. `ios/ci_scripts/`. The repo-root copy covers products
+  configured with the default repo-root location. Keep them in sync
+  (the root one is a wrapper, so there is nothing to sync).
 - `.npmrc` — `legacy-peer-deps=true`, required for `npm ci` to succeed with
   the react-native-tvos dependency tree.
 
-Both files exist on `main` and on `copilot/use-avplayer-tone-mapping`.
+All files exist on `main` and on `copilot/use-avplayer-tone-mapping`.
 
 ## Workflow checklist (App Store Connect)
 
@@ -41,11 +48,11 @@ For **each** Xcode Cloud workflow (one per app/target):
      invite feature and recent fixes. Only use it if you know you need it.
 2. **Build Action**: confirm it builds the correct scheme for that app
    (`mediora` for tvOS, `mediora-mobile` for iOS/Catalyst).
-3. **Custom build scripts**: the default `ci_scripts` location is what the
-   script expects. If the log says
-   `Post-Clone script not found at ci_scripts/ci_post_clone.sh`, the build
-   checked out a branch/commit that predates the script — check the build's
-   **Source** field, then start a new build from `main`.
+3. **Custom build scripts**: the script is provided at both the repo root
+   (`ci_scripts/`) and next to the workspace (`ios/ci_scripts/`). If the log
+   says `Post-Clone script not found at ci_scripts/ci_post_clone.sh`, the
+   build checked out a branch/commit that predates the script — check the
+   build's **Source** field, then start a new build from `main`.
 
 ## Verifying a build
 
