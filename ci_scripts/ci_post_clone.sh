@@ -1,66 +1,13 @@
 #!/bin/sh
 #
-# Xcode Cloud post-clone setup for Mediora.
+# Compatibility wrapper.
 #
-# The repository does not track ios/Pods (gitignored), and Xcode Cloud does
-# not run `pod install` automatically, so the build fails with:
-#   "Unable to open base configuration reference file
-#    .../Pods/Target Support Files/Pods-mediora-mobile/...xcconfig"
-# This script installs Node, npm dependencies, CocoaPods, and the Pods
-# before the xcodebuild step runs.
-#
-# Order matters: the Podfile requires `node` to evaluate, and
-# `use_native_modules!` + post_install patches need node_modules present.
+# Xcode Cloud looks for custom build scripts next to the workspace file
+# (ios/ci_scripts/) when the Xcode project lives in a subfolder of the
+# repository. The real script lives there; keep this root-level copy so the
+# default repo-root location also works.
 #
 set -e
 
-echo "=== Mediora ci_post_clone.sh starting ==="
-
-# ── 1. Node.js (needed by the Podfile and the JS bundle build phase) ──────
-if ! command -v node >/dev/null 2>&1; then
-  echo "Installing Node.js 20 via Homebrew..."
-  HOMEBREW_NO_AUTO_UPDATE=1 brew install node@20
-fi
-
-# node@20 is keg-only; put it on PATH for this and subsequent steps.
-if [ -d "/opt/homebrew/opt/node@20/bin" ]; then
-  export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-elif [ -d "/usr/local/opt/node@20/bin" ]; then
-  export PATH="/usr/local/opt/node@20/bin:$PATH"
-fi
-
-NODE_BIN="$(command -v node)"
-echo "Node: $($NODE_BIN --version) at $NODE_BIN"
-
-# Xcode build phases run with a minimal PATH. Symlink node into
-# /usr/local/bin so the "Bundle React Native code and images" phase and
-# ios/.xcode.env's `command -v node` resolve it during the build.
-if [ ! -e "/usr/local/bin/node" ]; then
-  echo "Symlinking node into /usr/local/bin..."
-  mkdir -p /usr/local/bin
-  ln -s "$NODE_BIN" /usr/local/bin/node
-fi
-if [ ! -e "/usr/local/bin/npm" ] && command -v npm >/dev/null 2>&1; then
-  ln -s "$(command -v npm)" /usr/local/bin/npm
-fi
-export NODE_BINARY="$NODE_BIN"
-
-# ── 2. npm dependencies (postinstall runs patch-package) ──────────────────
-cd "${CI_PRIMARY_REPOSITORY_PATH:-.}"
-echo "Installing npm dependencies..."
-npm ci --no-audit --no-fund
-
-# ── 3. CocoaPods ──────────────────────────────────────────────────────────
-if ! command -v pod >/dev/null 2>&1; then
-  echo "Installing CocoaPods via Homebrew..."
-  HOMEBREW_NO_AUTO_UPDATE=1 brew install cocoapods
-fi
-echo "CocoaPods: $(pod --version)"
-
-# ── 4. Pods (both the tvOS `mediora` and iOS/Catalyst `mediora-mobile`
-#       targets are covered by the single workspace) ───────────────────────
-cd ios
-echo "Running pod install..."
-pod install
-
-echo "=== Mediora ci_post_clone.sh complete ==="
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "${SCRIPT_DIR%/ci_scripts}/ios/ci_scripts/ci_post_clone.sh" "$@"
