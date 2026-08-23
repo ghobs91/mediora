@@ -18,6 +18,8 @@ interface JellyfinMediaRowProps {
   getImageUrl?: (item: JellyfinItem) => string | null;
   tmdbItems?: never;
   landscape?: boolean;
+  showDetailsBelow?: boolean;
+  size?: 'small' | 'medium' | 'large' | 'xlarge';
   useSeriesThumbnail?: boolean;
 }
 
@@ -36,13 +38,13 @@ export function MediaRow(props: MediaRowProps) {
   const { spacing, isMobile } = useResponsiveColumns();
 
   // Responsive horizontal padding
-  const horizontalPadding = isMobile ? 16 : scaleSize(52);
+  const horizontalPadding = isMobile ? 16 : (Platform.isTV ? scaleSize(52) : 28);
 
   // Separator component for spacing between items
   const ItemSeparator = () => <View style={{ width: spacing }} />;
 
   if ('items' in props && props.items) {
-    const { items, onItemPress, onItemRemove, onItemMarkWatched, onItemToggleFavorite, getImageUrl, landscape, useSeriesThumbnail } = props;
+    const { items, onItemPress, onItemRemove, onItemMarkWatched, onItemToggleFavorite, getImageUrl, landscape, showDetailsBelow, size, useSeriesThumbnail } = props;
 
     if (items.length === 0) {
       return null;
@@ -79,6 +81,8 @@ export function MediaRow(props: MediaRowProps) {
               onMarkWatched={onItemMarkWatched ? () => onItemMarkWatched(item) : undefined}
               onToggleFavorite={onItemToggleFavorite ? (isFavorite) => onItemToggleFavorite(item, isFavorite) : undefined}
               landscape={landscape}
+              showDetailsBelow={showDetailsBelow}
+              size={size}
             />
           )}
           showsHorizontalScrollIndicator={false}

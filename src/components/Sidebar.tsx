@@ -101,6 +101,34 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
     }
   }, [navigation, isMobile]);
 
+  const renderSearchItem = () => {
+    const isActive = currentRoute === 'Search';
+    const isSearchFocused = focusedItem === 'Search';
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.searchItem,
+          isActive && styles.searchItemActive,
+          isSearchFocused && styles.navItemFocused,
+        ]}
+        onPress={() => handleNavigate('Search')}
+        onFocus={() => handleFocus('Search')}
+        onBlur={() => handleBlur('Search')}
+        activeOpacity={0.7}
+        focusable={true}
+        tvParallaxProperties={Platform.isTV ? { enabled: false } : undefined}>
+        <Icon
+          name="search-outline"
+          size={Platform.isTV ? scaleSize(19) : 15}
+          color="rgba(255, 255, 255, 0.48)"
+          style={styles.searchIcon}
+        />
+        <Text style={styles.searchText}>Search</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderNavItem = (item: any, index: number, isFirst: boolean = false) => {
     const isActive = currentRoute === item.route;
     const isFocused = focusedItem === item.route;
@@ -150,7 +178,9 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
 
     return (
       <>
-        {visibleMainItems.map((item, index) => renderNavItem(item, index, index === 0))}
+        {visibleMainItems
+          .filter(item => item.route !== 'Search')
+          .map((item, index) => renderNavItem(item, index, index === 0))}
 
         <Text style={styles.sectionHeader}>Library</Text>
         {visibleLibraryItems.map((item, index) => renderNavItem(item, index))}
@@ -223,7 +253,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
       )}
 
       <View style={styles.header}>
-        <Text style={styles.logo}>Mediora</Text>
+        {renderSearchItem()}
       </View>
 
       <ScrollView style={styles.navContainer} showsVerticalScrollIndicator={false}>
@@ -237,11 +267,11 @@ const styles = StyleSheet.create({
   // Floating Sidebar Styles (Desktop/Tablet/TV)
   sidebar: {
     flex: 1,
-    width: scaleSize(240),
-    backgroundColor: Platform.isTV ? 'rgba(28, 28, 30, 0.4)' : 'rgba(28, 28, 30, 0.85)',
-    borderRadius: scaleSize(16),
-    paddingTop: scaleSize(20),
-    paddingBottom: scaleSize(16),
+    width: Platform.isTV ? scaleSize(240) : 200,
+    backgroundColor: Platform.isTV ? 'rgba(28, 28, 30, 0.4)' : 'rgba(28, 28, 30, 0.92)',
+    borderRadius: Platform.isTV ? scaleSize(16) : 12,
+    paddingTop: Platform.isTV ? scaleSize(20) : 8,
+    paddingBottom: Platform.isTV ? scaleSize(16) : 12,
     shadowColor: 'rgba(0, 0, 0, 0.5)',
     shadowOffset: { width: 0, height: scaleSize(8) },
     shadowOpacity: 0.6,
@@ -251,10 +281,10 @@ const styles = StyleSheet.create({
   },
   windowControls: {
     flexDirection: 'row',
-    gap: scaleSize(8),
-    paddingHorizontal: scaleSize(20),
-    paddingTop: scaleSize(8),
-    paddingBottom: scaleSize(12),
+    gap: Platform.isTV ? scaleSize(8) : 7,
+    paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
+    paddingTop: Platform.isTV ? scaleSize(8) : 4,
+    paddingBottom: Platform.isTV ? scaleSize(12) : 10,
   },
   trafficLight: {
     width: scaleSize(12),
@@ -272,37 +302,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#28C840',
   },
   header: {
-    paddingHorizontal: scaleSize(24),
-    paddingBottom: scaleSize(24),
-    marginBottom: scaleSize(12),
-  },
-  logo: {
-    fontSize: scaleFontSize(28),
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: 0.5,
+    paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
+    paddingBottom: Platform.isTV ? scaleSize(12) : 8,
+    marginBottom: Platform.isTV ? scaleSize(4) : 2,
   },
   navContainer: {
     flex: 1,
-    paddingHorizontal: scaleSize(20),
+    paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
+  },
+  searchItem: {
+    height: Platform.isTV ? scaleSize(42) : 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Platform.isTV ? scaleSize(12) : 9,
+    borderRadius: Platform.isTV ? scaleSize(21) : 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  searchItemActive: {
+    borderColor: 'rgba(255, 255, 255, 0.38)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchIcon: {
+    width: Platform.isTV ? scaleSize(20) : 16,
+    marginRight: Platform.isTV ? scaleSize(7) : 5,
+  },
+  searchText: {
+    fontSize: Platform.isTV ? scaleFontSize(16) : 12,
+    color: 'rgba(255, 255, 255, 0.42)',
+    fontWeight: '500',
   },
   sectionHeader: {
-    fontSize: scaleFontSize(13),
+    fontSize: Platform.isTV ? scaleFontSize(13) : 12,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.5)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: scaleSize(24),
-    marginBottom: scaleSize(8),
-    marginLeft: scaleSize(12),
+    color: 'rgba(255, 255, 255, 0.48)',
+    letterSpacing: 0.2,
+    marginTop: Platform.isTV ? scaleSize(20) : 16,
+    marginBottom: Platform.isTV ? scaleSize(6) : 6,
+    marginLeft: Platform.isTV ? scaleSize(12) : 9,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: scaleSize(10),
-    paddingHorizontal: scaleSize(12),
-    borderRadius: scaleSize(8),
-    marginBottom: scaleSize(4),
+    paddingVertical: Platform.isTV ? scaleSize(10) : 5,
+    paddingHorizontal: Platform.isTV ? scaleSize(12) : 9,
+    borderRadius: Platform.isTV ? scaleSize(8) : 6,
+    marginBottom: Platform.isTV ? scaleSize(4) : 2,
     backgroundColor: 'transparent',
   },
   navItemActive: {
@@ -312,14 +358,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   navIcon: {
-    marginRight: scaleSize(12),
-    width: scaleSize(24),
+    marginRight: Platform.isTV ? scaleSize(12) : 9,
+    width: Platform.isTV ? scaleSize(24) : 16,
   },
   navText: {
-    fontSize: scaleFontSize(17),
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: Platform.isTV ? scaleFontSize(17) : 13,
+    color: 'rgba(255, 255, 255, 0.66)',
     fontWeight: '500',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   navTextActive: {
     color: '#ffffff',

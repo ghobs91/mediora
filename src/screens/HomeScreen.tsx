@@ -477,6 +477,8 @@ export function HomeScreen() {
             onItemToggleFavorite={handleToggleFavorite}
             getImageUrl={getImageUrlWithBackdrop}
             landscape={true}
+            showDetailsBelow={!isMobile}
+            size={isMobile ? undefined : 'large'}
             useSeriesThumbnail={true}
           />
 

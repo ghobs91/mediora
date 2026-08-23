@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, StyleSheet, TouchableOpacity, Text, Linking } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Linking, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -365,7 +365,11 @@ export function AppNavigator() {
               const isPlayerScreen = currentRoute === 'Player' || currentRoute === 'LivePlayer';
               return (
                 <>
-                  <View style={[styles.content, !isPlayerScreen && styles.contentWithSidebar]}>
+                  <View style={[
+                    styles.content,
+                    !isPlayerScreen && styles.contentWithSidebar,
+                    !isPlayerScreen && !Platform.isTV && styles.contentWithSidebarMac,
+                  ]}>
                     <DesktopStackNavigator />
                   </View>
                   {!isPlayerScreen && showSidebar && (
@@ -395,6 +399,9 @@ const styles = StyleSheet.create({
   },
   contentWithSidebar: {
     paddingLeft: scaleSize(272), // Account for floating sidebar width + margins
+  },
+  contentWithSidebarMac: {
+    paddingLeft: 236, // 16px sidebar inset + 200px sidebar + 20px breathing room
   },
   floatingSidebarWrapper: {
     position: 'absolute',

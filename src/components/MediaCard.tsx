@@ -34,6 +34,7 @@ interface MediaCardProps {
   isDownloading?: boolean;
   rank?: number; // For numbered rankings (Top 10, etc.)
   landscape?: boolean; // For landscape orientation (wider instead of taller)
+  showDetailsBelow?: boolean; // Keep landscape metadata below the artwork
 }
 
 
@@ -54,6 +55,7 @@ export function MediaCard({
   isDownloading,
   rank,
   landscape = false,
+  showDetailsBelow = false,
 }: MediaCardProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
@@ -337,7 +339,7 @@ export function MediaCard({
             )}
           </View>
         )}
-        {landscape && (
+        {landscape && !showDetailsBelow && (
           <View style={[styles.titleOverlay, { borderRadius }]}>
             <View style={styles.titleOverlayGradient}>
               <Text style={[styles.titleOverlayText, isMobile && styles.titleOverlayTextMobile]} numberOfLines={1}>
@@ -352,8 +354,8 @@ export function MediaCard({
           </View>
         )}
       </View>
-      {!landscape && (
-        <View style={[styles.textContainer, { width }, isMobile && styles.textContainerMobile]}>
+      {(!landscape || showDetailsBelow) && (
+        <View style={[styles.textContainer, { width }, isMobile && styles.textContainerMobile, showDetailsBelow && styles.landscapeDetailsBelow]}>
           <Text style={[styles.title, isMobile && styles.titleMobile]} numberOfLines={1}>
             {displayTitle}
           </Text>
@@ -420,6 +422,10 @@ const styles = StyleSheet.create({
   textContainerMobile: {
     marginTop: 8,
     paddingHorizontal: 4,
+  },
+  landscapeDetailsBelow: {
+    marginTop: scaleSize(10),
+    paddingHorizontal: scaleSize(2),
   },
   title: {
     color: '#fff',
