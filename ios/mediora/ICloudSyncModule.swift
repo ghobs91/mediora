@@ -23,6 +23,20 @@ class ICloudSyncModule: NSObject {
     static let radarrApiKey = "radarr_api_key"
     static let radarrRootFolderPath = "radarr_root_folder_path"
     static let radarrQualityProfileId = "radarr_quality_profile_id"
+
+    // Write timestamps (ms since epoch) so devices can resolve conflicts
+    // by keeping whichever side was written last.
+    static let jellyfinUpdatedAt = "jellyfin_updated_at"
+    static let sonarrUpdatedAt = "sonarr_updated_at"
+    static let radarrUpdatedAt = "radarr_updated_at"
+  }
+
+  private func stamp(_ key: String) {
+    store.set(Date().timeIntervalSince1970 * 1000, forKey: key)
+  }
+
+  private func readTimestamp(_ key: String) -> Int64 {
+    return store.longLong(forKey: key)
   }
   
   override init() {
@@ -64,6 +78,7 @@ class ICloudSyncModule: NSObject {
     store.set(userId, forKey: Keys.jellyfinUserId)
     store.set(serverId, forKey: Keys.jellyfinServerId)
     store.set(deviceId, forKey: Keys.jellyfinDeviceId)
+    stamp(Keys.jellyfinUpdatedAt)
     
     let success = store.synchronize()
     if success {
@@ -93,7 +108,8 @@ class ICloudSyncModule: NSObject {
       "accessToken": accessToken,
       "userId": userId,
       "serverId": serverId,
-      "deviceId": deviceId
+      "deviceId": deviceId,
+      "updatedAt": readTimestamp(Keys.jellyfinUpdatedAt)
     ]
     
     resolve(settings)
@@ -131,6 +147,7 @@ class ICloudSyncModule: NSObject {
     store.set(apiKey, forKey: Keys.sonarrApiKey)
     store.set(rootFolderPath, forKey: Keys.sonarrRootFolderPath)
     store.set(qualityProfileId.intValue, forKey: Keys.sonarrQualityProfileId)
+    stamp(Keys.sonarrUpdatedAt)
     
     let success = store.synchronize()
     if success {
@@ -155,12 +172,13 @@ class ICloudSyncModule: NSObject {
     
     // Quality profile ID defaults to 0 if not found
     let qualityProfileId = store.longLong(forKey: Keys.sonarrQualityProfileId)
-    
+
     let settings: [String: Any] = [
       "serverUrl": serverUrl,
       "apiKey": apiKey,
       "rootFolderPath": rootFolderPath,
-      "qualityProfileId": qualityProfileId
+      "qualityProfileId": qualityProfileId,
+      "updatedAt": readTimestamp(Keys.sonarrUpdatedAt)
     ]
     
     resolve(settings)
@@ -197,6 +215,7 @@ class ICloudSyncModule: NSObject {
     store.set(apiKey, forKey: Keys.radarrApiKey)
     store.set(rootFolderPath, forKey: Keys.radarrRootFolderPath)
     store.set(qualityProfileId.intValue, forKey: Keys.radarrQualityProfileId)
+    stamp(Keys.radarrUpdatedAt)
     
     let success = store.synchronize()
     if success {
@@ -221,12 +240,13 @@ class ICloudSyncModule: NSObject {
     
     // Quality profile ID defaults to 0 if not found
     let qualityProfileId = store.longLong(forKey: Keys.radarrQualityProfileId)
-    
+
     let settings: [String: Any] = [
       "serverUrl": serverUrl,
       "apiKey": apiKey,
       "rootFolderPath": rootFolderPath,
-      "qualityProfileId": qualityProfileId
+      "qualityProfileId": qualityProfileId,
+      "updatedAt": readTimestamp(Keys.radarrUpdatedAt)
     ]
     
     resolve(settings)

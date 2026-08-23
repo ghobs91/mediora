@@ -29,6 +29,10 @@
 		HDR001A12F3ABC10200HDR002 /* HDRSupportModule.m in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */; };
 		HDR001A12F3ABC10200HDR003 /* HDRSupportModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */; };
 		HDR001A12F3ABC10200HDR004 /* HDRSupportModule.m in Sources */ = {isa = PBXBuildFile; fileRef = HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */; };
+		ICLD001A12F3ABC10200ICLD01 /* ICloudSyncModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */; };
+		ICLD001A12F3ABC10200ICLD02 /* ICloudSyncModule.m in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */; };
+		ICLD001A12F3ABC10200ICLD03 /* ICloudSyncModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */; };
+		ICLD001A12F3ABC10200ICLD04 /* ICloudSyncModule.m in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +59,8 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HDRSupportModule.swift; path = mediora/HDRSupportModule.swift; sourceTree = "<group>"; };
 		HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = HDRSupportModule.m; path = mediora/HDRSupportModule.m; sourceTree = "<group>"; };
+		ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ICloudSyncModule.swift; path = mediora/ICloudSyncModule.swift; sourceTree = "<group>"; };
+		ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ICloudSyncModule.m; path = mediora/ICloudSyncModule.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +91,8 @@
 				C8B71C722F2AC40200406A8C /* VideoPlayerWindow.swift */,
 				HDR001A12F3ABC10100HDR001 /* HDRSupportModule.swift */,
 				HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */,
+				ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */,
+				ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -401,6 +409,8 @@
 				C8B71C762F2AC40200406A8C /* VideoPlayerWindow.m in Sources */,
 				HDR001A12F3ABC10200HDR001 /* HDRSupportModule.swift in Sources */,
 				HDR001A12F3ABC10200HDR002 /* HDRSupportModule.m in Sources */,
+				ICLD001A12F3ABC10200ICLD01 /* ICloudSyncModule.swift in Sources */,
+				ICLD001A12F3ABC10200ICLD02 /* ICloudSyncModule.m in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -413,6 +423,8 @@
 				C8B71C742F2AC40200406A8C /* VideoPlayerWindow.m in Sources */,
 				HDR001A12F3ABC10200HDR003 /* HDRSupportModule.swift in Sources */,
 				HDR001A12F3ABC10200HDR004 /* HDRSupportModule.m in Sources */,
+				ICLD001A12F3ABC10200ICLD03 /* ICloudSyncModule.swift in Sources */,
+				ICLD001A12F3ABC10200ICLD04 /* ICloudSyncModule.m in Sources */,
 				22502BB980C96FD10B597393 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -428,6 +440,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_TOP_SHELF_IMAGE_NAME = "App Icon & Top Shelf Image";
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = mediora/mediora-tvOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
 				DEAD_CODE_STRIPPING = YES;
@@ -470,6 +483,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_TOP_SHELF_IMAGE_NAME = "App Icon & Top Shelf Image";
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = mediora/mediora-tvOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
 				DEAD_CODE_STRIPPING = YES;

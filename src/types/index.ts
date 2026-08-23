@@ -516,6 +516,8 @@ export interface AppSettings {
     userId: string;
     serverId: string;
     deviceId: string;
+    /** ms since epoch, stamped when written to iCloud KVS */
+    updatedAt?: number;
   } | null;
   tmdb: {
     apiKey: string;
@@ -525,12 +527,14 @@ export interface AppSettings {
     apiKey: string;
     rootFolderPath: string;
     qualityProfileId: number;
+    updatedAt?: number;
   } | null;
   radarr: {
     serverUrl: string;
     apiKey: string;
     rootFolderPath: string;
     qualityProfileId: number;
+    updatedAt?: number;
   } | null;
   iptv: {
     selectedCountries: string[]; // Array of country codes

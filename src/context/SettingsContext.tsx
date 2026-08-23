@@ -8,11 +8,31 @@ import React, {
   ReactNode,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { AppSettings } from '../types';
 import { iCloudService } from '../services/icloud';
 
 const SETTINGS_STORAGE_KEY = '@mediora/settings';
+
+// Conflict resolution: each service carries an `updatedAt` (ms since epoch,
+// stamped on write). Whichever side — local or iCloud — was written last wins.
+type Timestamped = { updatedAt?: number };
+
+const isNewer = (a?: number, b?: number) => (a ?? 0) > (b ?? 0);
+
+const pickNewer = <T extends Timestamped>(
+  local: T | null,
+  remote: T | null,
+): T | null => {
+  if (!remote) return local;
+  if (!local) return remote;
+  return isNewer(remote.updatedAt, local.updatedAt) ? remote : local;
+};
+
+const stampNow = <T extends Timestamped>(service: T): T => ({
+  ...service,
+  updatedAt: Date.now(),
+});
 
 const DEFAULT_SETTINGS: AppSettings = {
   jellyfin: null,
@@ -79,93 +99,121 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // --- iCloud helper: sync a single service's non-null settings to iCloud.
-  //    Silently handles errors — if iCloud is unavailable, we still have
-  //    AsyncStorage.  The sync-on-startup heartbeat ensures a failed initial
-  //    save is retried on the next launch.
+  // --- iCloud helpers ------------------------------------------------------
+  //    iCloud acts as the sync transport between Apple platforms. Conflicts
+  //    are resolved by `updatedAt` (newer write wins). If iCloud is
+  //    unavailable we still have AsyncStorage.
+
+  // Merge local settings with iCloud, taking the newer write per service.
+  const mergeWithICloud = useCallback(async (
+    local: AppSettings,
+  ): Promise<AppSettings> => {
+    if (!Platform.isTV || !iCloudService.isAvailable()) {
+      return local;
+    }
+
+    console.log('[Settings] tvOS detected, checking iCloud for newer settings...');
+    const [iCloudJellyfin, iCloudSonarr, iCloudRadarr] = await Promise.all([
+      iCloudService.getJellyfinSettings(),
+      iCloudService.getSonarrSettings(),
+      iCloudService.getRadarrSettings(),
+    ]);
+
+    return {
+      ...local,
+      jellyfin: pickNewer(local.jellyfin, iCloudJellyfin),
+      sonarr: pickNewer(local.sonarr, iCloudSonarr),
+      radarr: pickNewer(local.radarr, iCloudRadarr),
+    };
+  }, []);
+
+  // Heartbeat: push any service where the local write is newer than what
+  // iCloud has (or where iCloud is empty). Ensures a failed initial save is
+  // retried on a later launch without clobbering newer remote data.
   const syncToICloudIfNeeded = useCallback(async (currentSettings: AppSettings) => {
     if (!Platform.isTV) return;
 
     try {
       if (currentSettings.jellyfin) {
-        await iCloudService.saveJellyfinSettings(currentSettings.jellyfin);
+        const remote = await iCloudService.getJellyfinSettings();
+        if (!remote || isNewer(currentSettings.jellyfin.updatedAt, remote.updatedAt)) {
+          await iCloudService.saveJellyfinSettings(currentSettings.jellyfin);
+        }
       }
       if (currentSettings.sonarr) {
-        await iCloudService.saveSonarrSettings(currentSettings.sonarr);
+        const remote = await iCloudService.getSonarrSettings();
+        if (!remote || isNewer(currentSettings.sonarr.updatedAt, remote.updatedAt)) {
+          await iCloudService.saveSonarrSettings(currentSettings.sonarr);
+        }
       }
       if (currentSettings.radarr) {
-        await iCloudService.saveRadarrSettings(currentSettings.radarr);
+        const remote = await iCloudService.getRadarrSettings();
+        if (!remote || isNewer(currentSettings.radarr.updatedAt, remote.updatedAt)) {
+          await iCloudService.saveRadarrSettings(currentSettings.radarr);
+        }
       }
     } catch (err) {
       console.error('[Settings] iCloud heartbeat sync failed:', err);
     }
   }, []);
 
+  // On tvOS, re-reconcile with iCloud whenever the app returns to the
+  // foreground so changes saved on another device are picked up without a
+  // cold launch.
+  useEffect(() => {
+    if (!Platform.isTV) return;
+
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+
+      (async () => {
+        try {
+          const merged = await mergeWithICloud(settingsRef.current);
+          if (JSON.stringify(merged) !== JSON.stringify(settingsRef.current)) {
+            console.log('[Settings] Applying newer iCloud settings after foreground');
+            settingsRef.current = merged;
+            setSettings(merged);
+            await AsyncStorage.setItem(
+              SETTINGS_STORAGE_KEY,
+              JSON.stringify(merged),
+            );
+          }
+        } catch (err) {
+          console.error('[Settings] Foreground iCloud sync failed:', err);
+        }
+      })();
+    });
+
+    return () => subscription.remove();
+  }, [mergeWithICloud]);
+
   const loadSettings = async () => {
     try {
       // ── 1. Load from AsyncStorage ──────────────────────────────
       const stored = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
-      let loadedSettings = DEFAULT_SETTINGS;
-      let parseFailed = false;
+      let loadedSettings: AppSettings = DEFAULT_SETTINGS;
 
       if (stored) {
         try {
           loadedSettings = JSON.parse(stored);
         } catch (parseError) {
           console.error('[Settings] Failed to parse stored settings:', parseError);
-          parseFailed = true;
           // Don't throw — we still want to try iCloud restore below.
         }
       }
 
-      // ── 2. On tvOS, fall back to iCloud for any missing services ──
+      // ── 2. On tvOS, reconcile with iCloud (newer write wins) ────
       //    AsyncStorage can be purged by the OS when the Apple TV is
       //    low on storage, so iCloud acts as the authoritative backup.
-      if (Platform.isTV) {
-        const iCloudAvailable = iCloudService.isAvailable();
-        if (iCloudAvailable) {
-          console.log('[Settings] tvOS detected, checking iCloud for any missing settings...');
+      const beforeMerge = JSON.stringify(loadedSettings);
+      loadedSettings = await mergeWithICloud(loadedSettings);
 
-          const [iCloudJellyfin, iCloudSonarr, iCloudRadarr] = await Promise.all([
-            iCloudService.getJellyfinSettings(),
-            iCloudService.getSonarrSettings(),
-            iCloudService.getRadarrSettings(),
-          ]);
-
-          let needsLocalSave = false;
-
-          if (!loadedSettings.jellyfin && iCloudJellyfin) {
-            loadedSettings.jellyfin = iCloudJellyfin;
-            console.log('[Settings] Restored Jellyfin settings from iCloud');
-            needsLocalSave = true;
-          }
-          if (!loadedSettings.sonarr && iCloudSonarr) {
-            loadedSettings.sonarr = iCloudSonarr;
-            console.log('[Settings] Restored Sonarr settings from iCloud');
-            needsLocalSave = true;
-          }
-          if (!loadedSettings.radarr && iCloudRadarr) {
-            loadedSettings.radarr = iCloudRadarr;
-            console.log('[Settings] Restored Radarr settings from iCloud');
-            needsLocalSave = true;
-          }
-
-          // Persist restored settings back to local storage
-          if (needsLocalSave) {
-            await AsyncStorage.setItem(
-              SETTINGS_STORAGE_KEY,
-              JSON.stringify(loadedSettings),
-            );
-          }
-        } else {
-          console.log('[Settings] iCloud not available on this device');
-          if (parseFailed || !stored) {
-            console.warn(
-              '[Settings] No local settings and no iCloud backup — ' +
-              'connections will need to be re-configured.',
-            );
-          }
-        }
+      if (JSON.stringify(loadedSettings) !== beforeMerge) {
+        console.log('[Settings] Settings changed after iCloud merge, persisting locally');
+        await AsyncStorage.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify(loadedSettings),
+        );
       }
 
       // ── 3. Update state and trigger heartbeat sync ─────────────
@@ -184,13 +232,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateJellyfinSettings = useCallback(
     async (jellyfinSettings: AppSettings['jellyfin']) => {
       const currentSettings = settingsRef.current;
-      const newSettings = { ...currentSettings, jellyfin: jellyfinSettings };
+      const stamped = jellyfinSettings ? stampNow(jellyfinSettings) : null;
+      const newSettings = { ...currentSettings, jellyfin: stamped };
       await saveSettings(newSettings);
 
       // Sync to iCloud on all Apple platforms so tvOS can recover
       // credentials if AsyncStorage is purged by the OS
-      if (jellyfinSettings) {
-        await iCloudService.saveJellyfinSettings(jellyfinSettings);
+      if (stamped) {
+        await iCloudService.saveJellyfinSettings(stamped);
       }
     },
     [saveSettings],
@@ -208,12 +257,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateSonarrSettings = useCallback(
     async (sonarrSettings: AppSettings['sonarr']) => {
       const currentSettings = settingsRef.current;
-      const newSettings = { ...currentSettings, sonarr: sonarrSettings };
+      const stamped = sonarrSettings ? stampNow(sonarrSettings) : null;
+      const newSettings = { ...currentSettings, sonarr: stamped };
       await saveSettings(newSettings);
 
       // Sync to iCloud on all Apple platforms
-      if (sonarrSettings) {
-        await iCloudService.saveSonarrSettings(sonarrSettings);
+      if (stamped) {
+        await iCloudService.saveSonarrSettings(stamped);
       }
     },
     [saveSettings],
@@ -222,12 +272,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateRadarrSettings = useCallback(
     async (radarrSettings: AppSettings['radarr']) => {
       const currentSettings = settingsRef.current;
-      const newSettings = { ...currentSettings, radarr: radarrSettings };
+      const stamped = radarrSettings ? stampNow(radarrSettings) : null;
+      const newSettings = { ...currentSettings, radarr: stamped };
       await saveSettings(newSettings);
 
       // Sync to iCloud on all Apple platforms
-      if (radarrSettings) {
-        await iCloudService.saveRadarrSettings(radarrSettings);
+      if (stamped) {
+        await iCloudService.saveRadarrSettings(stamped);
       }
     },
     [saveSettings],
@@ -261,23 +312,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       radarr?: AppSettings['radarr'];
     }) => {
       const currentSettings = settingsRef.current;
+      const stampedJellyfin = stampNow(inviteSettings.jellyfin);
       const newSettings: AppSettings = {
         ...currentSettings,
-        jellyfin: inviteSettings.jellyfin,
+        jellyfin: stampedJellyfin,
         // Invites without arr settings leave any existing ones untouched.
-        sonarr: inviteSettings.sonarr ?? currentSettings.sonarr,
-        radarr: inviteSettings.radarr ?? currentSettings.radarr,
+        sonarr: inviteSettings.sonarr
+          ? stampNow(inviteSettings.sonarr)
+          : currentSettings.sonarr,
+        radarr: inviteSettings.radarr
+          ? stampNow(inviteSettings.radarr)
+          : currentSettings.radarr,
       };
       await saveSettings(newSettings);
 
       // Sync to iCloud on all Apple platforms so tvOS can recover these
       // credentials if AsyncStorage is purged.
-      await iCloudService.saveJellyfinSettings(inviteSettings.jellyfin);
-      if (inviteSettings.sonarr) {
-        await iCloudService.saveSonarrSettings(inviteSettings.sonarr);
+      await iCloudService.saveJellyfinSettings(stampedJellyfin);
+      if (newSettings.sonarr) {
+        await iCloudService.saveSonarrSettings(newSettings.sonarr);
       }
-      if (inviteSettings.radarr) {
-        await iCloudService.saveRadarrSettings(inviteSettings.radarr);
+      if (newSettings.radarr) {
+        await iCloudService.saveRadarrSettings(newSettings.radarr);
       }
     },
     [saveSettings],

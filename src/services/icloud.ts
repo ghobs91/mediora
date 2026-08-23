@@ -8,6 +8,8 @@ export interface JellyfinSettings {
   userId: string;
   serverId: string;
   deviceId: string;
+  /** ms since epoch, stamped by the native module on save */
+  updatedAt?: number;
 }
 
 export interface SonarrSettings {
@@ -15,6 +17,7 @@ export interface SonarrSettings {
   apiKey: string;
   rootFolderPath: string;
   qualityProfileId: number;
+  updatedAt?: number;
 }
 
 export interface RadarrSettings {
@@ -22,6 +25,7 @@ export interface RadarrSettings {
   apiKey: string;
   rootFolderPath: string;
   qualityProfileId: number;
+  updatedAt?: number;
 }
 
 class ICloudService {
