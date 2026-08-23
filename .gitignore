@@ -77,3 +77,6 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Serena (agent tooling) local state
+.serena/
