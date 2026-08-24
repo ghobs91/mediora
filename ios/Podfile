@@ -82,14 +82,21 @@ post_install do |installer|
       if File.exist?(frameworks_script)
         puts "Patching #{frameworks_script} for Mac Catalyst Hermes fix"
         content = File.read(frameworks_script)
-        # Remove root symlinks that confuse codesign on Catalyst
+        # Replace root entries with proper symlinks. The pre-built xcframework
+        # ships a real file at the root (not a symlink), which makes codesign
+        # treat the bundle as ambiguous on Catalyst; deleting the entries (the
+        # old workaround) produces a malformed framework that App Store Connect
+        # rejects with ITMS-90291/90292. Proper symlinks satisfy both.
         symlink_fix = <<-BASH
-    # Catalyst fix: Remove root symlinks to avoid 'ambiguous bundle format'
+    # Catalyst fix: hermesvm.framework root entries must be symlinks
+    # (ITMS-90291/90292 require them; a real root binary confuses codesign)
     HERMES_PATH="${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework"
     if [ -d "$HERMES_PATH/Versions" ]; then
-      echo "Removing hermesvm.framework root symlinks for Catalyst compatibility..."
+      echo "Fixing hermesvm.framework root symlinks for Catalyst compatibility..."
       rm -f "$HERMES_PATH/hermesvm"
+      ln -s "Versions/Current/hermesvm" "$HERMES_PATH/hermesvm"
       rm -f "$HERMES_PATH/Resources"
+      ln -s "Versions/Current/Resources" "$HERMES_PATH/Resources"
     fi
 BASH
         content.gsub!(/if \[\[ "\$CONFIGURATION" == "Debug" \]\]; then/, symlink_fix + "\n" + 'if [[ "$CONFIGURATION" == "Debug" ]]; then')
