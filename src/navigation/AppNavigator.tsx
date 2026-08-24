@@ -401,13 +401,13 @@ const styles = StyleSheet.create({
     paddingLeft: scaleSize(272), // Account for floating sidebar width + margins
   },
   contentWithSidebarMac: {
-    paddingLeft: 236, // 16px sidebar inset + 200px sidebar + 20px breathing room
+    paddingLeft: 201, // 200px flush sidebar + 1px divider
   },
   floatingSidebarWrapper: {
     position: 'absolute',
-    left: 16,
-    top: 16,
-    bottom: 16,
+    left: Platform.isTV ? 16 : 0,
+    top: Platform.isTV ? 16 : 0,
+    bottom: Platform.isTV ? 16 : 0,
     zIndex: 1000,
   },
   floatingMenuButton: {
