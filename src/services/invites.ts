@@ -99,6 +99,10 @@ export async function generateInvite(options: {
   const payload: InvitePayload = {
     v: 1,
     name: inviteName,
+    backendMode: settings.backendMode ?? 'mediarr',
+    mediarrServer: settings.mediarrServer
+      ? { ...settings.mediarrServer }
+      : null,
     jellyfin: {
       serverUrl: settings.jellyfin.serverUrl,
       username,

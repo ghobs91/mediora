@@ -56,9 +56,15 @@ interface SettingsContextType {
   updateLocalFilesSettings: (settings: AppSettings['localFiles']) => Promise<void>;
   applyInviteSettings: (settings: {
     jellyfin: NonNullable<AppSettings['jellyfin']>;
+    backendMode?: AppSettings['backendMode'];
+    mediarrServer?: AppSettings['mediarrServer'];
     sonarr?: AppSettings['sonarr'];
     radarr?: AppSettings['radarr'];
   }) => Promise<void>;
+  updateBackendMode: (mode: AppSettings['backendMode']) => Promise<void>;
+  updateMediarrServer: (
+    config: AppSettings['mediarrServer'],
+  ) => Promise<void>;
   clearAllSettings: () => Promise<void>;
   clearJellyfinSettings: () => Promise<void>;
 }
@@ -302,12 +308,38 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [saveSettings],
   );
 
+  // Backend mode is local-only (never synced to iCloud): it only describes
+  // how to reach the TV/movies backend, not remote credentials.
+  const updateBackendMode = useCallback(
+    async (backendMode: AppSettings['backendMode']) => {
+      const currentSettings = settingsRef.current;
+      const newSettings = { ...currentSettings, backendMode };
+      await saveSettings(newSettings);
+    },
+    [saveSettings],
+  );
+
+  // The mediora-server (Bobarr) URL + API key are local-only config.
+  const updateMediarrServer = useCallback(
+    async (mediarrServer: AppSettings['mediarrServer']) => {
+      const currentSettings = settingsRef.current;
+      const newSettings = {
+        ...currentSettings,
+        mediarrServer: mediarrServer ? { ...mediarrServer } : null,
+      };
+      await saveSettings(newSettings);
+    },
+    [saveSettings],
+  );
+
   // Apply a full invite in a single state update so onboarding doesn't
   // unmount mid-redemption (three sequential updates would each trigger a
   // re-render and the first one would swap onboarding out for the main app).
   const applyInviteSettings = useCallback(
     async (inviteSettings: {
       jellyfin: NonNullable<AppSettings['jellyfin']>;
+      backendMode?: AppSettings['backendMode'];
+      mediarrServer?: AppSettings['mediarrServer'];
       sonarr?: AppSettings['sonarr'];
       radarr?: AppSettings['radarr'];
     }) => {
@@ -315,7 +347,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const stampedJellyfin = stampNow(inviteSettings.jellyfin);
       const newSettings: AppSettings = {
         ...currentSettings,
-        jellyfin: stampedJellyfin,
+        // Invites set the backend mode; unset means fall back to legacy.
+        backendMode: inviteSettings.backendMode ?? 'mediarr',
+        mediarrServer: inviteSettings.mediarrServer
+          ? { ...inviteSettings.mediarrServer }
+          : currentSettings.mediarrServer,
         // Invites without arr settings leave any existing ones untouched.
         sonarr: inviteSettings.sonarr
           ? stampNow(inviteSettings.sonarr)
@@ -365,6 +401,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateRadarrSettings,
         updateIPTVSettings,
         updateLocalFilesSettings,
+        updateBackendMode,
+        updateMediarrServer,
         applyInviteSettings,
         clearAllSettings,
         clearJellyfinSettings,

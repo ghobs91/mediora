@@ -509,7 +509,25 @@ export interface LocalMediaItem {
 }
 
 // App Settings Types
+/**
+ * Which TV/movies backend the client talks to:
+ *  - 'mediarr':          legacy separate Sonarr + Radarr servers.
+ *  - 'mediarr-server':   a single mediora-server (Bobarr) instance that
+ *                        speaks both the Sonarr v3 and Radarr v3 APIs.
+ */
+export type BackendMode = 'mediarr' | 'mediarr-server';
+
+/** Config for the unified mediora-server (Bobarr) backend. */
+export interface MedioraServerConfig {
+  serverUrl: string;
+  apiKey: string;
+}
+
 export interface AppSettings {
+  /** Which TV/movies backend to use. Defaults to legacy 'mediarr'. */
+  backendMode?: BackendMode;
+  /** mediora-server (Bobarr) URL + single API key, used in 'mediarr-server' mode. */
+  mediarrServer?: MedioraServerConfig | null;
   jellyfin: {
     serverUrl: string;
     accessToken: string;
@@ -575,6 +593,10 @@ export type RootStackParamList = {
 export interface InvitePayload {
   v: 1;
   name: string;
+  /** Which backend the invitee should use. Defaults to legacy 'mediarr'. */
+  backendMode?: BackendMode;
+  /** mediora-server (Bobarr) config, used when backendMode is 'mediarr-server'. */
+  mediarrServer?: MedioraServerConfig | null;
   jellyfin: {
     serverUrl: string;
     username: string;

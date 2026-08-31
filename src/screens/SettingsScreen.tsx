@@ -17,8 +17,16 @@ import { FocusableButton, FocusableInput } from '../components';
 import { JellyfinService, SonarrService, RadarrService, LocalMediaService, IPTV_REGIONS, IPTVCountry } from '../services';
 import { useDeviceType } from '../hooks/useResponsive';
 import { InvitesSection } from './InvitesScreen';
+import { AppSettings, BackendMode } from '../types';
 
-type SettingsSection = 'jellyfin' | 'sonarr' | 'radarr' | 'livetv' | 'localfiles' | 'invites';
+type SettingsSection =
+  | 'jellyfin'
+  | 'backend'
+  | 'sonarr'
+  | 'radarr'
+  | 'livetv'
+  | 'localfiles'
+  | 'invites';
 
 export function SettingsScreen() {
   const {
@@ -28,6 +36,8 @@ export function SettingsScreen() {
     updateRadarrSettings,
     updateIPTVSettings,
     updateLocalFilesSettings,
+    updateBackendMode,
+    updateMediarrServer,
     clearJellyfinSettings,
   } = useSettings();
   const { isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled } =
@@ -86,6 +96,13 @@ export function SettingsScreen() {
             isMobile={isMobile}
           />
           <SettingsTab
+            title="Backend"
+            isSelected={activeSection === 'backend'}
+            isConnected={false}
+            onPress={() => setActiveSection('backend')}
+            isMobile={isMobile}
+          />
+          <SettingsTab
             title="Sonarr"
             isSelected={activeSection === 'sonarr'}
             isConnected={isSonarrConnected}
@@ -131,6 +148,14 @@ export function SettingsScreen() {
               settings={settings.jellyfin}
               onUpdate={updateJellyfinSettings}
               onClear={clearJellyfinSettings}
+            />
+          )}
+          {activeSection === 'backend' && (
+            <BackendSettings
+              backendMode={settings.backendMode}
+              mediarrServer={settings.mediarrServer}
+              onUpdateBackendMode={updateBackendMode}
+              onUpdateMediarrServer={updateMediarrServer}
             />
           )}
           {activeSection === 'sonarr' && (
@@ -756,6 +781,178 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
           </View>
         )}
       </View>
+    </View>
+  );
+}
+
+// Mediora Server (Bobarr) Backend Settings Section
+interface BackendSettingsProps {
+  backendMode: AppSettings['backendMode'];
+  mediarrServer: AppSettings['mediarrServer'];
+  onUpdateBackendMode: (mode: AppSettings['backendMode']) => Promise<void>;
+  onUpdateMediarrServer: (
+    config: AppSettings['mediarrServer'],
+  ) => Promise<void>;
+}
+
+function BackendSettings({
+  backendMode,
+  mediarrServer,
+  onUpdateBackendMode,
+  onUpdateMediarrServer,
+}: BackendSettingsProps) {
+  const [mode, setMode] = useState<BackendMode>(backendMode ?? 'mediarr');
+  const [serverUrl, setServerUrl] = useState(mediarrServer?.serverUrl || '');
+  const [apiKey, setApiKey] = useState(mediarrServer?.apiKey || '');
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // When switching to the mediora-server backend, prefill from saved config.
+  const handleModeSwitch = async (nextMode: BackendMode) => {
+    setMode(nextMode);
+    if (nextMode === 'mediarr-server' && mediarrServer) {
+      setServerUrl(mediarrServer.serverUrl);
+      setApiKey(mediarrServer.apiKey);
+    }
+    await onUpdateBackendMode(nextMode);
+  };
+
+  const normalizeUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return `http://${trimmed}`;
+    }
+    return trimmed;
+  };
+
+  const handleTest = async () => {
+    if (!serverUrl.trim() || !apiKey.trim()) return;
+
+    setIsTesting(true);
+    setTestResult(null);
+    setErrorMessage('');
+
+    try {
+      const normalizedUrl = normalizeUrl(serverUrl);
+      const service = new SonarrService(normalizedUrl, apiKey.trim());
+      const result = await service.testConnection();
+      setTestResult(result);
+
+      if (!result) {
+        setErrorMessage(
+          'Connection failed. Verify the URL and API key for your mediora-server.',
+        );
+      }
+    } catch (error) {
+      console.error('[Backend] Test error:', error);
+      setTestResult(false);
+      setErrorMessage('Network error. Server may not be reachable.');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      if (serverUrl.trim() && apiKey.trim()) {
+        await onUpdateMediarrServer({
+          serverUrl: normalizeUrl(serverUrl),
+          apiKey: apiKey.trim(),
+        });
+        setErrorMessage('');
+        setTestResult(null);
+      } else {
+        await onUpdateMediarrServer(null);
+      }
+    } catch (error) {
+      console.error('[Backend] Failed to save settings:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <View style={styles.sectionForm}>
+      <Text style={styles.sectionDescription}>
+        Choose how this device reaches the TV + movies backend. The mediora-server
+        (Bobarr) is a single instance that speaks both the Sonarr and Radarr v3
+        APIs; legacy mode uses separate Sonarr and Radarr servers.
+      </Text>
+
+      <View style={styles.loginMethodContainer}>
+        <Text style={styles.loginMethodLabel}>Backend:</Text>
+        <View style={styles.loginMethodButtons}>
+          <FocusableButton
+            title="Legacy"
+            onPress={() => handleModeSwitch('mediarr')}
+            variant={mode === 'mediarr' ? 'primary' : 'secondary'}
+            size="medium"
+            style={styles.loginMethodButton}
+          />
+          <FocusableButton
+            title="Mediora Server"
+            onPress={() => handleModeSwitch('mediarr-server')}
+            variant={mode === 'mediarr-server' ? 'primary' : 'secondary'}
+            size="medium"
+            style={styles.loginMethodButton}
+          />
+        </View>
+      </View>
+
+      {mode === 'mediarr-server' && (
+        <>
+          <Text style={styles.sectionDescription}>
+            Enter the mediora-server URL and its single API key.
+          </Text>
+          <FocusableInput
+            label="Server URL"
+            value={serverUrl}
+            onChangeText={setServerUrl}
+            placeholder="http://localhost:8787"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <FocusableInput
+            label="API Key"
+            value={apiKey}
+            onChangeText={setApiKey}
+            placeholder="Enter your mediora-server API key"
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+          />
+          {errorMessage !== '' && (
+            <Text style={styles.testFailure}>{errorMessage}</Text>
+          )}
+          {testResult !== null && (
+            <Text
+              style={[
+                styles.testResult,
+                testResult ? styles.testSuccess : styles.testFailure,
+              ]}>
+              {testResult ? 'Connection successful!' : 'Connection failed'}
+            </Text>
+          )}
+          <View style={styles.buttonRow}>
+            <FocusableButton
+              title="Test Connection"
+              onPress={handleTest}
+              loading={isTesting}
+              variant="secondary"
+              size="medium"
+            />
+            <FocusableButton
+              title="Save"
+              onPress={handleSave}
+              loading={isSaving}
+              size="medium"
+            />
+          </View>
+        </>
+      )}
     </View>
   );
 }

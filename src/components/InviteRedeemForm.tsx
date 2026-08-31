@@ -53,8 +53,20 @@ export function InviteRedeemForm({
   const [successMessage, setSuccessMessage] = useState<string>('');
 
   const willReplaceExisting = useMemo(() => {
-    return !!(settings.jellyfin || settings.sonarr || settings.radarr);
-  }, [settings.jellyfin, settings.sonarr, settings.radarr]);
+    return (
+      !!(
+        settings.jellyfin ||
+        settings.sonarr ||
+        settings.radarr ||
+        settings.mediarrServer
+      )
+    );
+  }, [
+    settings.jellyfin,
+    settings.sonarr,
+    settings.radarr,
+    settings.mediarrServer,
+  ]);
 
   const handleSubmitCode = async () => {
     setError('');
@@ -125,6 +137,10 @@ export function InviteRedeemForm({
           serverId: authResponse.ServerId,
           deviceId: service.getDeviceId(),
         },
+        backendMode: payload.backendMode ?? 'mediarr',
+        mediarrServer: payload.mediarrServer
+          ? { ...payload.mediarrServer }
+          : undefined,
         sonarr: payload.sonarr
           ? {
               serverUrl: payload.sonarr.serverUrl,
@@ -197,6 +213,18 @@ export function InviteRedeemForm({
           <SummaryRow label="Invite for" value={payload.name} />
           <SummaryRow label="Jellyfin" value={payload.jellyfin.serverUrl} />
           <SummaryRow label="Username" value={payload.jellyfin.username} />
+          <SummaryRow
+            label={
+              payload.backendMode === 'mediarr-server'
+                ? 'Mediora Server'
+                : 'Backend'
+            }
+            value={
+              payload.backendMode === 'mediarr-server'
+                ? payload.mediarrServer?.serverUrl || 'Not included'
+                : 'Legacy Sonarr + Radarr'
+            }
+          />
           <SummaryRow
             label="Sonarr"
             value={payload.sonarr ? payload.sonarr.serverUrl : 'Not included'}
