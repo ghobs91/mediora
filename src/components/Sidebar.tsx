@@ -6,6 +6,7 @@ import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass
 import Icon from 'react-native-vector-icons/Ionicons';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
+import { useSettings } from '../context';
 
 interface SidebarProps {
   currentRoute: string;
@@ -19,6 +20,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
+  const { settings } = useSettings();
   const drawerOpenRef = useRef(() => setIsDrawerOpen(true));
   const slideAnim = useRef(new Animated.Value(-320)).current;
 
@@ -74,7 +76,16 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
     { name: 'Invites', route: 'Invites', icon: 'ticket-outline', showInTabs: false },
   ];
 
-  const allNavItems = [...mainNavItems, ...libraryItems, ...settingsItems];
+  // In mediora-server mode the unified backend replaces Sonarr/Radarr,
+  // so hide the legacy entries to avoid configuring a dead path.
+  const showLegacyArr = settings.backendMode !== 'mediarr-server';
+  const visibleSettingsItems = settingsItems.filter(
+    item =>
+      showLegacyArr ||
+      (item.route !== 'SonarrSettings' && item.route !== 'RadarrSettings'),
+  );
+
+  const allNavItems = [...mainNavItems, ...libraryItems, ...visibleSettingsItems];
 
   const navItems = isMobile
     ? allNavItems.filter(item => !item.showInTabs)
@@ -175,7 +186,6 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
 
     const visibleMainItems = mainNavItems;
     const visibleLibraryItems = libraryItems;
-    const visibleSettingsItems = settingsItems;
 
     return (
       <>

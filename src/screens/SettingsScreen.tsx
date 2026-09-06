@@ -50,6 +50,17 @@ export function SettingsScreen() {
 
   const hasIPTVCountries = (settings.iptv?.selectedCountries?.length ?? 0) > 0;
 
+  // In mediora-server mode the unified backend replaces Sonarr/Radarr.
+  const showLegacyArr = settings.backendMode !== 'mediarr-server';
+
+  // If the mode flips while a legacy section is open (e.g. via invite
+  // redeem), fall back to the backend section instead of a blank screen.
+  useEffect(() => {
+    if (!showLegacyArr && (activeSection === 'sonarr' || activeSection === 'radarr')) {
+      setActiveSection('backend');
+    }
+  }, [showLegacyArr, activeSection]);
+
   const dynamicStyles = {
     contentContainer: {
       paddingTop: isMobile ? insets.top + 72 : 48, // Account for header bar on mobile
@@ -102,20 +113,24 @@ export function SettingsScreen() {
             onPress={() => setActiveSection('backend')}
             isMobile={isMobile}
           />
-          <SettingsTab
-            title="Sonarr"
-            isSelected={activeSection === 'sonarr'}
-            isConnected={isSonarrConnected}
-            onPress={() => setActiveSection('sonarr')}
-            isMobile={isMobile}
-          />
-          <SettingsTab
-            title="Radarr"
-            isSelected={activeSection === 'radarr'}
-            isConnected={isRadarrConnected}
-            onPress={() => setActiveSection('radarr')}
-            isMobile={isMobile}
-          />
+          {showLegacyArr && (
+            <SettingsTab
+              title="Sonarr"
+              isSelected={activeSection === 'sonarr'}
+              isConnected={isSonarrConnected}
+              onPress={() => setActiveSection('sonarr')}
+              isMobile={isMobile}
+            />
+          )}
+          {showLegacyArr && (
+            <SettingsTab
+              title="Radarr"
+              isSelected={activeSection === 'radarr'}
+              isConnected={isRadarrConnected}
+              onPress={() => setActiveSection('radarr')}
+              isMobile={isMobile}
+            />
+          )}
           <SettingsTab
             title="Live TV"
             isSelected={activeSection === 'livetv'}
@@ -158,13 +173,13 @@ export function SettingsScreen() {
               onUpdateMediarrServer={updateMediarrServer}
             />
           )}
-          {activeSection === 'sonarr' && (
+          {activeSection === 'sonarr' && showLegacyArr && (
             <SonarrSettings
               settings={settings.sonarr}
               onUpdate={updateSonarrSettings}
             />
           )}
-          {activeSection === 'radarr' && (
+          {activeSection === 'radarr' && showLegacyArr && (
             <RadarrSettings
               settings={settings.radarr}
               onUpdate={updateRadarrSettings}
