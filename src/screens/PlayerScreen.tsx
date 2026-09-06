@@ -183,18 +183,23 @@ export function PlayerScreen() {
         });
       }
 
-      // Check for saved position
-      let startPositionSeconds = 0;
-      if (itemDetails.UserData?.PlaybackPositionTicks && itemDetails.UserData.PlaybackPositionTicks > 300000000) {
-        startPositionSeconds = itemDetails.UserData.PlaybackPositionTicks / 10000000;
-        console.log(`[PlayerScreen] Resume position from server: ${Math.floor(startPositionSeconds)}s`);
-      } else {
-        const savedPosition = await playbackPositionService.getPosition(itemId);
-        if (savedPosition && savedPosition.positionSeconds > 30) {
-          startPositionSeconds = savedPosition.positionSeconds;
-          console.log(`[PlayerScreen] Resume position from local: ${Math.floor(startPositionSeconds)}s`);
-        }
+      // Check for saved position. Prefer the furthest position: if a server
+      // write failed (queued for retry), local is ahead; if another device
+      // advanced playback, the server is ahead. Max covers both.
+      const serverTicks = itemDetails.UserData?.PlaybackPositionTicks ?? 0;
+      const serverSeconds = serverTicks > 300000000 ? serverTicks / 10000000 : 0;
+      if (serverSeconds > 0) {
+        console.log(`[PlayerScreen] Resume position from server: ${Math.floor(serverSeconds)}s`);
       }
+      const savedPosition = await playbackPositionService.getPosition(itemId);
+      const localSeconds =
+        savedPosition && savedPosition.positionSeconds > 30
+          ? savedPosition.positionSeconds
+          : 0;
+      if (localSeconds > 0) {
+        console.log(`[PlayerScreen] Resume position from local: ${Math.floor(localSeconds)}s`);
+      }
+      const startPositionSeconds = Math.max(serverSeconds, localSeconds);
 
       savedPositionToRestore.current = startPositionSeconds;
       hasRestoredPosition.current = startPositionSeconds === 0;
@@ -243,13 +248,16 @@ export function PlayerScreen() {
         });
       }
 
-      // Report playback stopped to server
+      // Report playback stopped to server (queued for retry on failure,
+      // so background/kill doesn't lose resume state).
       if (currentJellyfin && currentPlaybackInfo?.MediaSources[0]) {
         currentJellyfin.reportPlaybackStopped(
           itemId,
           currentPlaybackInfo.MediaSources[0].Id,
           Math.floor(time * 10000000),
-        );
+        ).catch(error => {
+          console.warn('[PlayerScreen] Failed to report playback stopped:', error);
+        });
         currentJellyfin.stopEncodingSession();
       }
 
@@ -265,7 +273,8 @@ export function PlayerScreen() {
     setCurrentTime(data.currentTime);
     currentTimeRef.current = data.currentTime;
 
-    // Report progress every 10 seconds
+    // Report progress every 10 seconds (failures queue for retry server-side
+    // in JellyfinService; auth errors surface via console).
     const currentSecond = Math.floor(data.currentTime);
     if (jellyfin && playbackInfo?.MediaSources[0] && currentSecond % 10 === 0 && currentSecond !== lastProgressReport.current) {
       lastProgressReport.current = currentSecond;
@@ -275,7 +284,9 @@ export function PlayerScreen() {
         Math.floor(data.currentTime * 10000000),
         false,
         'Transcode',
-      );
+      ).catch(error => {
+        console.warn('[PlayerScreen] Failed to report playback progress:', error);
+      });
     }
   }, [jellyfin, playbackInfo, itemId]);
 

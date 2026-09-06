@@ -7,10 +7,15 @@ import {
   TMDBSeasonDetails,
   TMDBImagesResponse,
 } from '../types';
+import { fetchWithTimeout } from '../utils/http';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 const TMDB_API_KEY = 'dd47805cca8c2c3c59955bfa74b2b368';
+const TMDB_TIMEOUT_MS = 15000;
+const TMDB_MAX_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class TMDBService {
   private apiKey: string;
@@ -24,6 +29,31 @@ export class TMDBService {
     return params;
   }
 
+  // Timeout + retry with Retry-After respect. Returns the final response so
+  // callers keep their existing error messages; 429/5xx are retried first.
+  private async fetchWithPolicy(url: string, attempt = 0): Promise<Response> {
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(url, {}, TMDB_TIMEOUT_MS);
+    } catch (error) {
+      if (attempt + 1 < TMDB_MAX_ATTEMPTS) {
+        await sleep(500 * 2 ** attempt);
+        return this.fetchWithPolicy(url, attempt + 1);
+      }
+      throw error;
+    }
+    if (response.status === 429 && attempt + 1 < TMDB_MAX_ATTEMPTS) {
+      const retryAfterSec = Number(response.headers.get('Retry-After')) || 2;
+      await sleep(Math.min(Math.max(retryAfterSec, 1), 10) * 1000);
+      return this.fetchWithPolicy(url, attempt + 1);
+    }
+    if (response.status >= 500 && attempt + 1 < TMDB_MAX_ATTEMPTS) {
+      await sleep(500 * 2 ** attempt);
+      return this.fetchWithPolicy(url, attempt + 1);
+    }
+    return response;
+  }
+
   // Search
   async searchMovies(
     query: string,
@@ -35,7 +65,7 @@ export class TMDBService {
       include_adult: 'false',
     }));
 
-    const response = await fetch(`${BASE_URL}/search/movie?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/search/movie?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search movies: ${response.status}`);
@@ -58,7 +88,7 @@ export class TMDBService {
       include_adult: 'false',
     }));
 
-    const response = await fetch(`${BASE_URL}/search/tv?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/search/tv?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search TV shows: ${response.status}`);
@@ -84,7 +114,7 @@ export class TMDBService {
       include_adult: 'false',
     }));
 
-    const response = await fetch(`${BASE_URL}/search/multi?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/search/multi?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to search: ${response.status}`);
@@ -109,7 +139,7 @@ export class TMDBService {
       external_source: source,
     }));
 
-    const response = await fetch(`${BASE_URL}/find/${externalId}?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/find/${externalId}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to find by external ID: ${response.status}`);
@@ -137,7 +167,7 @@ export class TMDBService {
       append_to_response: 'external_ids,credits,recommendations',
     }));
 
-    const response = await fetch(`${BASE_URL}/movie/${movieId}?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/movie/${movieId}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get movie details: ${response.status}`);
@@ -151,7 +181,7 @@ export class TMDBService {
       append_to_response: 'external_ids,credits,recommendations',
     }));
 
-    const response = await fetch(`${BASE_URL}/tv/${tvId}?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/tv/${tvId}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get TV details: ${response.status}`);
@@ -163,7 +193,7 @@ export class TMDBService {
   async getSeasonDetails(tvId: number, seasonNumber: number): Promise<TMDBSeasonDetails> {
     const params = this.addApiKey(new URLSearchParams());
 
-    const response = await fetch(`${BASE_URL}/tv/${tvId}/season/${seasonNumber}?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/tv/${tvId}/season/${seasonNumber}?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get season details: ${response.status}`);
@@ -175,7 +205,7 @@ export class TMDBService {
   async getTVImages(tvId: number | string): Promise<TMDBImagesResponse> {
     const params = this.addApiKey(new URLSearchParams());
 
-    const response = await fetch(`${BASE_URL}/tv/${tvId}/images?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/tv/${tvId}/images?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get TV images: ${response.status}`);
@@ -187,7 +217,7 @@ export class TMDBService {
   async getMovieImages(movieId: number | string): Promise<TMDBImagesResponse> {
     const params = this.addApiKey(new URLSearchParams());
 
-    const response = await fetch(`${BASE_URL}/movie/${movieId}/images?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/movie/${movieId}/images?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get movie images: ${response.status}`);
@@ -206,7 +236,7 @@ export class TMDBService {
       page: String(page),
     }));
 
-    const response = await fetch(
+    const response = await this.fetchWithPolicy(
       `${BASE_URL}/trending/${mediaType}/${timeWindow}?${params}`,
     );
 
@@ -223,7 +253,7 @@ export class TMDBService {
       page: String(page),
     }));
 
-    const response = await fetch(`${BASE_URL}/movie/popular?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/movie/popular?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get popular movies: ${response.status}`);
@@ -244,7 +274,7 @@ export class TMDBService {
       page: String(page),
     }));
 
-    const response = await fetch(`${BASE_URL}/tv/popular?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/tv/popular?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get popular TV: ${response.status}`);
@@ -264,7 +294,7 @@ export class TMDBService {
   async getMovieGenres(): Promise<{ genres: { id: number; name: string }[] }> {
     const params = this.addApiKey(new URLSearchParams());
 
-    const response = await fetch(`${BASE_URL}/genre/movie/list?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/genre/movie/list?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get movie genres: ${response.status}`);
@@ -276,7 +306,7 @@ export class TMDBService {
   async getTVGenres(): Promise<{ genres: { id: number; name: string }[] }> {
     const params = this.addApiKey(new URLSearchParams());
 
-    const response = await fetch(`${BASE_URL}/genre/tv/list?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/genre/tv/list?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get TV genres: ${response.status}`);
@@ -300,7 +330,7 @@ export class TMDBService {
       params.append('with_genres', String(genreId));
     }
 
-    const response = await fetch(`${BASE_URL}/discover/movie?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/discover/movie?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to discover movies: ${response.status}`);
@@ -330,7 +360,7 @@ export class TMDBService {
       params.append('with_genres', String(genreId));
     }
 
-    const response = await fetch(`${BASE_URL}/discover/tv?${params}`);
+    const response = await this.fetchWithPolicy(`${BASE_URL}/discover/tv?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to discover TV shows: ${response.status}`);

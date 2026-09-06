@@ -10,32 +10,39 @@ const EPG_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12 hours before forced re-fet
 const EPG_STALE_THRESHOLD = 3 * 60 * 60 * 1000; // 3 hours before background revalidation
 const HOURS_AHEAD_TO_KEEP = 48; // Parse 48 hours of programs for longer cache life
 const HOURS_BEHIND_TO_KEEP = 2; // Keep recently ended programs (accounts for minor clock drift)
+const MAX_DECODED_XML_BYTES = 80 * 1024 * 1024; // Refuse to decode beyond this (OOM guard)
+
+/** Yield to the RN event loop so multi-MB gunzip/parse doesn't freeze tvOS UI. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /**
  * Decode UTF-8 bytes to string
- * React Native doesn't have TextDecoder, so we implement our own
+ * React Native doesn't have TextDecoder, so we implement our own.
+ * Chunked with periodic yields for large buffers.
  */
-function decodeUtf8(bytes: Uint8Array): string {
-  let result = '';
+function decodeUtf8Sync(bytes: Uint8Array): string {
+  const parts: string[] = [];
   let i = 0;
-  
+
   while (i < bytes.length) {
     const byte1 = bytes[i++];
-    
+
     if (byte1 < 0x80) {
       // Single-byte character (ASCII)
-      result += String.fromCharCode(byte1);
+      parts.push(String.fromCharCode(byte1));
     } else if (byte1 < 0xE0) {
       // Two-byte character
       const byte2 = bytes[i++];
       // eslint-disable-next-line no-bitwise
-      result += String.fromCharCode(((byte1 & 0x1F) << 6) | (byte2 & 0x3F));
+      parts.push(String.fromCharCode(((byte1 & 0x1F) << 6) | (byte2 & 0x3F)));
     } else if (byte1 < 0xF0) {
       // Three-byte character
       const byte2 = bytes[i++];
       const byte3 = bytes[i++];
       // eslint-disable-next-line no-bitwise
-      result += String.fromCharCode(((byte1 & 0x0F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F));
+      parts.push(String.fromCharCode(((byte1 & 0x0F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F)));
     } else {
       // Four-byte character (surrogate pair for characters outside BMP)
       const byte2 = bytes[i++];
@@ -46,17 +53,35 @@ function decodeUtf8(bytes: Uint8Array): string {
       // Convert to surrogate pair
       const highSurrogate = Math.floor((codePoint - 0x10000) / 0x400) + 0xD800;
       const lowSurrogate = ((codePoint - 0x10000) % 0x400) + 0xDC00;
-      result += String.fromCharCode(highSurrogate, lowSurrogate);
+      parts.push(String.fromCharCode(highSurrogate, lowSurrogate));
     }
   }
-  
-  return result;
+
+  return parts.join('');
+}
+
+async function decodeUtf8(bytes: Uint8Array): Promise<string> {
+  // Small payloads stay synchronous; large ones decode in slices with yields.
+  const SLICE_BYTES = 2 * 1024 * 1024;
+  if (bytes.length <= SLICE_BYTES) {
+    return decodeUtf8Sync(bytes);
+  }
+  const parts: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += SLICE_BYTES) {
+    parts.push(decodeUtf8Sync(bytes.subarray(offset, offset + SLICE_BYTES)));
+    await yieldToEventLoop();
+  }
+  return parts.join('');
 }
 
 // Simple XML parser for XMLTV format EPG data
 // Only keeps programs within the time window to reduce memory usage
-// Uses indexOf-based parsing for performance on large files
-function parseXMLTV(xmlString: string): EPGChannel[] {
+// Uses indexOf-based parsing for performance on large files.
+// Async with periodic event-loop yields so multi-MB files don't jank tvOS.
+async function parseXMLTV(
+  xmlString: string,
+  onProgress?: (message: string) => void,
+): Promise<EPGChannel[]> {
   const channels: Map<string, EPGChannel> = new Map();
   
   // Calculate time window - keep programs from recent past to 48 hours ahead
@@ -124,10 +149,13 @@ function parseXMLTV(xmlString: string): EPGChannel[] {
       if (channelCount <= 3) {
         console.log(`[EPG Parser] Sample channel: id="${channelId}", name="${displayName}"`);
       }
-      
+
       // Progress every 1000 channels
       if (channelCount % 1000 === 0) {
         console.log(`[EPG Parser] Parsed ${channelCount} channels...`);
+      }
+      if (channelCount % 250 === 0) {
+        await yieldToEventLoop();
       }
     }
     
@@ -232,20 +260,29 @@ function parseXMLTV(xmlString: string): EPGChannel[] {
       });
       
       programCount++;
-      
+
+      if (programCount % 2000 === 0) {
+        await yieldToEventLoop();
+      }
+
       // Progress logging every 2 seconds
       if (Date.now() - lastProgressTime > 2000) {
         console.log(`[EPG Parser] Parsed ${programCount} programs, ${timeFilteredCount} time-filtered...`);
+        onProgress?.(`Parsing EPG... ${programCount} programs`);
         lastProgressTime = Date.now();
       }
     }
     
     console.log(`[EPG Parser] Parsed ${programCount} programs (skipped ${skippedCount}, time-filtered ${timeFilteredCount})`);
-    
-    // Sort programs by start time for each channel
-    channels.forEach(channel => {
+
+    // Sort programs by start time for each channel (batched with yields)
+    let sorted = 0;
+    for (const channel of channels.values()) {
       channel.programs.sort((a, b) => a.start.getTime() - b.start.getTime());
-    });
+      if (++sorted % 250 === 0) {
+        await yieldToEventLoop();
+      }
+    }
     
     console.log(`[EPG] Parsed ${channels.size} channels with programs for next ${HOURS_AHEAD_TO_KEEP} hours`);
     return Array.from(channels.values());
@@ -384,9 +421,16 @@ export class EPGService {
       const prunedChannels = this.pruneExpiredPrograms(channels);
       const totalPrograms = prunedChannels.reduce((sum, ch) => sum + ch.programs.length, 0);
       console.log(`[EPG] Loaded ${prunedChannels.length} channels (${totalPrograms} active programs) from storage cache (${(cacheAge / 3600000).toFixed(1)}h old)`);
-      
-      // If all programs have expired, treat cache as invalid
+
+      // If all programs expired but the cache itself is fresh, still treat it
+      // as valid (e.g. overnight gap with no broadcasts). The caller triggers
+      // background revalidation for stale caches; returning null here would
+      // force a full multi-MB refetch storm on every prime-time expiry.
       if (totalPrograms === 0) {
+        if (cacheAge < EPG_STALE_THRESHOLD) {
+          console.log('[EPG] Cached programs all expired but cache is fresh — using as-is');
+          return { channels: prunedChannels, timestamp: parsed.timestamp };
+        }
         console.log('[EPG] All cached programs have expired, cache is stale');
         return null;
       }
@@ -686,6 +730,8 @@ export class EPGService {
                     console.log(`[EPG] Layer ${layer} output size: ${(decompressed.length / 1024 / 1024).toFixed(2)}MB`);
                     console.log(`[EPG] Layer ${layer} first 10 bytes: ${Array.from(decompressed.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
                     textBytes = decompressed;
+                    // Let the UI breathe between (potentially large) layers.
+                    await yieldToEventLoop();
                   } catch (err: any) {
                     console.log(`[EPG] Layer ${layer} decompression failed: ${err.message}`);
                     break;
@@ -706,8 +752,12 @@ export class EPGService {
               textBytes = rawBytes;
             }
             
-            // Decode UTF-8 bytes to string
-            xmlText = decodeUtf8(textBytes);
+            // Decode UTF-8 bytes to string (chunked with event-loop yields)
+            if (textBytes.length > MAX_DECODED_XML_BYTES) {
+              console.warn(`[EPG] Skipping ${(textBytes.length / 1024 / 1024).toFixed(1)}MB payload from ${source} (exceeds ${(MAX_DECODED_XML_BYTES / 1024 / 1024).toFixed(0)}MB guard)`);
+              continue;
+            }
+            xmlText = await decodeUtf8(textBytes);
             console.log(`[EPG] Decoded to ${(xmlText.length / 1024 / 1024).toFixed(2)}MB of text`);
             console.log(`[EPG] First 200 chars: ${xmlText.substring(0, 200)}`);
           } catch (decompressError) {
@@ -721,7 +771,7 @@ export class EPGService {
           }
           
           onProgress?.(`Parsing EPG for ${countryCode.toUpperCase()}...`);
-          const epgChannels = parseXMLTV(xmlText);
+          const epgChannels = await parseXMLTV(xmlText, onProgress);
           if (epgChannels.length > 0) {
             console.log(`[EPG] Parsed ${epgChannels.length} channels with ${epgChannels.reduce((sum, c) => sum + c.programs.length, 0)} programs from ${source}`);
             allEpgChannels.push(...epgChannels);

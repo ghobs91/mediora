@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import { useServices } from '../context';
 import { MediaCard, LoadingScreen } from '../components';
@@ -53,6 +53,7 @@ type FilterOption = 'all' | 'watched' | 'unwatched' | 'favorites';
 
 export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const { jellyfin, sonarr, radarr, tmdb, localMedia, isJellyfinConnected, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled } = useServices();
   const [_libraries, setLibraries] = useState<JellyfinLibrary[]>([]);
   const [selectedLibrary, setSelectedLibrary] = useState<JellyfinLibrary | null>(null);
@@ -389,19 +390,17 @@ export function LibraryScreen({ filterType }: LibraryScreenProps = {}) {
     }
   }, [selectedLibrary, isSonarrConnected, isRadarrConnected, isLocalFilesEnabled, loadLibraryItemsBase]);
 
-  // Load and refresh download progress for Sonarr
+  // Load and refresh download progress for Sonarr (focus-gated, 30s)
   useEffect(() => {
-    if (isSonarrConnected) {
+    if (!isSonarrConnected || !isFocused) return;
+    loadSonarrDownloadProgress();
+
+    const interval = setInterval(() => {
       loadSonarrDownloadProgress();
+    }, 30000);
 
-      // Refresh progress every 10 seconds
-      const interval = setInterval(() => {
-        loadSonarrDownloadProgress();
-      }, 10000);
-
-      return () => clearInterval(interval);
-    }
-  }, [isSonarrConnected, loadSonarrDownloadProgress]);
+    return () => clearInterval(interval);
+  }, [isSonarrConnected, isFocused, loadSonarrDownloadProgress]);
 
   const handleItemPress = async (item: CombinedLibraryItem) => {
     if (item.source === 'jellyfin') {

@@ -8,12 +8,23 @@ import {
   JellyfinUser,
   JellyfinUserPolicy,
 } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getHDRCapabilities } from './hdrSupport';
 
 const APP_NAME = 'Mediora';
 const APP_VERSION = '1.0.0';
 const DEFAULT_TIMEOUT = 30000; // 30 seconds for most requests
 const PLAYBACK_TIMEOUT = 60000; // 60 seconds for playback info (server may need to analyze media)
+const PLAYBACK_REPORT_TIMEOUT = 10000;
+const PLAYBACK_REPORT_QUEUE_KEY = '@mediora/playback_reports';
+const PLAYBACK_REPORT_QUEUE_MAX = 50;
+const PLAYBACK_REPORT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+interface QueuedPlaybackReport {
+  path: string;
+  body: Record<string, unknown>;
+  at: number;
+}
 
 function generateDeviceId(): string {
   return 'mediora-tvos-' + Math.random().toString(36).substring(2, 15);
@@ -998,6 +1009,107 @@ export class JellyfinService {
   }
 
   // Playback reporting
+  // Reports are queued in AsyncStorage on network failure and flushed on the
+  // next successful report, so background/kill during unmount doesn't lose
+  // resume state. Auth errors (401/403) still throw — queuing those would
+  // just replay a rejection.
+  private async loadReportQueue(): Promise<QueuedPlaybackReport[]> {
+    try {
+      const stored = await AsyncStorage.getItem(PLAYBACK_REPORT_QUEUE_KEY);
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveReportQueue(queue: QueuedPlaybackReport[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(
+        PLAYBACK_REPORT_QUEUE_KEY,
+        JSON.stringify(queue.slice(-PLAYBACK_REPORT_QUEUE_MAX)),
+      );
+    } catch (error) {
+      console.error('[Jellyfin] Failed to persist playback report queue:', error);
+    }
+  }
+
+  private async enqueueReport(report: QueuedPlaybackReport): Promise<void> {
+    const queue = await this.loadReportQueue();
+    queue.push(report);
+    await this.saveReportQueue(queue);
+  }
+
+  private async flushReportQueue(): Promise<void> {
+    const queue = await this.loadReportQueue();
+    if (queue.length === 0) return;
+    const fresh = queue.filter(
+      report => Date.now() - report.at < PLAYBACK_REPORT_MAX_AGE_MS,
+    );
+    let sent = 0;
+    for (const report of fresh) {
+      try {
+        const response = await fetchWithTimeout(
+          `${this.serverUrl}${report.path}`,
+          {
+            method: 'POST',
+            headers: getAuthHeader(this.accessToken, this.deviceId),
+            body: JSON.stringify(report.body),
+          },
+          PLAYBACK_REPORT_TIMEOUT,
+        );
+        if (response.status === 401 || response.status === 403) {
+          console.warn('[Jellyfin] Dropping queued playback report (auth):', report.path);
+          sent += 1;
+          continue;
+        }
+        if (!response.ok) break;
+        sent += 1;
+      } catch {
+        break;
+      }
+    }
+    if (sent > 0 || fresh.length !== queue.length) {
+      await this.saveReportQueue(fresh.slice(sent));
+    }
+  }
+
+  private async postPlaybackReport(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
+    // Best-effort flush first so ordering is roughly preserved.
+    try {
+      await this.flushReportQueue();
+    } catch {
+      // Flush failures are non-fatal; the current report still goes out.
+    }
+    try {
+      const response = await fetchWithTimeout(
+        `${this.serverUrl}${path}`,
+        {
+          method: 'POST',
+          headers: getAuthHeader(this.accessToken, this.deviceId),
+          body: JSON.stringify(body),
+        },
+        PLAYBACK_REPORT_TIMEOUT,
+      );
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Playback report rejected: ${response.status}`);
+      }
+      if (!response.ok) {
+        await this.enqueueReport({ path, body, at: Date.now() });
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Playback report rejected')) {
+        throw error;
+      }
+      console.warn('[Jellyfin] Playback report failed, queued for retry:', error);
+      await this.enqueueReport({ path, body, at: Date.now() });
+    }
+  }
+
   async reportPlaybackStart(
     itemId: string,
     mediaSourceId: string,
@@ -1008,19 +1120,15 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    await fetch(`${this.serverUrl}/Sessions/Playing`, {
-      method: 'POST',
-      headers: getAuthHeader(this.accessToken, this.deviceId),
-      body: JSON.stringify({
-        ItemId: itemId,
-        MediaSourceId: mediaSourceId,
-        PositionTicks: positionTicks,
-        PlaySessionId: this.playSessionId,
-        CanSeek: true,
-        IsPaused: false,
-        IsMuted: false,
-        PlayMethod: playMethod,
-      }),
+    await this.postPlaybackReport('/Sessions/Playing', {
+      ItemId: itemId,
+      MediaSourceId: mediaSourceId,
+      PositionTicks: positionTicks,
+      PlaySessionId: this.playSessionId,
+      CanSeek: true,
+      IsPaused: false,
+      IsMuted: false,
+      PlayMethod: playMethod,
     });
   }
 
@@ -1035,19 +1143,15 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    await fetch(`${this.serverUrl}/Sessions/Playing/Progress`, {
-      method: 'POST',
-      headers: getAuthHeader(this.accessToken, this.deviceId),
-      body: JSON.stringify({
-        ItemId: itemId,
-        MediaSourceId: mediaSourceId,
-        PositionTicks: positionTicks,
-        PlaySessionId: this.playSessionId,
-        CanSeek: true,
-        IsPaused: isPaused,
-        IsMuted: false,
-        PlayMethod: playMethod,
-      }),
+    await this.postPlaybackReport('/Sessions/Playing/Progress', {
+      ItemId: itemId,
+      MediaSourceId: mediaSourceId,
+      PositionTicks: positionTicks,
+      PlaySessionId: this.playSessionId,
+      CanSeek: true,
+      IsPaused: isPaused,
+      IsMuted: false,
+      PlayMethod: playMethod,
     });
   }
 
@@ -1060,15 +1164,11 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    await fetch(`${this.serverUrl}/Sessions/Playing/Stopped`, {
-      method: 'POST',
-      headers: getAuthHeader(this.accessToken, this.deviceId),
-      body: JSON.stringify({
-        ItemId: itemId,
-        MediaSourceId: mediaSourceId,
-        PositionTicks: positionTicks,
-        PlaySessionId: this.playSessionId,
-      }),
+    await this.postPlaybackReport('/Sessions/Playing/Stopped', {
+      ItemId: itemId,
+      MediaSourceId: mediaSourceId,
+      PositionTicks: positionTicks,
+      PlaySessionId: this.playSessionId,
     });
   }
 

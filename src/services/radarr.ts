@@ -4,10 +4,14 @@ import {
   RadarrQualityProfile,
   RadarrQueueItem,
 } from '../types';
+import { fetchWithRetry } from '../utils/http';
+
+const MOVIE_LIST_TTL_MS = 60000;
 
 export class RadarrService {
   private serverUrl: string;
   private apiKey: string;
+  private movieCache: { data: RadarrMovie[]; at: number } | null = null;
 
   constructor(serverUrl: string, apiKey: string) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
@@ -19,6 +23,17 @@ export class RadarrService {
       'X-Api-Key': this.apiKey,
       'Content-Type': 'application/json',
     };
+  }
+
+  private request(path: string, init: RequestInit = {}): Promise<Response> {
+    return fetchWithRetry(`${this.serverUrl}${path}`, {
+      ...init,
+      headers: { ...this.getHeaders(), ...init.headers },
+    });
+  }
+
+  public clearCache(): void {
+    this.movieCache = null;
   }
 
   // System
@@ -56,9 +71,7 @@ export class RadarrService {
 
   // Root Folders
   async getRootFolders(): Promise<RadarrRootFolder[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/rootFolder`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request('/api/v3/rootFolder');
 
     if (!response.ok) {
       throw new Error(`Failed to get root folders: ${response.status}`);
@@ -69,9 +82,7 @@ export class RadarrService {
 
   // Quality Profiles
   async getQualityProfiles(): Promise<RadarrQualityProfile[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/qualityprofile`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request('/api/v3/qualityprofile');
 
     if (!response.ok) {
       throw new Error(`Failed to get quality profiles: ${response.status}`);
@@ -82,21 +93,25 @@ export class RadarrService {
 
   // Movies
   async getAllMovies(): Promise<RadarrMovie[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/movie`, {
-      headers: this.getHeaders(),
-    });
+    if (
+      this.movieCache &&
+      Date.now() - this.movieCache.at < MOVIE_LIST_TTL_MS
+    ) {
+      return this.movieCache.data;
+    }
+    const response = await this.request('/api/v3/movie');
 
     if (!response.ok) {
       throw new Error(`Failed to get movies: ${response.status}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    this.movieCache = { data, at: Date.now() };
+    return data;
   }
 
   async getMovieById(id: number): Promise<RadarrMovie> {
-    const response = await fetch(`${this.serverUrl}/api/v3/movie/${id}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request(`/api/v3/movie/${id}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get movie: ${response.status}`);
@@ -107,12 +122,7 @@ export class RadarrService {
 
   async lookupMovie(term: string): Promise<RadarrMovie[]> {
     const params = new URLSearchParams({ term });
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/movie/lookup?${params}`,
-      {
-        headers: this.getHeaders(),
-      },
-    );
+    const response = await this.request(`/api/v3/movie/lookup?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to lookup movie: ${response.status}`);
@@ -123,12 +133,7 @@ export class RadarrService {
 
   async lookupMovieByTmdbId(tmdbId: number): Promise<RadarrMovie> {
     const params = new URLSearchParams({ tmdbId: String(tmdbId) });
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/movie/lookup/tmdb?${params}`,
-      {
-        headers: this.getHeaders(),
-      },
-    );
+    const response = await this.request(`/api/v3/movie/lookup/tmdb?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to lookup movie by TMDB ID: ${response.status}`);
@@ -139,12 +144,7 @@ export class RadarrService {
 
   async lookupMovieByImdbId(imdbId: string): Promise<RadarrMovie[]> {
     const params = new URLSearchParams({ term: `imdb:${imdbId}` });
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/movie/lookup?${params}`,
-      {
-        headers: this.getHeaders(),
-      },
-    );
+    const response = await this.request(`/api/v3/movie/lookup?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to lookup movie by IMDB ID: ${response.status}`);
@@ -185,6 +185,7 @@ export class RadarrService {
       throw new Error(`Failed to add movie: ${response.status} - ${error}`);
     }
 
+    this.clearCache();
     return response.json();
   }
 
@@ -204,6 +205,7 @@ export class RadarrService {
     if (!response.ok) {
       throw new Error(`Failed to delete movie: ${response.status}`);
     }
+    this.clearCache();
   }
 
   // Check if movie exists by TMDB ID
@@ -215,11 +217,8 @@ export class RadarrService {
   // Queue (for download progress)
   async getQueue(): Promise<{ records: RadarrQueueItem[]; totalRecords: number }> {
     try {
-      const response = await fetch(
-        `${this.serverUrl}/api/v3/queue?includeUnknownMovieItems=false&includeMovie=true`,
-        {
-          headers: this.getHeaders(),
-        },
+      const response = await this.request(
+        '/api/v3/queue?includeUnknownMovieItems=false&includeMovie=true',
       );
 
       if (!response.ok) {

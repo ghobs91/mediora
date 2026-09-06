@@ -6,10 +6,14 @@ import {
   SonarrEpisodeFile,
   SonarrQueueItem,
 } from '../types';
+import { fetchWithRetry } from '../utils/http';
+
+const SERIES_LIST_TTL_MS = 60000;
 
 export class SonarrService {
   private serverUrl: string;
   private apiKey: string;
+  private seriesCache: { data: SonarrSeries[]; at: number } | null = null;
 
   constructor(serverUrl: string, apiKey: string) {
     this.serverUrl = serverUrl.trim().replace(/\/$/, '');
@@ -26,6 +30,17 @@ export class SonarrService {
       'X-Api-Key': this.apiKey,
       'Content-Type': 'application/json',
     };
+  }
+
+  private request(path: string, init: RequestInit = {}): Promise<Response> {
+    return fetchWithRetry(`${this.serverUrl}${path}`, {
+      ...init,
+      headers: { ...this.getHeaders(), ...init.headers },
+    });
+  }
+
+  public clearCache(): void {
+    this.seriesCache = null;
   }
 
   // System
@@ -71,9 +86,7 @@ export class SonarrService {
 
   // Root Folders
   async getRootFolders(): Promise<SonarrRootFolder[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/rootFolder`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request('/api/v3/rootFolder');
 
     if (!response.ok) {
       throw new Error(`Failed to get root folders: ${response.status}`);
@@ -84,9 +97,7 @@ export class SonarrService {
 
   // Quality Profiles
   async getQualityProfiles(): Promise<SonarrQualityProfile[]> {
-    const response = await fetch(`${this.serverUrl}/api/v3/qualityprofile`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request('/api/v3/qualityprofile');
 
     if (!response.ok) {
       throw new Error(`Failed to get quality profiles: ${response.status}`);
@@ -97,16 +108,24 @@ export class SonarrService {
 
   // Series
   async getAllSeries(): Promise<SonarrSeries[]> {
+    // Polling screens call checkSeriesExists every 10s; cache the full list
+    // briefly so each tick isn't a full-table fetch.
+    if (
+      this.seriesCache &&
+      Date.now() - this.seriesCache.at < SERIES_LIST_TTL_MS
+    ) {
+      return this.seriesCache.data;
+    }
     try {
-      const response = await fetch(`${this.serverUrl}/api/v3/series`, {
-        headers: this.getHeaders(),
-      });
+      const response = await this.request('/api/v3/series');
 
       if (!response.ok) {
         throw new Error(`Failed to get series: ${response.status}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      this.seriesCache = { data, at: Date.now() };
+      return data;
     } catch (error) {
       console.error('[Sonarr] Failed to get series:', error);
       if (error instanceof Error && error.message.includes('Network request failed')) {
@@ -118,9 +137,7 @@ export class SonarrService {
   }
 
   async getSeriesById(id: number): Promise<SonarrSeries> {
-    const response = await fetch(`${this.serverUrl}/api/v3/series/${id}`, {
-      headers: this.getHeaders(),
-    });
+    const response = await this.request(`/api/v3/series/${id}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get series: ${response.status}`);
@@ -131,12 +148,7 @@ export class SonarrService {
 
   async lookupSeries(term: string): Promise<SonarrSeries[]> {
     const params = new URLSearchParams({ term });
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/series/lookup?${params}`,
-      {
-        headers: this.getHeaders(),
-      },
-    );
+    const response = await this.request(`/api/v3/series/lookup?${params}`);
 
     if (!response.ok) {
       throw new Error(`Failed to lookup series: ${response.status}`);
@@ -155,7 +167,7 @@ export class SonarrService {
     console.log('[Sonarr] API Key (first 8 chars):', this.apiKey.substring(0, 8) + '...');
     console.log('[Sonarr] Headers:', { ...headers, 'X-Api-Key': headers['X-Api-Key'].substring(0, 8) + '...' });
     
-    const response = await fetch(url, { headers });
+    const response = await this.request(`/api/v3/series/lookup?${params}`);
 
     console.log('[Sonarr] Response status:', response.status);
     console.log('[Sonarr] Response headers:', JSON.stringify([...response.headers.entries()]));
@@ -216,6 +228,7 @@ export class SonarrService {
       throw new Error(`Failed to add series: ${response.status} - ${error}`);
     }
 
+    this.clearCache();
     return response.json();
   }
 
@@ -235,6 +248,7 @@ export class SonarrService {
     if (!response.ok) {
       throw new Error(`Failed to delete series: ${response.status}`);
     }
+    this.clearCache();
   }
 
   // Check if series exists by TVDB ID
@@ -245,11 +259,8 @@ export class SonarrService {
 
   // Episodes
   async getEpisodesBySeriesId(seriesId: number): Promise<SonarrEpisode[]> {
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/episode?seriesId=${seriesId}`,
-      {
-        headers: this.getHeaders(),
-      },
+    const response = await this.request(
+      `/api/v3/episode?seriesId=${seriesId}`,
     );
 
     if (!response.ok) {
@@ -266,11 +277,8 @@ export class SonarrService {
 
   // Episode Files
   async getEpisodeFilesBySeriesId(seriesId: number): Promise<SonarrEpisodeFile[]> {
-    const response = await fetch(
-      `${this.serverUrl}/api/v3/episodefile?seriesId=${seriesId}`,
-      {
-        headers: this.getHeaders(),
-      },
+    const response = await this.request(
+      `/api/v3/episodefile?seriesId=${seriesId}`,
     );
 
     if (!response.ok) {
@@ -284,11 +292,8 @@ export class SonarrService {
   async getQueue(): Promise<{ records: SonarrQueueItem[]; totalRecords: number }> {
     try {
       // Request up to 1000 items to ensure we get all queue items
-      const response = await fetch(
-        `${this.serverUrl}/api/v3/queue?pageSize=1000&includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true`,
-        {
-          headers: this.getHeaders(),
-        },
+      const response = await this.request(
+        '/api/v3/queue?pageSize=1000&includeUnknownSeriesItems=false&includeSeries=true&includeEpisode=true',
       );
 
       if (!response.ok) {

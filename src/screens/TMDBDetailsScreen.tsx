@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useServices, useSettings } from '../context';
 import { FocusableButton, QualityProfileSelector } from '../components';
@@ -28,6 +28,7 @@ export function TMDBDetailsScreen() {
   const { tmdb, sonarr, radarr, jellyfin, isSonarrConnected, isRadarrConnected, isJellyfinConnected } = useServices();
   const { settings } = useSettings();
   const { item, mediaType } = route.params;
+  const isFocused = useIsFocused();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Responsive values
@@ -107,10 +108,12 @@ export function TMDBDetailsScreen() {
     }
   }, [selectedSeasonNumber, details]);
 
-  // Fetch queue data for download progress
+  // Fetch queue data for download progress (focus-gated, backs off on errors)
   useEffect(() => {
-    if (!alreadyExists) return;
+    if (!alreadyExists || !isFocused) return;
 
+    let failures = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
     const fetchQueue = async () => {
       try {
         if (mediaType === 'movie' && radarr) {
@@ -129,17 +132,26 @@ export function TMDBDetailsScreen() {
             }
           }
         }
+        failures = 0;
       } catch (error) {
+        failures += 1;
         console.error('[TMDBDetailsScreen] Failed to fetch queue:', error);
+        // Back off: stop polling after 3 consecutive failures until refocus.
+        if (failures >= 3 && interval) {
+          clearInterval(interval);
+          interval = null;
+        }
       }
     };
 
     fetchQueue();
-    // Poll for updates every 10 seconds
-    const interval = setInterval(fetchQueue, 10000);
+    // Poll every 30 seconds (was 10s full-list scans); server caches lists 60s.
+    interval = setInterval(fetchQueue, 30000);
 
-    return () => clearInterval(interval);
-  }, [alreadyExists, mediaType, item.id, details, radarr, sonarr]);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [alreadyExists, isFocused, mediaType, item.id, details, radarr, sonarr]);
 
   const loadDetails = async () => {
     if (!tmdb) return;
