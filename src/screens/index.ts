@@ -3,6 +3,7 @@ export { LibraryScreen } from './LibraryScreen';
 export { SearchScreen } from './SearchScreen';
 export { SettingsScreen } from './SettingsScreen';
 export { JellyfinSettingsScreen } from './JellyfinSettingsScreen';
+export { MedioraServerSettingsScreen } from './MedioraServerSettingsScreen';
 export { SonarrSettingsScreen } from './SonarrSettingsScreen';
 export { RadarrSettingsScreen } from './RadarrSettingsScreen';
 export { LiveTVSettingsScreen } from './LiveTVSettingsScreen';

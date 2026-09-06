@@ -319,7 +319,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [saveSettings],
   );
 
-  // The mediora-server (Bobarr) URL + API key are local-only config.
+  // The mediora-server URL + API key are local-only config.
   const updateMediarrServer = useCallback(
     async (mediarrServer: AppSettings['mediarrServer']) => {
       const currentSettings = settingsRef.current;

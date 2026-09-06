@@ -11,6 +11,7 @@ import {
   SearchScreen,
   SettingsScreen,
   JellyfinSettingsScreen,
+  MedioraServerSettingsScreen,
   SonarrSettingsScreen,
   RadarrSettingsScreen,
   LiveTVSettingsScreen,
@@ -51,6 +52,7 @@ function DesktopStackNavigator() {
       <Stack.Screen name="LiveTV" component={LiveTVScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="JellyfinSettings" component={JellyfinSettingsScreen} />
+      <Stack.Screen name="MedioraServerSettings" component={MedioraServerSettingsScreen} />
       <Stack.Screen name="SonarrSettings" component={SonarrSettingsScreen} />
       <Stack.Screen name="RadarrSettings" component={RadarrSettingsScreen} />
       <Stack.Screen name="LiveTVSettings" component={LiveTVSettingsScreen} />
@@ -325,6 +327,7 @@ export function AppNavigator() {
             }}>
             <Stack.Screen name="MainTabs" component={MobileTabNavigator} />
             <Stack.Screen name="JellyfinSettings" component={JellyfinSettingsScreen} />
+            <Stack.Screen name="MedioraServerSettings" component={MedioraServerSettingsScreen} />
             <Stack.Screen name="SonarrSettings" component={SonarrSettingsScreen} />
             <Stack.Screen name="RadarrSettings" component={RadarrSettingsScreen} />
             <Stack.Screen name="LiveTVSettings" component={LiveTVSettingsScreen} />

@@ -67,6 +67,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
 
   const settingsItems = [
     { name: 'Jellyfin', route: 'JellyfinSettings', icon: 'server-outline', showInTabs: false },
+    { name: 'Mediora Server', route: 'MedioraServerSettings', icon: 'cloud-outline', showInTabs: false },
     { name: 'Sonarr', route: 'SonarrSettings', icon: 'albums-outline', showInTabs: false },
     { name: 'Radarr', route: 'RadarrSettings', icon: 'film-outline', showInTabs: false },
     { name: 'Live TV Settings', route: 'LiveTVSettings', icon: 'settings-outline', showInTabs: false },

@@ -785,7 +785,7 @@ function JellyfinSettings({ settings, onUpdate, onClear }: JellyfinSettingsProps
   );
 }
 
-// Mediora Server (Bobarr) Backend Settings Section
+// Mediora Server Backend Settings Section
 interface BackendSettingsProps {
   backendMode: AppSettings['backendMode'];
   mediarrServer: AppSettings['mediarrServer'];
@@ -878,7 +878,7 @@ function BackendSettings({
     <View style={styles.sectionForm}>
       <Text style={styles.sectionDescription}>
         Choose how this device reaches the TV + movies backend. The mediora-server
-        (Bobarr) is a single instance that speaks both the Sonarr and Radarr v3
+        is a single instance that speaks both the Sonarr and Radarr v3
         APIs; legacy mode uses separate Sonarr and Radarr servers.
       </Text>
 

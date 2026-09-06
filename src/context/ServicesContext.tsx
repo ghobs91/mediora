@@ -64,10 +64,10 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sonarr = useMemo(() => {
-    // Bobarr mode: a single mediora-server instance speaks both the Sonarr v3
+    // Mediora-server mode: a single mediora-server instance speaks both the Sonarr v3
     // and Radarr v3 APIs, so both services point at the same URL + API key.
     if (settings.backendMode === 'mediarr-server' && settings.mediarrServer) {
-      console.log('[ServicesContext] Using mediora-server (Bobarr) backend for Sonarr');
+      console.log('[ServicesContext] Using mediora-server backend for Sonarr');
       return new SonarrService(
         settings.mediarrServer.serverUrl,
         settings.mediarrServer.apiKey,
@@ -89,10 +89,10 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   }, [settings.backendMode, settings.mediarrServer, settings.sonarr]);
 
   const radarr = useMemo(() => {
-    // Bobarr mode: a single mediora-server instance speaks both the Sonarr v3
+    // Mediora-server mode: a single mediora-server instance speaks both the Sonarr v3
     // and Radarr v3 APIs, so both services point at the same URL + API key.
     if (settings.backendMode === 'mediarr-server' && settings.mediarrServer) {
-      console.log('[ServicesContext] Using mediora-server (Bobarr) backend for Radarr');
+      console.log('[ServicesContext] Using mediora-server backend for Radarr');
       return new RadarrService(
         settings.mediarrServer.serverUrl,
         settings.mediarrServer.apiKey,
