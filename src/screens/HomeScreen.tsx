@@ -12,8 +12,8 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useServices } from '../context';
-import { MediaRow, MediaCard, LoadingScreen } from '../components';
-import { JellyfinItem, LocalMediaItem } from '../types';
+import { MediaRow, MediaCard, LoadingScreen, FeaturedCarousel } from '../components';
+import { JellyfinItem, LocalMediaItem, TMDBMovie, TMDBTVShow } from '../types';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
 import { TMDBService } from '../services';
@@ -203,6 +203,14 @@ export function HomeScreen() {
         title: item.name,
       });
     }
+  };
+
+  const handleRecommendationPress = (
+    item: TMDBMovie | TMDBTVShow,
+    mediaType: 'movie' | 'tv',
+  ) => {
+    // @ts-ignore - navigation typing
+    navigation.navigate('TMDBDetails', { item, mediaType });
   };
 
   const getImageUrl = (item: JellyfinItem | LocalMediaItem): string | null => {
@@ -468,6 +476,8 @@ export function HomeScreen() {
 
       {isJellyfinConnected && (
         <>
+          <FeaturedCarousel onItemPress={handleRecommendationPress} />
+
           <MediaRow
             title="Continue Watching"
             items={resumeItems}

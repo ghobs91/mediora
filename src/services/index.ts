@@ -6,5 +6,10 @@ export { iCloudService } from './icloud';
 export { epgService, EPGService } from './epg';
 export { playbackPositionService } from './playbackPosition';
 export { LocalMediaService } from './localMedia';
+export { MedioraServerService } from './medioraServer';
+export type {
+  MedioraRecommendation,
+  MedioraRecommendations,
+} from './medioraServer';
 export * from './iptv';
 export * from './iptvManager';

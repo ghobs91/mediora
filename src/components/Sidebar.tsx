@@ -6,12 +6,15 @@ import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass
 import Icon from 'react-native-vector-icons/Ionicons';
 import { scaleSize, scaleFontSize } from '../utils/scaling';
 import { useDeviceType } from '../hooks/useResponsive';
-import { useSettings } from '../context';
+import { useSettings, useServices } from '../context';
 
 interface SidebarProps {
   currentRoute: string;
   onOpenDrawer?: () => void;
 }
+
+// Apple TV sidebar accent: system blue icons on a dark translucent panel.
+const APPLE_SIDEBAR_BLUE = 'rgba(10, 132, 255, 1)';
 
 export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const navigation = useNavigation<any>();
@@ -21,6 +24,8 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const { isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
+  const { jellyfin, isJellyfinConnected } = useServices();
+  const [profileName, setProfileName] = useState<string | null>(null);
   const drawerOpenRef = useRef(() => setIsDrawerOpen(true));
   const slideAnim = useRef(new Animated.Value(-320)).current;
 
@@ -53,6 +58,28 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
       (window as any).__openMobileDrawer = drawerOpenRef.current;
     }
   }, [isFocused, isMobile]);
+
+  // Apple TV-style profile footer: show the Jellyfin profile name, if known.
+  React.useEffect(() => {
+    let cancelled = false;
+    if (jellyfin && isJellyfinConnected) {
+      jellyfin
+        .getCurrentUser()
+        .then(user => {
+          if (!cancelled && user?.Name) {
+            setProfileName(user.Name);
+          }
+        })
+        .catch(() => {
+          // Profile footer is decorative - ignore failures.
+        });
+    } else {
+      setProfileName(null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [jellyfin, isJellyfinConnected]);
 
   // On mobile, only show items not in bottom tabs
   // On TV/Desktop, show all navigation items
@@ -132,11 +159,13 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
         tvParallaxProperties={Platform.isTV ? { enabled: false } : undefined}>
         <Icon
           name="search-outline"
-          size={Platform.isTV ? scaleSize(19) : 15}
-          color="rgba(255, 255, 255, 0.48)"
+          size={Platform.isTV ? scaleSize(22) : 17}
+          color={APPLE_SIDEBAR_BLUE}
           style={styles.searchIcon}
         />
-        <Text style={styles.searchText}>Search</Text>
+        <Text style={[styles.searchText, isActive && styles.searchTextActive]}>
+          Search
+        </Text>
       </TouchableOpacity>
     );
   };
@@ -144,6 +173,12 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const renderNavItem = (item: any, index: number, isFirst: boolean = false) => {
     const isActive = currentRoute === item.route;
     const isFocused = focusedItem === item.route;
+    // Apple TV sidebar: system-blue icons on desktop, legacy colors on mobile.
+    const iconColor = isMobile
+      ? isActive
+        ? '#ffffff'
+        : 'rgba(255, 255, 255, 0.6)'
+      : APPLE_SIDEBAR_BLUE;
 
     return (
       <TouchableOpacity
@@ -165,7 +200,7 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
         <Icon
           name={item.icon}
           size={isMobile ? 22 : scaleSize(24)}
-          color={isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.6)'}
+          color={iconColor}
           style={isMobile ? styles.mobileNavIcon : styles.navIcon}
         />
         <Text
@@ -270,6 +305,20 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
       <ScrollView style={styles.navContainer} showsVerticalScrollIndicator={false}>
         {renderNavItems()}
       </ScrollView>
+
+      {/* Apple TV-style profile footer */}
+      {profileName && (
+        <View style={styles.profileFooter}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {profileName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.profileName} numberOfLines={1}>
+            {profileName}
+          </Text>
+        </View>
+      )}
     </LiquidGlassView>
   );
 }
@@ -320,27 +369,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
   },
   searchItem: {
-    height: Platform.isTV ? scaleSize(42) : 30,
+    height: Platform.isTV ? scaleSize(46) : 34,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Platform.isTV ? scaleSize(12) : 10,
-    borderRadius: Platform.isTV ? scaleSize(21) : 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: Platform.isTV ? scaleSize(10) : 8,
+    backgroundColor: 'transparent',
   },
   searchItemActive: {
-    borderColor: 'rgba(255, 255, 255, 0.38)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   searchIcon: {
-    width: Platform.isTV ? scaleSize(20) : 16,
-    marginRight: Platform.isTV ? scaleSize(7) : 5,
+    width: Platform.isTV ? scaleSize(24) : 18,
+    marginRight: Platform.isTV ? scaleSize(10) : 7,
   },
   searchText: {
-    fontSize: Platform.isTV ? scaleFontSize(16) : 12,
-    color: 'rgba(255, 255, 255, 0.42)',
+    fontSize: Platform.isTV ? scaleFontSize(17) : 13,
+    color: 'rgba(255, 255, 255, 0.65)',
     fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+  searchTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   sectionHeader: {
     fontSize: Platform.isTV ? scaleFontSize(13) : 11,
@@ -354,14 +405,14 @@ const styles = StyleSheet.create({
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Platform.isTV ? scaleSize(10) : 7,
+    paddingVertical: Platform.isTV ? scaleSize(11) : 8,
     paddingHorizontal: Platform.isTV ? scaleSize(12) : 10,
-    borderRadius: Platform.isTV ? scaleSize(8) : 8,
+    borderRadius: Platform.isTV ? scaleSize(10) : 8,
     marginBottom: Platform.isTV ? scaleSize(4) : 2,
     backgroundColor: 'transparent',
   },
   navItemActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   navItemFocused: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -372,12 +423,41 @@ const styles = StyleSheet.create({
   },
   navText: {
     fontSize: Platform.isTV ? scaleFontSize(17) : 13,
-    color: 'rgba(255, 255, 255, 0.82)',
+    color: 'rgba(255, 255, 255, 0.65)',
     fontWeight: '500',
     letterSpacing: 0.1,
   },
   navTextActive: {
     color: '#ffffff',
+    fontWeight: '700',
+  },
+  profileFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginHorizontal: Platform.isTV ? scaleSize(20) : 12,
+    paddingTop: Platform.isTV ? scaleSize(12) : 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  avatar: {
+    width: Platform.isTV ? scaleSize(30) : 26,
+    height: Platform.isTV ? scaleSize(30) : 26,
+    borderRadius: Platform.isTV ? scaleSize(15) : 13,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: Platform.isTV ? scaleFontSize(14) : 12,
+    fontWeight: '700',
+  },
+  profileName: {
+    flex: 1,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: Platform.isTV ? scaleFontSize(15) : 13,
     fontWeight: '600',
   },
 
