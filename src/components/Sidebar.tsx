@@ -284,20 +284,18 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   // that looks wrong on TV displays — use 'none' and rely on the solid background.
   const sidebarEffect = (Platform.isTV || !isLiquidGlassSupported) ? 'none' : 'regular';
 
+  // Native macOS traffic lights float over the full-size content and safe-area
+  // insets don't account for them on Catalyst, so enforce a minimum top
+  // clearance on desktop. (The old Platform.OS === 'macos' fake traffic lights
+  // never rendered — Catalyst reports 'ios' — and would duplicate the native
+  // buttons if they ever did, so they were removed.)
+  const desktopTopPadding = Math.max(insets.top + 8, 28);
+
   return (
     <LiquidGlassView
-      style={styles.sidebar}
+      style={[styles.sidebar, !Platform.isTV && { paddingTop: desktopTopPadding }]}
       effect={sidebarEffect}
       tintColor={Platform.isTV ? "rgba(28, 28, 30, 0.4)" : "rgba(28, 28, 30, 0.85)"}>
-      {/* macOS Window Controls (Traffic Lights) */}
-      {Platform.OS === 'macos' && (
-        <View style={styles.windowControls}>
-          <View style={[styles.trafficLight, styles.trafficLightRed]} />
-          <View style={[styles.trafficLight, styles.trafficLightYellow]} />
-          <View style={[styles.trafficLight, styles.trafficLightGreen]} />
-        </View>
-      )}
-
       <View style={styles.header}>
         {renderSearchItem()}
       </View>
@@ -336,28 +334,6 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.isTV ? scaleSize(16) : 12,
     borderRightWidth: Platform.isTV ? 0 : 1,
     borderRightColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  windowControls: {
-    flexDirection: 'row',
-    gap: Platform.isTV ? scaleSize(8) : 7,
-    paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
-    paddingTop: Platform.isTV ? scaleSize(8) : 4,
-    paddingBottom: Platform.isTV ? scaleSize(12) : 10,
-  },
-  trafficLight: {
-    width: scaleSize(12),
-    height: scaleSize(12),
-    borderRadius: scaleSize(6),
-    opacity: 0.9,
-  },
-  trafficLightRed: {
-    backgroundColor: '#FF5F57',
-  },
-  trafficLightYellow: {
-    backgroundColor: '#FFBD2E',
-  },
-  trafficLightGreen: {
-    backgroundColor: '#28C840',
   },
   header: {
     paddingHorizontal: Platform.isTV ? scaleSize(20) : 12,
@@ -419,7 +395,9 @@ const styles = StyleSheet.create({
   },
   navIcon: {
     marginRight: Platform.isTV ? scaleSize(12) : 10,
-    width: Platform.isTV ? scaleSize(24) : 18,
+    // Must fit the 24px desktop glyph (size={scaleSize(24)}); a narrower box
+    // clips the icon on the right.
+    width: Platform.isTV ? scaleSize(24) : 24,
   },
   navText: {
     fontSize: Platform.isTV ? scaleFontSize(17) : 13,

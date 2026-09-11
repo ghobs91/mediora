@@ -4,19 +4,32 @@
  * Caches channel data persistently for instant loading on subsequent launches
  */
 
-import { getCountryPlaylistUrl, getCountryByCode, getCountryEPGUrl } from './iptv';
+import { getCountryPlaylistUrl, getCountryStreamsUrl, getCountryByCode, getCountryEPGUrl } from './iptv';
 import { LiveTVChannel } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CHANNEL_CACHE_KEY = 'iptv_channels_cache_';
+const CHANNEL_CACHE_KEY = 'iptv_channels_cache_v2_';
 const CHANNEL_CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours before re-fetch
 
 export interface IPTVChannel extends LiveTVChannel {
   countryCode: string;
+  /** tvg-id (ChannelId@Feed) used for EPG matching */
+  tvgId?: string;
+  /** Alternate feed URLs for the same channel (fallback when primary fails) */
+  backupUrls?: string[];
+}
+
+interface ParsedEntry {
+  name: string;
+  url: string;
+  logo?: string;
+  group?: string;
+  tvgId?: string;
 }
 
 /**
- * Parse M3U playlist content into channel objects
+ * Parse M3U playlist content into channel entries (one per EXTINF row, so the
+ * same channel may appear multiple times — once per feed).
  */
 function parseM3U(content: string, countryCode: string): IPTVChannel[] {
   const lines = content.split('\n');
@@ -47,7 +60,7 @@ function parseM3U(content: string, countryCode: string): IPTVChannel[] {
 
       // Use tvg-id if available for linking to EPG
       if (idMatch) {
-        (currentChannel as any).tvgId = idMatch[1];
+        currentChannel.tvgId = idMatch[1];
       }
     } else if (line && !line.startsWith('#') && currentChannel) {
       // This is the URL
@@ -62,8 +75,8 @@ function parseM3U(content: string, countryCode: string): IPTVChannel[] {
           countryCode,
         };
         // Include tvg-id for EPG matching
-        if ((currentChannel as any).tvgId) {
-          (channel as any).tvgId = (currentChannel as any).tvgId;
+        if (currentChannel.tvgId) {
+          channel.tvgId = currentChannel.tvgId;
         }
         channels.push(channel);
         channelIndex++;
@@ -114,35 +127,120 @@ async function saveChannelsToCache(countryCodes: string[], channels: IPTVChannel
   }
 }
 
-/**
- * Fetch and parse channels from a country's M3U playlist
- */
-export async function fetchCountryChannels(countryCode: string): Promise<IPTVChannel[]> {
-  const url = getCountryPlaylistUrl(countryCode);
-  const country = getCountryByCode(countryCode);
-  
-  console.log(`[IPTV] Fetching channels for ${country?.name || countryCode} from ${url}`);
-
+async function fetchText(url: string): Promise<string | null> {
   try {
     const response = await fetch(url, {
       headers: {
         'Accept': 'text/plain, application/x-mpegurl, audio/x-mpegurl',
       },
     });
-
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-
-    const content = await response.text();
-    const channels = parseM3U(content, countryCode);
-    
-    console.log(`[IPTV] Found ${channels.length} channels for ${country?.name || countryCode}`);
-    return channels;
+    return await response.text();
   } catch (error) {
-    console.error(`[IPTV] Failed to fetch channels for ${countryCode}:`, error);
+    console.log(`[IPTV] Failed to fetch ${url}:`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
+ * Merge duplicate feed entries for the same channel into a single channel.
+ * The first entry wins for name/logo/group/primary URL; all other distinct
+ * URLs are kept as backupUrls for playback fallback. Entries without a tvg-id
+ * are keyed by normalized name.
+ */
+export function mergeFeedEntries(entries: ParsedEntry[], countryCode: string): IPTVChannel[] {
+  const byKey = new Map<string, IPTVChannel & { seenUrls: Set<string> }>();
+  const order: string[] = [];
+
+  const keyFor = (e: ParsedEntry) =>
+    e.tvgId ?? `name:${e.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+  for (const entry of entries) {
+    const key = keyFor(entry);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, {
+        id: `iptv-${countryCode}-${order.length}`,
+        name: entry.name,
+        url: entry.url,
+        logo: entry.logo,
+        group: entry.group || 'General',
+        countryCode,
+        tvgId: entry.tvgId,
+        seenUrls: new Set([entry.url]),
+      });
+      order.push(key);
+    } else {
+      // Backfill metadata missing from the winning (first) entry — the full
+      // streams playlist has no logos/groups, the curated one does.
+      if (!existing.logo && entry.logo) existing.logo = entry.logo;
+      if ((!existing.group || existing.group === 'General') && entry.group) {
+        existing.group = entry.group;
+      }
+      if (!existing.tvgId && entry.tvgId) existing.tvgId = entry.tvgId;
+      if (!existing.seenUrls.has(entry.url)) {
+        existing.seenUrls.add(entry.url);
+        existing.backupUrls = [...(existing.backupUrls ?? []), entry.url];
+      }
+    }
+  }
+
+  return order.map(key => {
+    const merged = byKey.get(key)!;
+    const channel: IPTVChannel = {
+      id: merged.id,
+      name: merged.name,
+      url: merged.url,
+      logo: merged.logo,
+      group: merged.group,
+      countryCode: merged.countryCode,
+      tvgId: merged.tvgId,
+    };
+    if (merged.backupUrls) channel.backupUrls = merged.backupUrls;
+    return channel;
+  });
+}
+
+/**
+ * Fetch and parse channels from a country's playlists.
+ *
+ * Combines the curated countries/*.m3u playlist (enriched metadata, but only
+ * health-checked streams — can omit working channels) with the full
+ * streams/*.m3u source (every submitted feed, matching
+ * https://iptv-org.github.io) so the channel set stays in sync with the
+ * website. Either source failing falls back to the other.
+ */
+export async function fetchCountryChannels(countryCode: string): Promise<IPTVChannel[]> {
+  const playlistUrl = getCountryPlaylistUrl(countryCode);
+  const streamsUrl = getCountryStreamsUrl(countryCode);
+  const country = getCountryByCode(countryCode);
+
+  console.log(`[IPTV] Fetching channels for ${country?.name || countryCode}`);
+
+  const [curated, full] = await Promise.all([
+    fetchText(playlistUrl),
+    fetchText(streamsUrl),
+  ]);
+
+  if (!curated && !full) {
+    console.error(`[IPTV] Failed to fetch channels for ${countryCode}: both sources failed`);
     return [];
   }
+
+  // Curated entries first so they win name/logo/group/primary URL on merge.
+  const entries: ParsedEntry[] = [
+    ...(curated ? parseM3U(curated, countryCode) : []),
+    ...(full ? parseM3U(full, countryCode) : []),
+  ];
+  const channels = mergeFeedEntries(entries, countryCode);
+
+  console.log(
+    `[IPTV] Found ${channels.length} channels for ${country?.name || countryCode} ` +
+    `(curated: ${curated ? 'ok' : 'failed'}, full: ${full ? 'ok' : 'failed'})`
+  );
+  return channels;
 }
 
 /**

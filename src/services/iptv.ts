@@ -170,10 +170,29 @@ export const IPTV_REGIONS: IPTVRegion[] = [
 ];
 
 /**
- * Get the M3U playlist URL for a country
+ * Get the M3U playlist URL for a country.
+ *
+ * This is the enriched per-country playlist (logos, group-title, tvg-id) but it
+ * only contains streams that recently passed iptv-org's automated health checks,
+ * so it can lag behind https://iptv-org.github.io and omit working channels
+ * (e.g. most Al Jazeera feeds for Qatar). Always merge with
+ * getCountryStreamsUrl() — see iptvManager — to stay in sync with the website.
  */
 export function getCountryPlaylistUrl(countryCode: string): string {
   return `https://iptv-org.github.io/iptv/countries/${countryCode}.m3u`;
+}
+
+/**
+ * Get the full (unfiltered) per-country streams URL for a country.
+ *
+ * This mirrors the channel set shown on https://iptv-org.github.io: every
+ * submitted feed, including ones the curated countries/*.m3u playlist currently
+ * omits. Entries are unenriched (no tvg-logo / group-title) and contain one row
+ * per feed, so callers must dedupe and backfill metadata from the curated
+ * playlist. May 404 for pseudo-codes without a source file (e.g. "int").
+ */
+export function getCountryStreamsUrl(countryCode: string): string {
+  return `https://raw.githubusercontent.com/iptv-org/iptv/master/streams/${countryCode}.m3u`;
 }
 
 /**
