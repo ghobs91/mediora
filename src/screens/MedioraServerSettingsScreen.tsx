@@ -52,7 +52,7 @@ export function MedioraServerSettingsScreen() {
 
       if (!result) {
         setErrorMessage(
-          'Connection failed. Verify the URL and API key from your mediora-server .env (SONARR_RADARR_API_KEY).',
+          'Connection failed. Verify the URL and copy the API key from your mediora-server Settings page.',
         );
       }
     } catch (error) {
