@@ -63,7 +63,12 @@ function getAuthHeader(
   const authValue = `MediaBrowser Client="${APP_NAME}", Device="Apple TV", DeviceId="${device}", Version="${APP_VERSION}"${accessToken ? `, Token="${accessToken}"` : ''}`;
 
   return {
+    // Send both the legacy Emby header (older Jellyfin releases) and the
+    // standard Authorization header. Jellyfin 12 ignores the X-Emby-* prefix
+    // and returns 400 for anonymous endpoints like QuickConnect/Initiate when
+    // it's the only one present.
     'X-Emby-Authorization': authValue,
+    Authorization: authValue,
     'Content-Type': 'application/json',
   };
 }
