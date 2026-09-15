@@ -11,9 +11,35 @@ on:
         required: false
         default: 'true'
         type: boolean
+  workflow_call:
+    inputs:
+      upload_to_testflight:
+        description: 'Upload to TestFlight'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_signing: ${{ steps.check.outputs.has_signing }}
+    steps:
+      - name: Check signing secrets
+        id: check
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_TEAM_ID" ]; then
+            echo "has_signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_signing=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Signing secrets are not configured; skipping tvOS build. See .github/SECRETS_SETUP.md"
+          fi
+
   build-tvos:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.has_signing == 'true' }}
     runs-on: macos-14
     
     steps:
@@ -75,7 +101,7 @@ jobs:
             -exportOptionsPlist ios/ExportOptions-tvOS.plist
 
       - name: Upload to TestFlight
-        if: ${{ github.event.inputs.upload_to_testflight != 'false' }}
+        if: ${{ inputs.upload_to_testflight != false }}
         run: |
           xcrun altool --upload-app \
             --type tvos \
