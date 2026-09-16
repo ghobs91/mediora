@@ -82,7 +82,7 @@ export class RadarrService {
 
   // Quality Profiles
   async getQualityProfiles(): Promise<RadarrQualityProfile[]> {
-    const response = await this.request('/api/v3/qualityprofile');
+    const response = await this.request('/api/v3/qualityprofile?type=Movie');
 
     if (!response.ok) {
       throw new Error(`Failed to get quality profiles: ${response.status}`);

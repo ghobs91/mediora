@@ -32,8 +32,10 @@ export function TMDBDetailsScreen() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Responsive values
-  const backdropHeight = windowHeight * 0.6;
-  const posterWidth = Math.max(windowWidth * 0.2, 200);
+  const isMobile = !Platform.isTV && windowWidth < 768;
+  const isMedioraServer = settings.backendMode === 'mediarr-server';
+  const backdropHeight = windowHeight * (isMobile ? 0.45 : 0.6);
+  const posterWidth = isMobile ? windowWidth * 0.45 : Math.max(windowWidth * 0.2, 200);
   const posterHeight = posterWidth * 1.5;
 
   const [details, setDetails] = useState<TMDBMovieDetails | TMDBTVDetails | null>(null);
@@ -236,8 +238,11 @@ export function TMDBDetailsScreen() {
   };
 
   const handleRequestMovie = async () => {
-    if (!radarr || !settings.radarr) {
-      Alert.alert('Error', 'Radarr is not configured');
+    if (!radarr || (!isMedioraServer && !settings.radarr)) {
+      Alert.alert(
+        'Error',
+        isMedioraServer ? 'Mediora Server is not configured' : 'Radarr is not configured',
+      );
       return;
     }
 
@@ -255,14 +260,19 @@ export function TMDBDetailsScreen() {
       setShowQualityProfileModal(true);
     } catch (error) {
       console.error('Failed to load quality profiles:', error);
-      Alert.alert('Error', 'Failed to load quality profiles. Check your Radarr connection.');
+      Alert.alert(
+        'Error',
+        isMedioraServer
+          ? 'Failed to load quality profiles. Check your Mediora Server connection.'
+          : 'Failed to load quality profiles. Check your Radarr connection.',
+      );
     } finally {
       setLoadingProfiles(false);
     }
   };
 
   const confirmRequestMovie = async (qualityProfileId: number) => {
-    if (!radarr || !settings.radarr) return;
+    if (!radarr || (!isMedioraServer && !settings.radarr)) return;
 
     setIsRequesting(true);
 
@@ -272,13 +282,18 @@ export function TMDBDetailsScreen() {
 
       // Add the movie with selected quality profile
       await radarr.addMovie(radarrMovie, {
-        rootFolderPath: settings.radarr.rootFolderPath,
+        rootFolderPath: settings.radarr?.rootFolderPath ?? '',
         qualityProfileId: qualityProfileId,
         searchForMovie: true,
       });
 
       setAlreadyExists(true);
-      Alert.alert('Success', 'Movie has been added to Radarr');
+      Alert.alert(
+        'Success',
+        isMedioraServer
+          ? 'Added to your library. The download has started.'
+          : 'Movie has been added to Radarr',
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add movie';
       Alert.alert('Error', message);
@@ -288,14 +303,22 @@ export function TMDBDetailsScreen() {
   };
 
   const handleRequestTV = async () => {
-    if (!sonarr || !settings.sonarr) {
-      Alert.alert('Error', 'Sonarr is not configured');
+    if (!sonarr || (!isMedioraServer && !settings.sonarr)) {
+      Alert.alert(
+        'Error',
+        isMedioraServer ? 'Mediora Server is not configured' : 'Sonarr is not configured',
+      );
       return;
     }
 
     const tvDetails = details as TMDBTVDetails;
     if (!tvDetails?.external_ids?.tvdb_id) {
-      Alert.alert('Error', 'TVDB ID not found for this show. Try searching for it directly in Sonarr.');
+      Alert.alert(
+        'Error',
+        isMedioraServer
+          ? 'TVDB ID not found for this show, so it cannot be added right now.'
+          : 'TVDB ID not found for this show. Try searching for it directly in Sonarr.',
+      );
       return;
     }
 
@@ -313,14 +336,19 @@ export function TMDBDetailsScreen() {
       setShowQualityProfileModal(true);
     } catch (error) {
       console.error('Failed to load quality profiles:', error);
-      Alert.alert('Error', 'Failed to load quality profiles. Check your Sonarr connection.');
+      Alert.alert(
+        'Error',
+        isMedioraServer
+          ? 'Failed to load quality profiles. Check your Mediora Server connection.'
+          : 'Failed to load quality profiles. Check your Sonarr connection.',
+      );
     } finally {
       setLoadingProfiles(false);
     }
   };
 
   const confirmRequestTV = async (qualityProfileId: number) => {
-    if (!sonarr || !settings.sonarr) return;
+    if (!sonarr || (!isMedioraServer && !settings.sonarr)) return;
 
     const tvDetails = details as TMDBTVDetails;
     if (!tvDetails?.external_ids?.tvdb_id) return;
@@ -328,10 +356,9 @@ export function TMDBDetailsScreen() {
     setIsRequesting(true);
 
     try {
-      console.log('[TMDBDetailsScreen] Current Sonarr settings:', {
-        serverUrl: settings.sonarr.serverUrl,
-        apiKey: settings.sonarr.apiKey.substring(0, 8) + '...',
-        rootFolderPath: settings.sonarr.rootFolderPath,
+      console.log('[TMDBDetailsScreen] Current backend settings:', {
+        backendMode: isMedioraServer ? 'mediarr-server' : 'mediarr',
+        rootFolderPath: settings.sonarr?.rootFolderPath,
         qualityProfileId: qualityProfileId,
       });
       console.log('[TMDBDetailsScreen] Looking up series with TVDB ID:', tvDetails.external_ids.tvdb_id);
@@ -340,11 +367,16 @@ export function TMDBDetailsScreen() {
       const sonarrResults = await sonarr.lookupSeriesByTvdbId(tvDetails.external_ids.tvdb_id);
 
       if (sonarrResults.length === 0) {
-        Alert.alert('Error', 'Series not found in Sonarr. The show may not be available in Sonarr\'s database yet.');
+        Alert.alert(
+          'Error',
+          isMedioraServer
+            ? 'Series not found. The show may not be available yet.'
+            : 'Series not found in Sonarr. The show may not be available in Sonarr\'s database yet.',
+        );
         return;
       }
 
-      console.log('[TMDBDetailsScreen] Found series in Sonarr:', sonarrResults[0].title);
+      console.log('[TMDBDetailsScreen] Found series:', sonarrResults[0].title);
 
       // Add the series with selected seasons or all seasons
       const seasonsToMonitor = selectedSeasonsToRequest.size > 0
@@ -352,7 +384,7 @@ export function TMDBDetailsScreen() {
         : undefined; // undefined means monitor all seasons
 
       await sonarr.addSeriesWithSeasons(sonarrResults[0], {
-        rootFolderPath: settings.sonarr.rootFolderPath,
+        rootFolderPath: settings.sonarr?.rootFolderPath ?? '',
         qualityProfileId: qualityProfileId,
         searchForMissingEpisodes: true,
         monitoredSeasons: seasonsToMonitor,
@@ -362,18 +394,29 @@ export function TMDBDetailsScreen() {
       const seasonText = selectedSeasonsToRequest.size > 0
         ? `Season(s) ${Array.from(selectedSeasonsToRequest).join(', ')} added`
         : 'TV show has been added';
-      Alert.alert('Success', seasonText + ' to Sonarr');
+      Alert.alert(
+        'Success',
+        isMedioraServer
+          ? `${seasonText} to your library. Downloading now.`
+          : `${seasonText} to Sonarr`,
+      );
     } catch (error) {
       console.error('[TMDBDetailsScreen] Failed to add TV show:', error);
       let message = 'Failed to add TV show';
 
       if (error instanceof Error) {
         if (error.message.includes('401')) {
-          message = 'Sonarr authentication failed. Please check your API key in Settings.';
+          message = isMedioraServer
+            ? 'Mediora Server authentication failed. Please check your API key in Settings.'
+            : 'Sonarr authentication failed. Please check your API key in Settings.';
         } else if (error.message.includes('404')) {
-          message = 'Series not found in Sonarr. It may not be available in their database yet.';
+          message = isMedioraServer
+            ? 'Series not found. It may not be available yet.'
+            : 'Series not found in Sonarr. It may not be available in their database yet.';
         } else if (error.message.includes('Network request failed')) {
-          message = 'Cannot connect to Sonarr server. Please check your server URL and network connection.';
+          message = isMedioraServer
+            ? 'Cannot connect to Mediora Server. Please check your server URL and network connection.'
+            : 'Cannot connect to Sonarr server. Please check your server URL and network connection.';
         } else {
           message = error.message;
         }
@@ -386,8 +429,11 @@ export function TMDBDetailsScreen() {
   };
 
   const handleRequestSeason = async (seasonNumber: number) => {
-    if (!sonarr || !settings.sonarr) {
-      Alert.alert('Error', 'Sonarr is not configured');
+    if (!sonarr || (!isMedioraServer && !settings.sonarr)) {
+      Alert.alert(
+        'Error',
+        isMedioraServer ? 'Mediora Server is not configured' : 'Sonarr is not configured',
+      );
       return;
     }
 
@@ -420,7 +466,7 @@ export function TMDBDetailsScreen() {
   };
 
   const confirmRequestSeason = async (seasonNumber: number, qualityProfileId: number) => {
-    if (!sonarr || !settings.sonarr) return;
+    if (!sonarr || (!isMedioraServer && !settings.sonarr)) return;
 
     const tvDetails = details as TMDBTVDetails;
     if (!tvDetails?.external_ids?.tvdb_id) return;
@@ -440,12 +486,15 @@ export function TMDBDetailsScreen() {
         // Series doesn't exist, add it with only this season monitored
         const sonarrResults = await sonarr.lookupSeriesByTvdbId(tvDetails.external_ids.tvdb_id);
         if (sonarrResults.length === 0) {
-          Alert.alert('Error', 'Series not found in Sonarr.');
+          Alert.alert(
+            'Error',
+            isMedioraServer ? 'Series not found.' : 'Series not found in Sonarr.',
+          );
           return;
         }
 
         await sonarr.addSeriesWithSeasons(sonarrResults[0], {
-          rootFolderPath: settings.sonarr.rootFolderPath,
+          rootFolderPath: settings.sonarr?.rootFolderPath ?? '',
           qualityProfileId: qualityProfileId,
           searchForMissingEpisodes: true,
           monitoredSeasons: [seasonNumber],
@@ -549,9 +598,9 @@ export function TMDBDetailsScreen() {
     return (
       <TouchableOpacity style={styles.episodeCard}>
         {stillUrl ? (
-          <Image source={{ uri: stillUrl }} style={styles.episodeImage} />
+          <Image source={{ uri: stillUrl }} style={[styles.episodeImage, isMobile && styles.episodeImageMobile]} />
         ) : (
-          <View style={[styles.episodeImage, styles.episodeImagePlaceholder]}>
+          <View style={[styles.episodeImage, isMobile && styles.episodeImageMobile, styles.episodeImagePlaceholder]}>
             <Text style={styles.episodeNumber}>E{episode.episode_number}</Text>
           </View>
         )}
@@ -595,20 +644,20 @@ export function TMDBDetailsScreen() {
       )}
       <View style={[styles.backdropOverlay, { height: backdropHeight, width: Platform.isTV ? windowWidth + 272 : windowWidth, left: Platform.isTV ? -272 : 0 }]} />
 
-      <View style={[styles.content, { marginTop: backdropHeight * 0.5 }]}>
-        <View style={styles.mainContent}>
+      <View style={[styles.content, { marginTop: backdropHeight * 0.5 }, isMobile && styles.contentMobile]}>
+        <View style={[styles.mainContent, isMobile && styles.mainContentMobile]}>
           {/* Poster */}
           {posterUrl && (
             <Image
               source={{ uri: posterUrl }}
-              style={[styles.poster, { width: posterWidth, height: posterHeight }]}
+              style={[styles.poster, { width: posterWidth, height: posterHeight }, isMobile && styles.posterMobile]}
               resizeMode="cover"
             />
           )}
 
           {/* Info */}
           <View style={styles.info}>
-            <Text style={styles.title}>{title}</Text>
+            <Text style={[styles.title, isMobile && styles.titleMobile]}>{title}</Text>
 
             <View style={styles.metadata}>
               {releaseDate && (
@@ -646,12 +695,12 @@ export function TMDBDetailsScreen() {
             )}
 
             {/* Actions */}
-            <View style={styles.actions}>
+            <View style={[styles.actions, isMobile && styles.actionsMobile]}>
               {jellyfinItem && (
                 <FocusableButton
                   title={mediaType === 'movie' ? 'Play Movie' : 'View Series'}
                   onPress={handlePlayFromJellyfin}
-                  size="large"
+                  size={isMobile ? undefined : 'large'}
                   variant="primary"
                   hasTVPreferredFocus={true}
                 />
@@ -660,9 +709,11 @@ export function TMDBDetailsScreen() {
                 <FocusableButton
                   title={
                     alreadyExists
-                      ? mediaType === 'movie'
-                        ? 'Added to Radarr'
-                        : 'Added to Sonarr'
+                      ? isMedioraServer
+                        ? 'Added to Library'
+                        : mediaType === 'movie'
+                          ? 'Added to Radarr'
+                          : 'Added to Sonarr'
                       : mediaType === 'movie'
                         ? 'Request Movie'
                         : 'Request TV Show'
@@ -672,7 +723,7 @@ export function TMDBDetailsScreen() {
                   }
                   disabled={alreadyExists || isRequesting || loadingProfiles}
                   loading={isRequesting || loadingProfiles}
-                  size="large"
+                  size={isMobile ? undefined : 'large'}
                   variant={jellyfinItem ? 'secondary' : (alreadyExists ? 'secondary' : 'primary')}
                   hasTVPreferredFocus={!jellyfinItem}
                 />
@@ -680,7 +731,7 @@ export function TMDBDetailsScreen() {
               {!canRequest && !jellyfinItem && (
                 <View>
                   <Text style={styles.configureText}>
-                    Configure {mediaType === 'movie' ? 'Radarr' : 'Sonarr'} in
+                    Configure {isMedioraServer ? 'Mediora Server' : mediaType === 'movie' ? 'Radarr' : 'Sonarr'} in
                     Settings to request this {mediaType === 'movie' ? 'movie' : 'show'}
                   </Text>
                 </View>
@@ -714,7 +765,7 @@ export function TMDBDetailsScreen() {
         {/* Cast Section */}
         {details?.credits?.cast && details.credits.cast.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cast</Text>
+            <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Cast</Text>
             <FlatList
               data={details.credits.cast.slice(0, 10)}
               renderItem={renderCastMember}
@@ -729,7 +780,7 @@ export function TMDBDetailsScreen() {
         {/* Seasons & Episodes Section (TV Shows only) */}
         {mediaType === 'tv' && tvDetails && tvDetails.seasons && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Seasons & Episodes</Text>
+            <Text style={[styles.sectionTitle, isMobile && styles.sectionTitleMobile]}>Seasons & Episodes</Text>
 
             {!alreadyExists && canRequest && (
               <View style={styles.seasonSelectionHint}>
@@ -1123,5 +1174,31 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(14),
     color: '#2196f3',
     fontWeight: '500',
+  },
+  contentMobile: {
+    padding: 16,
+  },
+  mainContentMobile: {
+    flexDirection: 'column',
+  },
+  posterMobile: {
+    marginRight: 0,
+    marginBottom: scaleSize(16),
+    alignSelf: 'center',
+  },
+  titleMobile: {
+    fontSize: scaleFontSize(28),
+    marginBottom: scaleSize(12),
+  },
+  actionsMobile: {
+    flexWrap: 'wrap',
+  },
+  sectionTitleMobile: {
+    fontSize: scaleFontSize(22),
+    marginBottom: scaleSize(16),
+  },
+  episodeImageMobile: {
+    width: scaleSize(120),
+    height: scaleSize(68),
   },
 });

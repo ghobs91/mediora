@@ -97,7 +97,7 @@ export class SonarrService {
 
   // Quality Profiles
   async getQualityProfiles(): Promise<SonarrQualityProfile[]> {
-    const response = await this.request('/api/v3/qualityprofile');
+    const response = await this.request('/api/v3/qualityprofile?type=TvShow');
 
     if (!response.ok) {
       throw new Error(`Failed to get quality profiles: ${response.status}`);
