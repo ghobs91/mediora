@@ -477,7 +477,7 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
 				PRODUCT_NAME = Mediora;
 				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -519,7 +519,7 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
 				PRODUCT_NAME = Mediora;
 				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -561,7 +561,7 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
 				PRODUCT_NAME = mediora;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -755,7 +755,7 @@
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
 				PRODUCT_NAME = Mediora;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
