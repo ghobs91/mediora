@@ -65,6 +65,12 @@ interface SettingsContextType {
   updateMediarrServer: (
     config: AppSettings['mediarrServer'],
   ) => Promise<void>;
+  /**
+   * Re-read settings from iCloud and adopt anything newer. Used by tvOS
+   * onboarding to pick up a setup redeemed on another device without a cold
+   * launch. Returns true when a Jellyfin connection is present afterwards.
+   */
+  refreshFromICloud: () => Promise<boolean>;
   clearAllSettings: () => Promise<void>;
   clearJellyfinSettings: () => Promise<void>;
 }
@@ -132,6 +138,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       radarr: pickNewer(local.radarr, iCloudRadarr),
     };
   }, []);
+
+  // Adopt newer iCloud settings on demand (tvOS onboarding "check again").
+  const refreshFromICloud = useCallback(async (): Promise<boolean> => {
+    if (!iCloudService.isAvailable()) return false;
+    try {
+      const merged = await mergeWithICloud(settingsRef.current);
+      if (JSON.stringify(merged) !== JSON.stringify(settingsRef.current)) {
+        settingsRef.current = merged;
+        setSettings(merged);
+        await AsyncStorage.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify(merged),
+        );
+      }
+      return !!merged.jellyfin;
+    } catch (err) {
+      console.error('[Settings] Manual iCloud refresh failed:', err);
+      return false;
+    }
+  }, [mergeWithICloud]);
 
   // Heartbeat: push any service where the local write is newer than what
   // iCloud has (or where iCloud is empty). Ensures a failed initial save is
@@ -404,6 +430,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateBackendMode,
         updateMediarrServer,
         applyInviteSettings,
+        refreshFromICloud,
         clearAllSettings,
         clearJellyfinSettings,
       }}>

@@ -50,9 +50,10 @@
 	<array>
 		<string>_http._tcp</string>
 		<string>_https._tcp</string>
+		<string>_mediora-pair._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Mediora needs access to your local network to connect to your Jellyfin media server.</string>
+	<string>Mediora uses your local network to connect to your Jellyfin media server and to send invites from your iPhone or Mac to your Apple TV.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>

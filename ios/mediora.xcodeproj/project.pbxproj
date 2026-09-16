@@ -33,6 +33,10 @@
 		ICLD001A12F3ABC10200ICLD02 /* ICloudSyncModule.m in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */; };
 		ICLD001A12F3ABC10200ICLD03 /* ICloudSyncModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */; };
 		ICLD001A12F3ABC10200ICLD04 /* ICloudSyncModule.m in Sources */ = {isa = PBXBuildFile; fileRef = ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */; };
+		PAIR001A12F3ABC10200PAIR01 /* InvitePairingModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = PAIR001A12F3ABC10100PAIR01 /* InvitePairingModule.swift */; };
+		PAIR001A12F3ABC10200PAIR02 /* InvitePairingModule.m in Sources */ = {isa = PBXBuildFile; fileRef = PAIR001A12F3ABC10100PAIR02 /* InvitePairingModule.m */; };
+		PAIR001A12F3ABC10200PAIR03 /* InvitePairingModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = PAIR001A12F3ABC10100PAIR01 /* InvitePairingModule.swift */; };
+		PAIR001A12F3ABC10200PAIR04 /* InvitePairingModule.m in Sources */ = {isa = PBXBuildFile; fileRef = PAIR001A12F3ABC10100PAIR02 /* InvitePairingModule.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +65,8 @@
 		HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = HDRSupportModule.m; path = mediora/HDRSupportModule.m; sourceTree = "<group>"; };
 		ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ICloudSyncModule.swift; path = mediora/ICloudSyncModule.swift; sourceTree = "<group>"; };
 		ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ICloudSyncModule.m; path = mediora/ICloudSyncModule.m; sourceTree = "<group>"; };
+		PAIR001A12F3ABC10100PAIR01 /* InvitePairingModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvitePairingModule.swift; path = mediora/InvitePairingModule.swift; sourceTree = "<group>"; };
+		PAIR001A12F3ABC10100PAIR02 /* InvitePairingModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = InvitePairingModule.m; path = mediora/InvitePairingModule.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +99,8 @@
 				HDR001A12F3ABC10100HDR002 /* HDRSupportModule.m */,
 				ICLD001A12F3ABC10100ICLD01 /* ICloudSyncModule.swift */,
 				ICLD001A12F3ABC10100ICLD02 /* ICloudSyncModule.m */,
+				PAIR001A12F3ABC10100PAIR01 /* InvitePairingModule.swift */,
+				PAIR001A12F3ABC10100PAIR02 /* InvitePairingModule.m */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -411,6 +419,8 @@
 				HDR001A12F3ABC10200HDR002 /* HDRSupportModule.m in Sources */,
 				ICLD001A12F3ABC10200ICLD01 /* ICloudSyncModule.swift in Sources */,
 				ICLD001A12F3ABC10200ICLD02 /* ICloudSyncModule.m in Sources */,
+				PAIR001A12F3ABC10200PAIR01 /* InvitePairingModule.swift in Sources */,
+				PAIR001A12F3ABC10200PAIR02 /* InvitePairingModule.m in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -425,6 +435,8 @@
 				HDR001A12F3ABC10200HDR004 /* HDRSupportModule.m in Sources */,
 				ICLD001A12F3ABC10200ICLD03 /* ICloudSyncModule.swift in Sources */,
 				ICLD001A12F3ABC10200ICLD04 /* ICloudSyncModule.m in Sources */,
+				PAIR001A12F3ABC10200PAIR03 /* InvitePairingModule.swift in Sources */,
+				PAIR001A12F3ABC10200PAIR04 /* InvitePairingModule.m in Sources */,
 				22502BB980C96FD10B597393 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -442,7 +454,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "mediora/mediora-tvOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				ENABLE_BITCODE = NO;
@@ -458,14 +470,14 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 2.2;
+				MARKETING_VERSION = 2.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app;
 				PRODUCT_NAME = Mediora;
 				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -485,7 +497,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "mediora/mediora-tvOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				INFOPLIST_FILE = mediora/Info.plist;
@@ -500,14 +512,14 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 2.2;
+				MARKETING_VERSION = 2.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mediora.app.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app;
 				PRODUCT_NAME = Mediora;
 				SWIFT_OBJC_BRIDGING_HEADER = "mediora-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -525,7 +537,7 @@
 				CODE_SIGN_ENTITLEMENTS = mediora/mediora.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				INFOPLIST_FILE = mediora/Info.plist;
@@ -542,14 +554,14 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.mobile;
 				PRODUCT_NAME = mediora;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
@@ -718,7 +730,7 @@
 				CODE_SIGN_ENTITLEMENTS = mediora/mediora.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = XTXZ3CYRPX;
 				ENABLE_BITCODE = NO;
@@ -736,14 +748,14 @@
 					"$(SDKROOT)/System/iOSSupport/usr/lib/swift",
 					"$(inherited)",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.Mediora;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediora.app.mobile;
 				PRODUCT_NAME = Mediora;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;

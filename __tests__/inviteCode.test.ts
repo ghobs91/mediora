@@ -1,4 +1,8 @@
 import pako from 'pako';
+import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 import {
   buildInviteCode,
   buildInviteUrl,
@@ -13,9 +17,14 @@ import {
 } from '../src/utils/inviteCode';
 import { InvitePayload } from '../src/types';
 
+const PASSPHRASE = '482913';
+const PBKDF2_ITERATIONS = 200_000;
+
 const samplePayload: InvitePayload = {
-  v: 1,
+  v: 2,
   name: 'Sister',
+  backendMode: 'mediarr',
+  mediarrServer: null,
   jellyfin: {
     serverUrl: 'http://100.64.0.10:8096',
     username: 'sister',
@@ -35,28 +44,94 @@ const samplePayload: InvitePayload = {
   },
 };
 
-const PASSPHRASE = '482913';
+const mediarrServerPayload: InvitePayload = {
+  v: 2,
+  name: 'Uncle Bob',
+  backendMode: 'mediarr-server',
+  mediarrServer: {
+    serverUrl: 'http://100.64.0.10:5055',
+    apiKey: 'abcdefabcdefabcdefabcdefabcdefab',
+  },
+  jellyfin: {
+    serverUrl: 'http://100.64.0.10:8096',
+    username: 'uncle-bob',
+    password: 'zZ9!pQ2@wE4#rT6$',
+  },
+  sonarr: null,
+  radarr: null,
+};
 
-/** Build a legacy (v0, unencrypted gzip-only) code for compat tests. */
-function legacyCode(payload: InvitePayload): string {
-  const gz = pako.gzip(JSON.stringify(payload));
+// A payload in the previous (v1) shape: encrypted envelope over gzipped JSON.
+const v1Payload: InvitePayload = {
+  ...samplePayload,
+  v: 1,
+  backendMode: 'mediarr-server',
+  mediarrServer: {
+    serverUrl: 'http://100.64.0.10:5055',
+    apiKey: 'abcdefabcdefabcdefabcdefabcdefab',
+  },
+};
+
+function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
-  for (let i = 0; i < gz.length; i += 0x8000) {
+  for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode.apply(
       null,
-      Array.from(gz.subarray(i, i + 0x8000)),
+      Array.from(bytes.subarray(i, i + 0x8000)),
     );
   }
-  const b64 = (globalThis as any).btoa(binary)
+  let b64 = (globalThis as any)
+    .btoa(binary)
     .split('+')
     .join('-')
     .split('/')
     .join('_');
-  let code = b64;
-  while (code.endsWith('=')) {
-    code = code.slice(0, -1);
+  while (b64.endsWith('=')) {
+    b64 = b64.slice(0, -1);
   }
-  return code;
+  return b64;
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, p) => sum + p.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+/** Build a legacy (v0, unencrypted gzip-only) code for compat tests. */
+function legacyCode(payload: InvitePayload): string {
+  return toBase64Url(pako.gzip(JSON.stringify(payload)));
+}
+
+/** Build a v1 (encrypted envelope over gzipped JSON) code for compat tests. */
+async function v1EncryptedCode(
+  payload: InvitePayload,
+  passphrase: string,
+): Promise<string> {
+  const gz = pako.gzip(JSON.stringify(payload));
+  const salt = new Uint8Array(16).map((_, i) => i + 1);
+  const nonce = new Uint8Array(24).map((_, i) => i + 1);
+  const key = await pbkdf2Async(sha256, utf8ToBytes(passphrase), salt, {
+    c: PBKDF2_ITERATIONS,
+    dkLen: 32,
+  });
+  const ciphertext = xchacha20poly1305(key, nonce).encrypt(gz);
+  const iterations = new Uint8Array(4);
+  new DataView(iterations.buffer).setUint32(0, PBKDF2_ITERATIONS, false);
+  return toBase64Url(
+    concatBytes([
+      new Uint8Array([0x4d, 0x45, 1]), // "ME" + version 1
+      iterations,
+      salt,
+      nonce,
+      ciphertext,
+    ]),
+  );
 }
 
 describe('invite code codec (encrypted)', () => {
@@ -65,6 +140,19 @@ describe('invite code codec (encrypted)', () => {
     expect(typeof code).toBe('string');
     expect(code.length).toBeGreaterThan(20);
     expect(await decodeInviteCode(code, PASSPHRASE)).toEqual(samplePayload);
+  });
+
+  test('round-trips a mediarr-server payload without arr settings', async () => {
+    const code = await buildInviteCode(mediarrServerPayload, PASSPHRASE);
+    expect(await decodeInviteCode(code, PASSPHRASE)).toEqual(
+      mediarrServerPayload,
+    );
+  });
+
+  test('v2 codes are substantially shorter than v1 for the same payload', async () => {
+    const v2 = await buildInviteCode(samplePayload, PASSPHRASE);
+    const v1 = await v1EncryptedCode(samplePayload, PASSPHRASE);
+    expect(v2.length).toBeLessThan(v1.length * 0.85);
   });
 
   test('is passphrase-protected: wrong passphrase fails', async () => {
@@ -102,6 +190,15 @@ describe('invite code codec (encrypted)', () => {
   test('passphrases with unicode and spaces work', async () => {
     const code = await buildInviteCode(samplePayload, '  hérmana✓  ');
     expect(await decodeInviteCode(code, 'hérmana✓')).toEqual(samplePayload);
+  });
+
+  test('still decodes v1 (encrypted gzipped-JSON) codes', async () => {
+    const code = await v1EncryptedCode(v1Payload, PASSPHRASE);
+    expect(inspectInviteCode(code)).toBe('encrypted');
+    expect(await decodeInviteCode(code, PASSPHRASE)).toEqual(v1Payload);
+    await expect(decodeInviteCode(code, '000000')).rejects.toThrow(
+      /Incorrect passphrase/,
+    );
   });
 
   test('still decodes legacy unencrypted codes', async () => {

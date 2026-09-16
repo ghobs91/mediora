@@ -15,7 +15,12 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import { useSettings, useServices } from '../context';
-import { FocusableButton, FocusableInput, QRCode } from '../components';
+import {
+  FocusableButton,
+  FocusableInput,
+  QRCode,
+  SendInviteToTV,
+} from '../components';
 import {
   generateInvite,
   getStoredInvites,
@@ -400,9 +405,9 @@ function InviteCard({
           </Text>
           <Text style={styles.linkHint}>
             Send this link to the invitee — opening it on their iPhone or Mac
-            sets everything up automatically. On Apple TV, enter the link
-            manually or scan the QR code from another device. Share the
-            passphrase separately: both are required to redeem.
+            sets everything up automatically, and an Apple TV signed in to the
+            same iCloud account picks it up too. Share the passphrase
+            separately: both are required to redeem.
           </Text>
 
           <View style={styles.cardButtons}>
@@ -420,6 +425,8 @@ function InviteCard({
               style={styles.cardButton}
             />
           </View>
+
+          <SendInviteToTV invite={invite.inviteUrl} style={styles.sendToTv} />
         </View>
       )}
     </LiquidGlassView>
@@ -609,6 +616,10 @@ const styles = StyleSheet.create({
   },
   cardButton: {
     flex: 1,
+  },
+  sendToTv: {
+    marginTop: 12,
+    alignSelf: 'stretch',
   },
   backButtonContainer: {
     position: 'absolute',

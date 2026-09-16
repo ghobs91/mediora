@@ -97,7 +97,7 @@ export async function generateInvite(options: {
 
   // 3. Build the invite payload from the admin's current settings.
   const payload: InvitePayload = {
-    v: 1,
+    v: 2,
     name: inviteName,
     backendMode: settings.backendMode ?? 'mediarr',
     mediarrServer: settings.mediarrServer

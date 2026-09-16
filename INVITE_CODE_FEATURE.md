@@ -35,10 +35,16 @@ are required to redeem.
 - **iOS/macOS**: tapping the `mediora://invite` link (sent via iMessage) or
   scanning the QR opens Mediora and pre-fills the code. Requires the URL
   scheme registered in `ios/mediora/Info.plist` (`CFBundleURLTypes`).
-- **tvOS**: no custom URL schemes — type the code/link with the on-screen
-  keyboard, or rely on iCloud: redeeming on the invitee's iPhone/macOS saves
-  settings to iCloud, and the existing tvOS iCloud restore pulls them onto
-  their Apple TV automatically (same iCloud account required).
+- **tvOS**: no custom URL schemes, so onboarding leads with two options that
+  avoid typing the long code:
+  - **iCloud (same Apple ID)**: redeem on the invitee's iPhone/Mac, and the
+    tvOS iCloud restore pulls the settings onto their Apple TV. Onboarding has
+    a "Check again" button that re-reads iCloud on demand.
+  - **LAN pairing (any Apple ID)**: the Apple TV hosts a pairing session and
+    shows a short 6-digit code; on the invitee's iPhone/Mac, Mediora's
+    "Send to Apple TV" finds the TV over Bonjour and delivers the invite.
+    The passphrase is still entered on the TV (it is short and numeric).
+  Typing the code/link manually remains available as a fallback.
 - After the code is entered, the invitee types the passphrase (decryption is
   fully local/offline), reviews the invite, then the device authenticates
   against Jellyfin with the invite credentials (each device gets its own
@@ -50,10 +56,15 @@ are required to redeem.
 - **One code per person**: there is no server-side state, so the same code can
   be redeemed on multiple devices (her iPhone, Mac, Apple TV all share the one
   Jellyfin user).
-- **Code format** (v1): `mediora://invite?c=<base64url(envelope)>` where
+- **Code format** (v2): `mediora://invite?c=<base64url(envelope)>` where
   `envelope = magic "ME" | version | PBKDF2 iterations (BE32) | salt (16) |
-  nonce (24) | XChaCha20-Poly1305 ciphertext+tag`. Legacy v0 codes
-  (`base64url(gzip(JSON))`, unencrypted) are still accepted.
+  nonce (24) | XChaCha20-Poly1305 ciphertext+tag`. The ciphertext is a gzipped
+  **compact positional binary payload** (field names never appear on the wire;
+  strings are varint-length-prefixed, numbers are LEB128). This makes codes
+  roughly 40–50% shorter than the v1 format (e.g. an invite with Jellyfin +
+  Sonarr + Radarr is ~300 characters instead of ~455). v1 codes (gzipped JSON
+  plaintext, same envelope) and legacy v0 codes (`base64url(gzip(JSON))`,
+  unencrypted) are still accepted on decode.
 - **Crypto**: [@noble/hashes](https://github.com/paulmillr/noble-hashes) +
   [@noble/ciphers](https://github.com/paulmillr/noble-ciphers) — pure JS,
   audited, no native modules, safe with the react-native-tvos fork. The link
@@ -74,6 +85,9 @@ are required to redeem.
 | Jellyfin user management API | `src/services/jellyfin.ts` (user management section) |
 | QR rendering (pure JS, no native deps) | `src/components/QRCode.tsx` |
 | Redeem form (shared, incl. passphrase step) | `src/components/InviteRedeemForm.tsx` |
+| LAN pairing JS API | `src/services/invitePairing.ts` |
+| Sender UI (iPhone/Mac "Send to Apple TV") | `src/components/SendInviteToTV.tsx` |
+| LAN pairing native module (Bonjour + TCP) | `ios/mediora/InvitePairingModule.swift`, `.m` |
 | First-run onboarding | `src/screens/OnboardingScreen.tsx` |
 | Generate/list invites UI | `src/screens/InvitesScreen.tsx` |
 | Standalone redeem screen | `src/screens/InviteRedeemScreen.tsx` |

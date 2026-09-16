@@ -1,20 +1,27 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { LiquidGlassView } from '@callstack/liquid-glass';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSettings } from '../context';
 import { JellyfinService } from '../services';
+import {
+  isInvitePairingAvailable,
+  startPairingHost,
+  stopPairingHost,
+  waitForPairedInvite,
+} from '../services/invitePairing';
 import { InvitePayload } from '../types';
 import {
   decodeInviteCode,
   extractInviteCode,
   inspectInviteCode,
 } from '../utils/inviteCode';
-import { FocusableButton, FocusableInput } from './index';
+import { FocusableButton, FocusableInput, SendInviteToTV } from './index';
 
 interface InviteRedeemFormProps {
   /** Pre-filled code (e.g. from a deep link). */
@@ -51,6 +58,18 @@ export function InviteRedeemForm({
   const [payload, setPayload] = useState<InvitePayload | null>(null);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [isReceiving, setIsReceiving] = useState(false);
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairingStatus, setPairingStatus] = useState('');
+
+  // Stop advertising if the form goes away while waiting for a sender.
+  useEffect(() => {
+    return () => {
+      if (isInvitePairingAvailable()) {
+        stopPairingHost().catch(() => {});
+      }
+    };
+  }, []);
 
   const willReplaceExisting = useMemo(() => {
     return (
@@ -68,10 +87,10 @@ export function InviteRedeemForm({
     settings.mediarrServer,
   ]);
 
-  const handleSubmitCode = async () => {
+  const submitCode = async (input: string) => {
     setError('');
     try {
-      const code = extractInviteCode(codeInput);
+      const code = extractInviteCode(input);
       if (!code) {
         throw new Error(
           'That doesn\'t look like a valid invite code. Check the code or link and try again.',
@@ -96,6 +115,43 @@ export function InviteRedeemForm({
           : 'Invalid invite code.',
       );
     }
+  };
+
+  const handleSubmitCode = () => submitCode(codeInput);
+
+  // tvOS: host a pairing session and wait for a phone/Mac to send the invite.
+  const handleReceiveFromDevice = async () => {
+    if (isReceiving) return;
+    setError('');
+    setPairingCode('');
+    setIsReceiving(true);
+    setPairingStatus('Looking for your iPhone or Mac…');
+    try {
+      const host = await startPairingHost();
+      setPairingCode(host.code);
+      setPairingStatus(
+        'On your iPhone or Mac, open Mediora, tap “Send to Apple TV”, pick this Apple TV, and enter the code above.',
+      );
+      const invite = await waitForPairedInvite();
+      setPairingStatus('Invite received!');
+      await submitCode(invite);
+    } catch (pairingError) {
+      setPairingStatus(
+        pairingError instanceof Error
+          ? pairingError.message
+          : 'Pairing failed. Please try again.',
+      );
+    } finally {
+      await stopPairingHost().catch(() => {});
+      setIsReceiving(false);
+    }
+  };
+
+  const handleCancelReceive = async () => {
+    await stopPairingHost().catch(() => {});
+    setPairingCode('');
+    setPairingStatus('');
+    setIsReceiving(false);
   };
 
   const handleSubmitPassphrase = async () => {
@@ -312,8 +368,9 @@ export function InviteRedeemForm({
     <View style={styles.formContainer}>
       <Text style={styles.title}>Enter invite code</Text>
       <Text style={styles.description}>
-        Paste the invite link or code you received. Scanning the QR code or
-        opening the link on this device fills it in automatically.
+        {Platform.isTV
+          ? 'If possible, redeem the invite on your iPhone or Mac first — this Apple TV then picks up the setup automatically through iCloud. To enter it here instead, type the invite code or link you received.'
+          : 'Paste the invite link or code you received. Scanning the QR code or opening the link on this device fills it in automatically.'}
       </Text>
 
       <FocusableInput
@@ -339,6 +396,41 @@ export function InviteRedeemForm({
         disabled={!codeInput.trim()}
         style={styles.continueButton}
       />
+
+      {Platform.isTV && isInvitePairingAvailable() ? (
+        <View style={styles.pairingPanel}>
+          <Text style={styles.pairingTitle}>Receive from iPhone or Mac</Text>
+          {pairingCode ? (
+            <Text style={styles.pairingCode}>{pairingCode}</Text>
+          ) : null}
+          {pairingStatus ? (
+            <Text style={styles.pairingStatus}>{pairingStatus}</Text>
+          ) : null}
+          {isReceiving ? (
+            <FocusableButton
+              title="Cancel"
+              variant="secondary"
+              onPress={handleCancelReceive}
+              style={styles.continueButton}
+            />
+          ) : (
+            <FocusableButton
+              title={pairingCode ? 'Try again' : 'Start receiving'}
+              icon={pairingCode ? 'refresh-outline' : 'phone-portrait-outline'}
+              variant="secondary"
+              onPress={handleReceiveFromDevice}
+              style={styles.continueButton}
+            />
+          )}
+        </View>
+      ) : null}
+
+      {!Platform.isTV && extractInviteCode(codeInput) ? (
+        <SendInviteToTV
+          invite={extractInviteCode(codeInput) as string}
+          style={styles.continueButton}
+        />
+      ) : null}
     </View>
   );
 }
@@ -424,6 +516,32 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     marginTop: 20,
+  },
+  pairingPanel: {
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    padding: 16,
+    gap: 10,
+  },
+  pairingTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  pairingCode: {
+    fontSize: 40,
+    fontWeight: '800',
+    letterSpacing: 8,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  pairingStatus: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   doneButton: {
     marginTop: 12,

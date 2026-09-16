@@ -588,11 +588,15 @@ export type RootStackParamList = {
 // Invite Code Types
 /**
  * Payload embedded in an invite code. Everything needed for a device to
- * replicate the owner's setup. The code itself is gzip + base64url — it is
- * obfuscated, not encrypted, so it must be treated as a secret.
+ * replicate the owner's setup. The code bundles a compact binary payload that
+ * is gzipped, encrypted (XChaCha20-Poly1305) and base64url-encoded, so it must
+ * be treated as a secret.
+ *
+ * `v` is the payload format version: 1 = legacy gzipped JSON (decode only),
+ * 2 = current compact binary layout.
  */
 export interface InvitePayload {
-  v: 1;
+  v: 1 | 2;
   name: string;
   /** Which backend the invitee should use. Defaults to legacy 'mediarr'. */
   backendMode?: BackendMode;
