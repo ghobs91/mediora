@@ -62,13 +62,28 @@ export function HomeScreen() {
     setError(null);
 
     try {
-      const [resume, nextUp, latest] = await Promise.all([
+      // Settle all three independently: a single failing/stalled endpoint
+      // (e.g. an auth challenge on /Shows/NextUp) must not blank the whole
+      // home screen. Only surface an error when every request failed.
+      const results = await Promise.allSettled([
         jellyfin.getResumeItems(10),
         jellyfin.getNextUp(10),
         jellyfin.getLatestMedia(undefined, 20),
       ]);
 
       if (isCancelled) return;
+
+      const [resumeResult, nextUpResult, latestResult] = results;
+      if (results.every(result => result.status === 'rejected')) {
+        const reason = results.find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected',
+        )?.reason;
+        throw reason instanceof Error ? reason : new Error('Failed to load media.');
+      }
+
+      const resume = resumeResult.status === 'fulfilled' ? resumeResult.value ?? [] : [];
+      const nextUp = nextUpResult.status === 'fulfilled' ? nextUpResult.value ?? [] : [];
+      const latest = latestResult.status === 'fulfilled' ? latestResult.value ?? [] : [];
 
       // Combine resume and next up candidates
       const allResumeCandidates = [...resume, ...nextUp];
@@ -150,8 +165,12 @@ export function HomeScreen() {
     } catch (err) {
       console.error('Failed to load home data:', err);
       if (!isCancelled) {
-        if (err instanceof Error && err.message.includes('Network request failed')) {
+        if (err instanceof Error && err.message.includes('timed out')) {
+          setError('Your Jellyfin server did not respond. Make sure it is running and reachable from this Apple TV, then try again.');
+        } else if (err instanceof Error && err.message.includes('Network request failed')) {
           setError('Unable to connect to your Jellyfin server. Please check your network connection and server settings.');
+        } else if (err instanceof Error && err.message) {
+          setError(`Failed to load media: ${err.message}`);
         } else {
           setError('Failed to load media. Please try again.');
         }

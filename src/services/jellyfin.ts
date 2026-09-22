@@ -30,28 +30,47 @@ function generateDeviceId(): string {
   return 'mediora-tvos-' + Math.random().toString(36).substring(2, 15);
 }
 
-// Helper function to add timeout to fetch requests
+// Helper function to add timeout to fetch requests.
+//
+// Uses Promise.race in addition to AbortController so the returned promise
+// always settles. On iOS/tvOS, when a server replies 401 with a
+// WWW-Authenticate header, React Native's networking never resolves or rejects
+// the fetch promise (facebook/react-native#34883). Aborting alone does not
+// recover from that, so without the race the UI would spin forever.
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
   timeout: number = DEFAULT_TIMEOUT,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutError = new Error(
+    `Request timed out after ${timeout / 1000} seconds. Please check your network connection and server.`,
+  );
 
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return response;
-  } catch (error) {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(timeoutError);
+    }, timeout);
+  });
+
+  const fetchPromise = fetch(url, {
+    ...options,
+    signal: controller.signal,
+  }).catch(error => {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout / 1000} seconds. Please check your network connection and server.`);
+      throw timeoutError;
     }
     throw error;
+  });
+  // Avoid an unhandled rejection if the timeout wins the race.
+  fetchPromise.catch(() => {});
+
+  try {
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId!);
   }
 }
 
@@ -132,7 +151,7 @@ export class JellyfinService {
       const url = `${this.serverUrl}/QuickConnect/Initiate`;
       console.log('[Jellyfin] Request URL:', url);
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: getAuthHeader(undefined, this.deviceId),
       });
@@ -160,7 +179,7 @@ export class JellyfinService {
   async checkQuickConnectStatus(
     secret: string,
   ): Promise<JellyfinQuickConnectStatus> {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/QuickConnect/Connect?secret=${encodeURIComponent(secret)}`,
       {
         method: 'GET',
@@ -178,7 +197,7 @@ export class JellyfinService {
   async authenticateWithQuickConnect(
     secret: string,
   ): Promise<JellyfinAuthResponse> {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/AuthenticateWithQuickConnect`,
       {
         method: 'POST',
@@ -215,7 +234,7 @@ export class JellyfinService {
 
       console.log('[Jellyfin] Request body:', JSON.stringify(requestBody));
 
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `${this.serverUrl}/Users/AuthenticateByName`,
         {
           method: 'POST',
@@ -371,7 +390,7 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Views`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -414,7 +433,7 @@ export class JellyfinService {
       filters: options?.filters?.join(','),
     });
 
-    const response = await fetch(`${this.serverUrl}/Items?${queryString}`, {
+    const response = await fetchWithTimeout(`${this.serverUrl}/Items?${queryString}`, {
       headers: getAuthHeader(this.accessToken, this.deviceId),
     });
 
@@ -460,7 +479,7 @@ export class JellyfinService {
       parentId: libraryId,
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Items/Latest?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -486,7 +505,7 @@ export class JellyfinService {
       mediaTypes: 'Video',
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Items/Resume?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -512,7 +531,7 @@ export class JellyfinService {
       fields: 'Overview,MediaSources,UserData',
     });
 
-    const response = await fetch(`${this.serverUrl}/Shows/NextUp?${queryString}`, {
+    const response = await fetchWithTimeout(`${this.serverUrl}/Shows/NextUp?${queryString}`, {
       headers: getAuthHeader(this.accessToken, this.deviceId),
     });
 
@@ -545,7 +564,7 @@ export class JellyfinService {
       includeItemTypes: options?.includeItemTypes?.join(','),
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Items?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -573,7 +592,7 @@ export class JellyfinService {
       AnyProviderIdEquals: `tmdb.${tmdbId}`,
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Items?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -606,7 +625,7 @@ export class JellyfinService {
       AnyProviderIdEquals: `tvdb.${tvdbId}`,
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/Items?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -637,7 +656,7 @@ export class JellyfinService {
       fields: 'Overview,UserData',
     });
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Shows/${seriesId}/Seasons?${queryString}`,
       {
         headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -1183,7 +1202,7 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
       {
         method: 'POST',
@@ -1203,7 +1222,7 @@ export class JellyfinService {
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
       {
         method: 'DELETE',
@@ -1225,7 +1244,7 @@ export class JellyfinService {
 
     // The proper way to remove from continue watching is to mark it as played
     // This will remove it from the "Resume" list
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/PlayedItems/${itemId}`,
       {
         method: 'POST',
@@ -1292,7 +1311,7 @@ export class JellyfinService {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 500); // 500ms per check
 
-            const response = await fetch(`${serverUrl}/System/Info/Public`, {
+            const response = await fetchWithTimeout(`${serverUrl}/System/Info/Public`, {
               method: 'GET',
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
@@ -1355,7 +1374,7 @@ export class JellyfinService {
     }
 
     const method = isFavorite ? 'POST' : 'DELETE';
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${this.serverUrl}/Users/${this.userId}/FavoriteItems/${itemId}`,
       {
         method,
@@ -1382,7 +1401,7 @@ export class JellyfinService {
         fields: 'ChannelInfo',
       });
 
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `${this.serverUrl}/LiveTv/Channels?${queryString}`,
         {
           headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -1439,7 +1458,7 @@ export class JellyfinService {
 
       const queryString = buildQueryString(params);
 
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `${this.serverUrl}/LiveTv/Programs?${queryString}`,
         {
           headers: getAuthHeader(this.accessToken, this.deviceId),
@@ -1466,7 +1485,7 @@ export class JellyfinService {
     }
 
     try {
-      await fetch(
+      await fetchWithTimeout(
         `${this.serverUrl}/Videos/ActiveEncodings?deviceId=${encodeURIComponent(this.deviceId)}&playSessionId=${encodeURIComponent(this.playSessionId)}`,
         {
           method: 'DELETE',
@@ -1491,7 +1510,7 @@ export interface M3UChannel {
 
 export async function parseM3U(url: string): Promise<M3UChannel[]> {
   try {
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch M3U playlist: ${response.status}`);
     }
