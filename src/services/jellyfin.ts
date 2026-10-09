@@ -914,7 +914,7 @@ export class JellyfinService {
     // Stream the original file directly without container remuxing
     // Just tell Jellyfin to stream it as-is
     const queryString = buildQueryString({
-      api_key: this.accessToken || '',
+      ApiKey: this.accessToken || '',
       mediaSourceId: mediaSourceId,
       static: true, // Serve as static file, no transcoding
     });
@@ -934,7 +934,7 @@ export class JellyfinService {
     console.log('[Jellyfin] HLS stream - HDR active:', this._isHDRActive);
 
     const params: Record<string, string | number | boolean | undefined> = {
-      api_key: this.accessToken || '',
+      ApiKey: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
@@ -983,7 +983,7 @@ export class JellyfinService {
     // Fallback: MPEG-TS stream with full transcoding
     // TS format is better for progressive streaming than fragmented MP4
     const queryString = buildQueryString({
-      api_key: this.accessToken || '',
+      ApiKey: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
       playSessionId: this.playSessionId,
@@ -1026,7 +1026,7 @@ export class JellyfinService {
   getSubtitleUrl(itemId: string, mediaSourceId: string, streamIndex: number, format: string = 'vtt'): string {
     // Jellyfin subtitle endpoint: /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/Stream.{format}
     const queryString = buildQueryString({
-      api_key: this.accessToken || '',
+      ApiKey: this.accessToken || '',
     });
 
     return `${this.serverUrl}/Videos/${itemId}/${mediaSourceId}/Subtitles/${streamIndex}/Stream.${format}?${queryString}`;
@@ -1424,7 +1424,7 @@ export class JellyfinService {
   // Get live stream URL for a channel
   getLiveStreamUrl(channelId: string): string {
     const queryString = buildQueryString({
-      api_key: this.accessToken || '',
+      ApiKey: this.accessToken || '',
       deviceId: this.deviceId,
       playSessionId: this.playSessionId,
     });
