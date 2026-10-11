@@ -6,6 +6,8 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -37,6 +39,8 @@ interface FeaturedCarouselProps {
   maxItems?: number;
   /** Seconds between automatic slides. Defaults to 7. */
   cycleSeconds?: number;
+  /** Extra style merged onto the root container (e.g. margin overrides). */
+  style?: StyleProp<ViewStyle>;
 }
 
 const AUTOPLAY_DEFAULT_SECONDS = 7;
@@ -57,6 +61,7 @@ export function FeaturedCarousel({
   onItemPress,
   maxItems = 8,
   cycleSeconds = AUTOPLAY_DEFAULT_SECONDS,
+  style,
 }: FeaturedCarouselProps) {
   const { settings } = useSettings();
   const { tmdb } = useServices();
@@ -208,7 +213,7 @@ export function FeaturedCarousel({
   if (!serverConfig?.serverUrl || !serverConfig?.apiKey) return null;
   if (isLoading && items.length === 0) {
     return (
-      <View style={[styles.loader, isMobile && styles.loaderMobile]}>
+      <View style={[styles.loader, isMobile && styles.loaderMobile, style]}>
         <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
       </View>
     );
@@ -222,7 +227,7 @@ export function FeaturedCarousel({
   ].filter(Boolean);
 
   return (
-    <View style={[styles.container, isMobile && styles.containerMobile]}>
+    <View style={[styles.container, isMobile && styles.containerMobile, style]}>
       {/* Backdrop still */}
       {activeItem.backdropUrl ? (
         <Image

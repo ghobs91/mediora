@@ -44,6 +44,11 @@ export function HomeScreen() {
     },
   };
 
+  // The featured hero sits flush against the top of the screen, so pull it up
+  // by the content container's top padding (which keeps the rest of the feed
+  // clear of the window chrome).
+  const topPadding = isMobile ? insets.top + 60 : scaleSize(52);
+
   const loadLocalMedia = useCallback(async () => {
     if (!localMedia) return;
     try {
@@ -244,21 +249,32 @@ export function HomeScreen() {
 
   const getImageUrlWithBackdrop = (item: JellyfinItem): string | null => {
     if (!jellyfin) return null;
-    
-    // For episodes, check if we have a backdrop for the series
-    if (item.Type === 'Episode' && item.SeriesId && seriesBackdrops.has(item.SeriesId)) {
-      const backdropUrl = seriesBackdrops.get(item.SeriesId);
-      return backdropUrl || null;
+
+    // Episodes preview the specific episode (Continue Watching / New Episodes),
+    // so prefer the episode's own still over the parent series' artwork.
+    if (item.Type === 'Episode') {
+      if (item.ImageTags?.Primary) {
+        return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 780 });
+      }
+      if (item.ImageTags?.Thumb) {
+        return jellyfin.getImageUrl(item.Id, 'Thumb', { maxWidth: 780 });
+      }
+      // No episode still available - fall back to the series artwork.
+      if (item.SeriesId) {
+        const backdropUrl = seriesBackdrops.get(item.SeriesId);
+        if (backdropUrl) return backdropUrl;
+        return jellyfin.getImageUrl(item.SeriesId, 'Primary', { maxWidth: 400 });
+      }
+      return null;
     }
-    
+
     // Check if we have a TMDB backdrop for this item (Series or Movie)
     if ((item.Type === 'Series' || item.Type === 'Movie') && seriesBackdrops.has(item.Id)) {
       const backdropUrl = seriesBackdrops.get(item.Id);
       return backdropUrl || null;
     }
     
-    // Fall back to Jellyfin backdrop for Series/Movies (wide aspect ratio)
-    // or Jellyfin primary image for Episodes (will use series poster via useSeriesThumbnail)
+    // Fall back to a Jellyfin backdrop for Series/Movies (wide aspect ratio).
     if (item.Type === 'Series' || item.Type === 'Movie') {
       // Try Backdrop first, then Thumb, finally Primary
       if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
@@ -268,7 +284,7 @@ export function HomeScreen() {
              jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
     }
     
-    // For episodes without TMDB backdrop, fall back to episode's primary image
+    // Fallback for anything else
     return jellyfin.getImageUrl(item.Id, 'Primary', { maxWidth: 400 });
   };
 
@@ -495,7 +511,10 @@ export function HomeScreen() {
 
       {isJellyfinConnected && (
         <>
-          <FeaturedCarousel onItemPress={handleRecommendationPress} />
+          <FeaturedCarousel
+            onItemPress={handleRecommendationPress}
+            style={{ marginTop: -topPadding }}
+          />
 
           <MediaRow
             title="Continue Watching"
@@ -508,7 +527,6 @@ export function HomeScreen() {
             landscape={true}
             showDetailsBelow={!isMobile}
             size={isMobile ? undefined : 'large'}
-            useSeriesThumbnail={true}
           />
 
           <MediaRow
