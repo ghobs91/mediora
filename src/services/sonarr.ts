@@ -10,6 +10,15 @@ import { fetchWithRetry } from '../utils/http';
 
 const SERIES_LIST_TTL_MS = 60000;
 
+/**
+ * A queue item is finished when Sonarr/mediora-server marks it `completed`
+ * or reports no bytes left. Kept out of download-progress calculations so a
+ * lingering finished torrent never shows a bogus 0% bar.
+ */
+function isQueueItemCompleted(item: SonarrQueueItem): boolean {
+  return item.status === 'completed' || (item.size > 0 && item.sizeleft <= 0);
+}
+
 export class SonarrService {
   private serverUrl: string;
   private apiKey: string;
@@ -300,7 +309,17 @@ export class SonarrService {
         throw new Error(`Failed to get queue: ${response.status}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      const records: SonarrQueueItem[] = Array.isArray(data?.records)
+        ? data.records
+        : [];
+
+      // Sonarr's queue only carries in-flight downloads. A finished item that
+      // lingers in the queue (e.g. a seeding torrent) must not render a
+      // progress bar, so drop anything already complete.
+      const inProgress = records.filter(item => !isQueueItemCompleted(item));
+
+      return { records: inProgress, totalRecords: inProgress.length };
     } catch (error) {
       console.error('[Sonarr] Failed to get queue:', error);
       if (error instanceof Error && error.message.includes('Network request failed')) {

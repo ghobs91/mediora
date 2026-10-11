@@ -8,6 +8,14 @@ import { fetchWithRetry } from '../utils/http';
 
 const MOVIE_LIST_TTL_MS = 60000;
 
+/**
+ * See the SonarrService equivalent: finished queue rows must not be treated
+ * as in-flight downloads or they render a bogus 0% progress bar.
+ */
+function isQueueItemCompleted(item: RadarrQueueItem): boolean {
+  return item.status === 'completed' || (item.size > 0 && item.sizeleft <= 0);
+}
+
 export class RadarrService {
   private serverUrl: string;
   private apiKey: string;
@@ -225,7 +233,14 @@ export class RadarrService {
         throw new Error(`Failed to get queue: ${response.status}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      const records: RadarrQueueItem[] = Array.isArray(data?.records)
+        ? data.records
+        : [];
+
+      const inProgress = records.filter(item => !isQueueItemCompleted(item));
+
+      return { records: inProgress, totalRecords: inProgress.length };
     } catch (error) {
       console.error('[Radarr] Failed to get queue:', error);
       if (error instanceof Error && error.message.includes('Network request failed')) {
