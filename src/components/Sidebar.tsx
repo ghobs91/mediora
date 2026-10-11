@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Modal, Pressable, Animated, PanResponder } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
@@ -11,12 +11,23 @@ import { useSettings, useServices } from '../context';
 interface SidebarProps {
   currentRoute: string;
   onOpenDrawer?: () => void;
+  /** Current sidebar width on desktop/tablet. */
+  width?: number;
+  /** Called with the new width while the user drags the resize handle. */
+  onResize?: (width: number) => void;
 }
 
 // Apple TV sidebar accent: system blue icons on a dark translucent panel.
 const APPLE_SIDEBAR_BLUE = 'rgba(10, 132, 255, 1)';
 
-export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
+const DEFAULT_SIDEBAR_WIDTH = Platform.isTV ? scaleSize(240) : 200;
+const MIN_SIDEBAR_WIDTH = 150;
+const MAX_SIDEBAR_WIDTH = 480;
+
+const clampSidebarWidth = (value: number) =>
+  Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.round(value)));
+
+export function Sidebar({ currentRoute, onOpenDrawer, width, onResize }: SidebarProps) {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
@@ -28,6 +39,42 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
   const [profileName, setProfileName] = useState<string | null>(null);
   const drawerOpenRef = useRef(() => setIsDrawerOpen(true));
   const slideAnim = useRef(new Animated.Value(-320)).current;
+
+  // Resizable desktop sidebar: track the latest width/onResize in refs so the
+  // PanResponder is created once and never goes stale mid-drag.
+  const effectiveWidth = width ?? DEFAULT_SIDEBAR_WIDTH;
+  const widthRef = useRef(effectiveWidth);
+  const startWidthRef = useRef(effectiveWidth);
+  const onResizeRef = useRef(onResize);
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    widthRef.current = effectiveWidth;
+  }, [effectiveWidth]);
+
+  useEffect(() => {
+    onResizeRef.current = onResize;
+  }, [onResize]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Don't steal taps - only claim the gesture once the pointer moves,
+      // so nav items under the handle still respond to presses.
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dx) > 2,
+      onPanResponderGrant: () => {
+        startWidthRef.current = widthRef.current;
+        setIsResizing(true);
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        onResizeRef.current?.(
+          clampSidebarWidth(startWidthRef.current + gesture.dx),
+        );
+      },
+      onPanResponderRelease: () => setIsResizing(false),
+      onPanResponderTerminate: () => setIsResizing(false),
+    }),
+  ).current;
 
   // Update ref when state setter changes
   React.useEffect(() => {
@@ -293,7 +340,11 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
 
   return (
     <LiquidGlassView
-      style={[styles.sidebar, !Platform.isTV && { paddingTop: desktopTopPadding }]}
+      style={[
+        styles.sidebar,
+        !Platform.isTV && { paddingTop: desktopTopPadding },
+        { width: effectiveWidth },
+      ]}
       effect={sidebarEffect}
       tintColor={Platform.isTV ? "rgba(28, 28, 30, 0.4)" : "rgba(28, 28, 30, 0.85)"}>
       <View style={styles.header}>
@@ -315,6 +366,22 @@ export function Sidebar({ currentRoute, onOpenDrawer }: SidebarProps) {
           <Text style={styles.profileName} numberOfLines={1}>
             {profileName}
           </Text>
+        </View>
+      )}
+
+      {/* Draggable resize handle (mouse-driven platforms only). */}
+      {!Platform.isTV && onResize && (
+        <View
+          style={styles.resizeHandle}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Resize sidebar"
+          {...panResponder.panHandlers}>
+          <View
+            style={[
+              styles.resizeHandleBar,
+              isResizing && styles.resizeHandleBarActive,
+            ]}
+          />
         </View>
       )}
     </LiquidGlassView>
@@ -437,6 +504,27 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: Platform.isTV ? scaleFontSize(15) : 13,
     fontWeight: '600',
+  },
+
+  // Resize handle along the sidebar's right edge.
+  resizeHandle: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+  },
+  resizeHandleBar: {
+    width: 3,
+    height: 56,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  resizeHandleBarActive: {
+    backgroundColor: APPLE_SIDEBAR_BLUE,
   },
 
   // Mobile Drawer Styles

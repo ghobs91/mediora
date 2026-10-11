@@ -26,6 +26,7 @@ import {
 import { Sidebar } from '../components';
 import { RootStackParamList } from '../types';
 import { useDeviceType } from '../hooks/useResponsive';
+import { useSidebarWidth } from '../hooks';
 import { scaleSize } from '../utils/scaling';
 import { consumeInviteUrl } from '../utils/inviteCode';
 
@@ -270,6 +271,7 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export function AppNavigator() {
   const { isMobile, showSidebar } = useDeviceType();
+  const { sidebarWidth, setSidebarWidth } = useSidebarWidth();
   const [currentRoute, setCurrentRoute] = useState('Home');
 
   // Track navigation state changes for desktop sidebar
@@ -370,17 +372,32 @@ export function AppNavigator() {
                 <>
                   <View style={[
                     styles.content,
-                    !isPlayerScreen && styles.contentWithSidebar,
-                    !isPlayerScreen && !Platform.isTV && styles.contentWithSidebarMac,
+                    !isPlayerScreen && {
+                      paddingLeft: Platform.isTV
+                        ? sidebarWidth + scaleSize(32)
+                        : sidebarWidth + 1,
+                    },
                   ]}>
                     <DesktopStackNavigator />
                   </View>
                   {!isPlayerScreen && showSidebar && (
                     <View style={styles.floatingSidebarWrapper}>
-                      <Sidebar currentRoute={currentRoute} onOpenDrawer={() => { }} />
+                      <Sidebar
+                        currentRoute={currentRoute}
+                        onOpenDrawer={() => { }}
+                        width={sidebarWidth}
+                        onResize={setSidebarWidth}
+                      />
                     </View>
                   )}
-                  {!isPlayerScreen && !showSidebar && <Sidebar currentRoute={currentRoute} onOpenDrawer={() => { }} />}
+                  {!isPlayerScreen && !showSidebar && (
+                    <Sidebar
+                      currentRoute={currentRoute}
+                      onOpenDrawer={() => { }}
+                      width={sidebarWidth}
+                      onResize={setSidebarWidth}
+                    />
+                  )}
                 </>
               );
             })()}
@@ -399,12 +416,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  contentWithSidebar: {
-    paddingLeft: scaleSize(272), // Account for floating sidebar width + margins
-  },
-  contentWithSidebarMac: {
-    paddingLeft: 201, // 200px flush sidebar + 1px divider
   },
   floatingSidebarWrapper: {
     position: 'absolute',
