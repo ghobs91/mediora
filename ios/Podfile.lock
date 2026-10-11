@@ -3109,7 +3109,7 @@ SPEC CHECKSUMS:
   FBLazyVector: d5832d4eba2d6e2bc1eda519f0a14c540ae5d6e9
   fmt: c358e29b79c2957a8958c4169de5ad5cdd458216
   glog: 2777ae82f2611bf0a9ed50bcd30b0eea7e7b7f05
-  hermes-engine: 7172b501be1790d9cbe362634ab097341837eee0
+  hermes-engine: 4cfd58fa2266fc1e86c15d9a90d763d6de6f583d
   LiquidGlass: a2ea1e5036efd0964d666b4b63b5bcb3509e1651
   RCT-Folly: 3fc78fcbfe96ce79e811d19ad0d5e4c70c812c8c
   RCTDeprecation: f83cf0a38288a4c19e0271700ac9e0d1aaed0448
