@@ -247,7 +247,7 @@ export function MediaCard({
             <View style={styles.downloadBadge}>
               <Icon name="arrow-down-circle" size={isMobile ? 12 : scaleSize(14)} color="#fff" />
               <Text style={[styles.downloadText, isMobile && { fontSize: 10 }]}>
-                {Math.round(downloadProgress * 100)}%
+                {Math.floor(downloadProgress * 100)}%
               </Text>
             </View>
           </View>

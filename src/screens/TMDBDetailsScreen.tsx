@@ -544,11 +544,13 @@ export function TMDBDetailsScreen() {
     return (queueItems as RadarrQueueItem[])[0] || null;
   };
 
-  // Helper to calculate progress percentage
+  // Helper to calculate progress percentage. Floors rather than rounds so a
+  // download stalled one piece short of completion reads as 99%, not a
+  // misleading 100% that makes it look finished (and playable).
   const calculateProgress = (queueItem: SonarrQueueItem | RadarrQueueItem): number => {
     if (!queueItem.size || queueItem.size === 0) return 0;
     const downloaded = queueItem.size - queueItem.sizeleft;
-    return Math.round((downloaded / queueItem.size) * 100);
+    return Math.floor((downloaded / queueItem.size) * 100);
   };
 
   // Helper to get season overall progress
