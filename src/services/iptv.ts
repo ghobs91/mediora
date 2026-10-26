@@ -78,6 +78,11 @@ export const IPTV_COUNTRIES: IPTVCountry[] = [
   { code: 'qa', name: 'Qatar', flag: '🇶🇦' },
   { code: 'lb', name: 'Lebanon', flag: '🇱🇧' },
   { code: 'jo', name: 'Jordan', flag: '🇯🇴' },
+  { code: 'sy', name: 'Syria', flag: '🇸🇾' },
+  { code: 'ps', name: 'Palestine', flag: '🇵🇸' },
+  { code: 'ly', name: 'Libya', flag: '🇱🇾' },
+  { code: 'mr', name: 'Mauritania', flag: '🇲🇷' },
+  { code: 'cy', name: 'Cyprus', flag: '🇨🇾' },
   
   // Latin America
   { code: 'br', name: 'Brazil', flag: '🇧🇷' },
@@ -144,7 +149,7 @@ export const IPTV_REGIONS: IPTVRegion[] = [
     // 'int' is listed here because pan-Arab channels (Al Arabiya, Sky News Arabia, etc.)
     // are categorised as International in iptv-org and live in int.m3u, not country playlists.
     countries: IPTV_COUNTRIES.filter(c =>
-      ['int', 'ae', 'sa', 'il', 'tr', 'eg', 'ir', 'iq', 'kw', 'qa', 'lb', 'jo'].includes(c.code)
+      ['int', 'ae', 'sa', 'il', 'tr', 'eg', 'ir', 'iq', 'kw', 'qa', 'lb', 'jo', 'sy', 'ps', 'ly', 'mr', 'cy'].includes(c.code)
     ),
   },
   {

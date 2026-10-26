@@ -12,6 +12,7 @@ import {
   ScrollView,
   Modal,
   ActivityIndicator,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -402,7 +403,8 @@ export function LiveTVScreen() {
     }
     setSelectedChannel(prev => {
       if (!prev || !filteredChannels.find(ch => ch.id === prev.id)) {
-        return filteredChannels[0];
+        // External channels have no playable URL for the inline player.
+        return filteredChannels.find(ch => ch.streamType !== 'external') ?? null;
       }
       return prev;
     });
@@ -426,6 +428,13 @@ export function LiveTVScreen() {
   }, [settings.iptv?.selectedCountries]);
 
   const handleChannelPress = useCallback((channel: LiveTVChannel) => {
+    // Broadcasters that only stream through their own player (YouTube live)
+    // cannot be handed to react-native-video — send the user to the source.
+    if (channel.streamType === 'external') {
+      Linking.openURL(channel.url).catch(err =>
+        console.error('[LiveTV] Failed to open external channel:', err));
+      return;
+    }
     console.log('[LiveTV] Playing channel:', channel.name);
     (navigation as any).navigate('LivePlayer', {
       channelId: channel.id,
@@ -437,7 +446,9 @@ export function LiveTVScreen() {
 
   // Select a channel: on mobile navigate to full player, on desktop/TV update inline player
   const handleChannelSelect = useCallback((channel: LiveTVChannel) => {
-    if (isMobile) {
+    if (channel.streamType === 'external') {
+      handleChannelPress(channel);
+    } else if (isMobile) {
       handleChannelPress(channel);
     } else {
       setSelectedChannel(channel);
@@ -494,6 +505,14 @@ export function LiveTVScreen() {
             <Text style={styles.channelItemSubtitle} numberOfLines={1}>{subtitle}</Text>
           ) : null}
         </View>
+        {channel.streamType === 'external' && (
+          <Icon
+            name="logo-youtube"
+            size={isMobile ? 16 : scaleSize(18)}
+            color="rgba(255, 255, 255, 0.45)"
+            style={{ marginLeft: 4 }}
+          />
+        )}
         {isFavorite && (
           <Icon name="heart" size={isMobile ? 16 : scaleSize(18)} color="#e50914" style={{ marginLeft: 4 }} />
         )}

@@ -5,6 +5,7 @@
  */
 
 import { getCountryPlaylistUrl, getCountryStreamsUrl, getCountryByCode, getCountryEPGUrl } from './iptv';
+import { CURATED_STREAMS } from './curatedStreams';
 import { LiveTVChannel } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -25,6 +26,31 @@ interface ParsedEntry {
   logo?: string;
   group?: string;
   tvgId?: string;
+  streamType?: 'hls' | 'external';
+}
+
+/**
+ * Split an #EXTINF line into its attribute section and channel name.
+ *
+ * The name starts after the first comma that is not inside a quoted attribute
+ * value. Some playlists embed a raw User-Agent containing commas — e.g.
+ * `http-user-agent="... (KHTML, like Gecko) ..."` — which a naive
+ * `[^,]*,(.+)$` match treats as the name separator, truncating the name to
+ * ` like Gecko) Chrome/92... group-title="General",Musawa Channel`.
+ */
+function splitExtInf(line: string): { attributes: string; name: string } {
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      return { attributes: line.slice(0, i), name: line.slice(i + 1).trim() };
+    }
+  }
+
+  return { attributes: line, name: '' };
 }
 
 /**
@@ -43,13 +69,13 @@ function parseM3U(content: string, countryCode: string): IPTVChannel[] {
     if (line.startsWith('#EXTINF:')) {
       // Parse channel info
       // Format: #EXTINF:-1 tvg-id="channel.id" tvg-logo="http://..." group-title="Group",Channel Name
-      const match = line.match(/#EXTINF:[^,]*,(.+)$/);
-      const name = match ? match[1].trim() : `Channel ${channelIndex + 1}`;
+      const { attributes, name: rawName } = splitExtInf(line);
+      const name = rawName || `Channel ${channelIndex + 1}`;
 
       // Extract attributes
-      const logoMatch = line.match(/tvg-logo="([^"]+)"/);
-      const groupMatch = line.match(/group-title="([^"]+)"/);
-      const idMatch = line.match(/tvg-id="([^"]+)"/);
+      const logoMatch = attributes.match(/tvg-logo="([^"]+)"/);
+      const groupMatch = attributes.match(/group-title="([^"]+)"/);
+      const idMatch = attributes.match(/tvg-id="([^"]+)"/);
 
       currentChannel = {
         name,
@@ -169,6 +195,7 @@ export function mergeFeedEntries(entries: ParsedEntry[], countryCode: string): I
         group: entry.group || 'General',
         countryCode,
         tvgId: entry.tvgId,
+        streamType: entry.streamType,
         seenUrls: new Set([entry.url]),
       });
       order.push(key);
@@ -198,9 +225,27 @@ export function mergeFeedEntries(entries: ParsedEntry[], countryCode: string): I
       countryCode: merged.countryCode,
       tvgId: merged.tvgId,
     };
+    if (merged.streamType) channel.streamType = merged.streamType;
     if (merged.backupUrls) channel.backupUrls = merged.backupUrls;
     return channel;
   });
+}
+
+/**
+ * Hand-verified public feeds for this country that iptv-org does not expose
+ * under it. See curatedStreams.ts for why they are not in the playlists.
+ */
+function getSupplementEntries(countryCode: string): ParsedEntry[] {
+  return CURATED_STREAMS
+    .filter(stream => stream.countryCode === countryCode)
+    .map(stream => ({
+      name: stream.name,
+      url: stream.url,
+      logo: stream.logo,
+      group: stream.group,
+      tvgId: stream.tvgId,
+      streamType: stream.streamType,
+    }));
 }
 
 /**
@@ -210,12 +255,14 @@ export function mergeFeedEntries(entries: ParsedEntry[], countryCode: string): I
  * health-checked streams — can omit working channels) with the full
  * streams/*.m3u source (every submitted feed, matching
  * https://iptv-org.github.io) so the channel set stays in sync with the
- * website. Either source failing falls back to the other.
+ * website. Either source failing falls back to the other, and the hand-verified
+ * supplement covers channels neither source carries.
  */
 export async function fetchCountryChannels(countryCode: string): Promise<IPTVChannel[]> {
   const playlistUrl = getCountryPlaylistUrl(countryCode);
   const streamsUrl = getCountryStreamsUrl(countryCode);
   const country = getCountryByCode(countryCode);
+  const supplement = getSupplementEntries(countryCode);
 
   console.log(`[IPTV] Fetching channels for ${country?.name || countryCode}`);
 
@@ -224,21 +271,24 @@ export async function fetchCountryChannels(countryCode: string): Promise<IPTVCha
     fetchText(streamsUrl),
   ]);
 
-  if (!curated && !full) {
+  if (!curated && !full && supplement.length === 0) {
     console.error(`[IPTV] Failed to fetch channels for ${countryCode}: both sources failed`);
     return [];
   }
 
-  // Curated entries first so they win name/logo/group/primary URL on merge.
+  // Curated entries first so they win name/logo/group/primary URL on merge;
+  // the supplement goes last because it has no playlist metadata to offer.
   const entries: ParsedEntry[] = [
     ...(curated ? parseM3U(curated, countryCode) : []),
     ...(full ? parseM3U(full, countryCode) : []),
+    ...supplement,
   ];
   const channels = mergeFeedEntries(entries, countryCode);
 
   console.log(
     `[IPTV] Found ${channels.length} channels for ${country?.name || countryCode} ` +
-    `(curated: ${curated ? 'ok' : 'failed'}, full: ${full ? 'ok' : 'failed'})`
+    `(curated: ${curated ? 'ok' : 'failed'}, full: ${full ? 'ok' : 'failed'}, ` +
+    `supplement: ${supplement.length})`
   );
   return channels;
 }

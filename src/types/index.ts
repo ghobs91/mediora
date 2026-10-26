@@ -647,6 +647,12 @@ export interface LiveTVChannel {
   logo?: string;
   group?: string;
   jellyfinId?: string; // If from Jellyfin
+  /**
+   * How `url` should be played. Defaults to 'hls' (react-native-video).
+   * 'external' means the broadcaster only offers the stream through their own
+   * player — currently YouTube live — so it is opened outside the app.
+   */
+  streamType?: 'hls' | 'external';
 }
 
 // EPG Types

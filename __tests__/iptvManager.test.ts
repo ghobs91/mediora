@@ -76,6 +76,24 @@ test('curated metadata wins and extra feeds become backup URLs', async () => {
   expect(alkass.backupUrls).toBeUndefined();
 });
 
+test('channel names survive commas inside quoted EXTINF attributes', async () => {
+  // Mirrors the real Palestine playlist: the http-user-agent value contains
+  // "(KHTML, like Gecko)", which a naive first-comma split treats as the
+  // attributes/name separator.
+  const WITH_USER_AGENT = `#EXTM3U
+#EXTINF:-1 tvg-id="MusawaChannel.ps@SD" tvg-logo="https://i.imgur.com/GB2Q9kl.png" http-user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36" group-title="General",Musawa Channel (1080p) [Not 24/7]
+https://pbc.furrera.ps/musawahd/index.m3u8
+`;
+  mockFetch(WITH_USER_AGENT, null);
+  const channels = await fetchCountryChannels('ps');
+
+  expect(channels).toHaveLength(1);
+  expect(channels[0].name).toBe('Musawa Channel (1080p) [Not 24/7]');
+  expect(channels[0].group).toBe('General');
+  expect(channels[0].tvgId).toBe('MusawaChannel.ps@SD');
+  expect(channels[0].logo).toBe('https://i.imgur.com/GB2Q9kl.png');
+});
+
 test('falls back to curated playlist when streams source 404s (e.g. int)', async () => {
   mockFetch(CURATED_QA, null);
   const channels = await fetchCountryChannels('int');
@@ -84,9 +102,68 @@ test('falls back to curated playlist when streams source 404s (e.g. int)', async
   expect(channels[0].tvgId).toBe('AlkassOne.qa@SD');
 });
 
-test('returns empty array when both sources fail', async () => {
+test('returns empty array when both sources fail and there is no supplement', async () => {
   mockFetch(null, null);
   await expect(fetchCountryChannels('qa')).resolves.toEqual([]);
+});
+
+test('supplement still loads when both iptv-org sources fail', async () => {
+  mockFetch(null, null);
+  const channels = await fetchCountryChannels('lb');
+
+  expect(channels.map(c => c.name)).toContain('TV NBN');
+  expect(channels[0].countryCode).toBe('lb');
+});
+
+test('supplement merges into the playlist instead of duplicating it', async () => {
+  mockFetch(null, null);
+  const channels = await fetchCountryChannels('eg');
+
+  // Coptic feeds iptv-org files under "us" are reachable from Egypt.
+  expect(channels.map(c => c.name)).toEqual(
+    expect.arrayContaining([
+      'Al Horreya TV',
+      'Alkarma TV Middle East',
+      'Alkarma TV Praise',
+      'Alkarma TV North America',
+    ])
+  );
+});
+
+test('external (non-HLS) channels keep their stream type through the merge', async () => {
+  mockFetch(null, null);
+  const channels = await fetchCountryChannels('eg');
+
+  const youtube = channels.filter(c => c.streamType === 'external');
+  expect(youtube.map(c => c.name)).toEqual(
+    expect.arrayContaining([
+      'Al Kahera Wal Nas',
+      'AlQahera News',
+      'Alghad TV',
+      'eXtra news',
+      'Al Mehwar',
+      'Maspero Zaman',
+      'Fr. Daoud Lamei TV',
+    ])
+  );
+  // Channel /live URLs, not per-broadcast ?v= ids, so the rows survive stream restarts.
+  expect(youtube.every(c => /^https:\/\/www\.youtube\.com\/channel\/UC[\w-]{22}\/live$/.test(c.url))).toBe(true);
+
+  // HLS channels must not be marked external, or the player would be skipped.
+  const hls = channels.find(c => c.name === 'Al Horreya TV')!;
+  expect(hls.streamType).toBeUndefined();
+});
+
+test('external channels are only surfaced under the country they belong to', async () => {
+  mockFetch(null, null);
+  const jordan = await fetchCountryChannels('jo');
+  const mauritania = await fetchCountryChannels('mr');
+  const egypt = await fetchCountryChannels('eg');
+
+  expect(jordan.map(c => c.name)).toContain('Roya News');
+  expect(jordan.map(c => c.name)).not.toContain('Chinguit TV');
+  expect(mauritania.map(c => c.name)).toContain('Chinguit TV');
+  expect(egypt.map(c => c.name)).not.toContain('Roya News');
 });
 
 test('mergeFeedEntries keys entries without tvg-id by name', () => {
