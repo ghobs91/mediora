@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Video, { OnProgressData, VideoRef } from 'react-native-video';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, useIsFocused, RouteProp } from '@react-navigation/native';
 import { useServices } from '../context';
 import { LoadingScreen } from '../components';
 import { RootStackParamList, JellyfinPlaybackInfo, JellyfinItem } from '../types';
@@ -38,6 +38,7 @@ type PlayerScreenRouteProp = RouteProp<RootStackParamList, 'Player'>;
 export function PlayerScreen() {
   const route = useRoute<PlayerScreenRouteProp>();
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const { jellyfin } = useServices();
   const { itemId, localPath, title: routeTitle } = route.params;
   const insets = useSafeAreaInsets();
@@ -54,16 +55,17 @@ export function PlayerScreen() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
-  const [useNativeWindow, setUseNativeWindow] = useState<boolean | null>(null);
-  const [nativeWindowOpened, setNativeWindowOpened] = useState(false);
+  const [useNativePlayer, setUseNativePlayer] = useState<boolean | null>(null);
+  const [nativePlayerOpened, setNativePlayerOpened] = useState(false);
   
   // Debug: Log platform info
-  console.log('[PlayerScreen] Platform.OS:', Platform.OS, 'Platform.isTV:', Platform.isTV, 'useNativeWindow:', useNativeWindow);
+  console.log('[PlayerScreen] Platform.OS:', Platform.OS, 'Platform.isTV:', Platform.isTV, 'useNativePlayer:', useNativePlayer);
   
-  // Show custom controls only if we're NOT using native window or on non-TV iOS
-  const showCustomControls = useNativeWindow === false && !Platform.isTV && Platform.OS === 'ios';
+  // Show custom controls only if we're NOT using native player or on non-TV iOS
+  const showCustomControls = useNativePlayer === false && !Platform.isTV && Platform.OS === 'ios';
 
   const videoRef = useRef<VideoRef>(null);
+  const nativePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRestoredPosition = useRef(false);
   const savedPositionToRestore = useRef<number>(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,26 +82,72 @@ export function PlayerScreen() {
   useEffect(() => { jellyfinRef.current = jellyfin; }, [jellyfin]);
   useEffect(() => { playbackInfoRef.current = playbackInfo; }, [playbackInfo]);
 
-  // Check if native window player is supported (Mac Catalyst)
+  // Check if the native player is supported (Mac Catalyst)
   useEffect(() => {
-    const checkNativeWindow = async () => {
+    const checkNativePlayer = async () => {
       try {
         const supported = await videoPlayerWindowService.isSupported();
-        console.log('[PlayerScreen] Native window player supported:', supported);
-        setUseNativeWindow(supported);
+        console.log('[PlayerScreen] Native player supported:', supported);
+        setUseNativePlayer(supported);
       } catch (err) {
-        console.log('[PlayerScreen] Native window check failed:', err);
-        setUseNativeWindow(false);
+        console.log('[PlayerScreen] Native player check failed:', err);
+        setUseNativePlayer(false);
       }
     };
-    checkNativeWindow();
+    checkNativePlayer();
   }, []);
 
-  // Open native window player when ready (Mac Catalyst)
-  // This opens video in a separate macOS window with native window controls
+  // Open the native player when ready (Mac Catalyst)
+  // On macOS this presents the system AVPlayerViewController. The in-app
+  // react-native-video player is not mounted at all while it owns the stream,
+  // otherwise both players render the same audio.
   useEffect(() => {
+    // The system player exposes no JS events, so poll it for the position and
+    // treat "no active player" as closed (Done button or end of the item).
+    const pollNativePosition = async () => {
+      if (!nativePollRef.current) return;
+
+      try {
+        const position = await videoPlayerWindowService.getPlaybackPosition();
+        if (!position || !nativePollRef.current) return;
+
+        currentTimeRef.current = position.currentTime;
+        if (position.duration > 0) {
+          durationRef.current = position.duration;
+        }
+
+        const currentSecond = Math.floor(position.currentTime);
+        if (
+          currentSecond > 0 &&
+          currentSecond % 10 === 0 &&
+          currentSecond !== lastProgressReport.current
+        ) {
+          lastProgressReport.current = currentSecond;
+          const mediaSource = playbackInfoRef.current?.MediaSources[0];
+          if (mediaSource && jellyfinRef.current) {
+            jellyfinRef.current.reportPlaybackProgress(
+              itemId,
+              mediaSource.Id,
+              Math.floor(position.currentTime * 10000000),
+              false,
+              'Transcode',
+            ).catch(error => {
+              console.warn('[PlayerScreen] Failed to report native progress:', error);
+            });
+          }
+        }
+      } catch {
+        // Player is gone - stop polling and leave the screen. Resume position
+        // and the stopped report are handled by the unmount cleanup.
+        if (!nativePollRef.current) return;
+        clearInterval(nativePollRef.current);
+        nativePollRef.current = null;
+        navigation.goBack();
+      }
+    };
+
     const openNativePlayer = async () => {
-      if (useNativeWindow !== true || isLoading || !playbackInfo?.MediaSources[0] || !jellyfin || !item || nativeWindowOpened) {
+      if (useNativePlayer !== true || isLoading || !playbackInfo?.MediaSources[0] || !jellyfin || !item || nativePlayerOpened) {
         return;
       }
 
@@ -109,24 +157,26 @@ export function PlayerScreen() {
         const title = item.Name || 'Video';
         const startPosition = savedPositionToRestore.current;
 
-        console.log('[PlayerScreen] Opening native window player:', { title, videoUrl: videoUrl.substring(0, 100) });
-        setNativeWindowOpened(true); // Prevent multiple opens
+        console.log('[PlayerScreen] Opening native player:', { title, videoUrl: videoUrl.substring(0, 100) });
+        setNativePlayerOpened(true); // Prevent multiple opens
         
         const result = await videoPlayerWindowService.openPlayer(videoUrl, title, itemId, startPosition);
-        console.log('[PlayerScreen] Native window opened:', result);
-        
-        // Navigate back immediately - native window handles its own playback and close
-        setTimeout(() => navigation.goBack(), 100);
+        console.log('[PlayerScreen] Native player opened:', result);
+
+        // Stay mounted so progress reporting keeps working while the native
+        // player owns playback; we leave once the player is dismissed.
+        nativePollRef.current = setInterval(pollNativePosition, 1000);
       } catch (err) {
-        console.error('[PlayerScreen] Failed to open native window:', err);
-        // Fallback to in-app player
-        setUseNativeWindow(false);
-        setNativeWindowOpened(false);
+        console.error('[PlayerScreen] Failed to open native player:', err);
+        // The native player rejects before it starts playing, so falling back
+        // here cannot produce two simultaneous streams.
+        setUseNativePlayer(false);
+        setNativePlayerOpened(false);
       }
     };
 
     openNativePlayer();
-  }, [isLoading, useNativeWindow, playbackInfo, jellyfin, item, itemId, navigation, nativeWindowOpened]);
+  }, [isLoading, useNativePlayer, playbackInfo, jellyfin, item, itemId, navigation, nativePlayerOpened]);
 
   // Handle keyboard events on macOS (ESC to exit)
   useEffect(() => {
@@ -249,8 +299,10 @@ export function PlayerScreen() {
       }
 
       // Report playback stopped to server (queued for retry on failure,
-      // so background/kill doesn't lose resume state).
-      if (currentJellyfin && currentPlaybackInfo?.MediaSources[0]) {
+      // so background/kill doesn't lose resume state). Skipped when the
+      // in-app player never played (e.g. the native macOS player owns
+      // playback) so we don't reset the server-side resume position to 0.
+      if (time > 0 && currentJellyfin && currentPlaybackInfo?.MediaSources[0]) {
         currentJellyfin.reportPlaybackStopped(
           itemId,
           currentPlaybackInfo.MediaSources[0].Id,
@@ -263,6 +315,11 @@ export function PlayerScreen() {
 
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
+      }
+
+      if (nativePollRef.current) {
+        clearInterval(nativePollRef.current);
+        nativePollRef.current = null;
       }
     };
     // This effect intentionally has no dependencies - it only runs on unmount
@@ -402,16 +459,6 @@ export function PlayerScreen() {
     return <LoadingScreen message="Loading video..." />;
   }
 
-  // If we're waiting to check native window support or opening native window, show loading
-  if (useNativeWindow === null || (useNativeWindow === true && !nativeWindowOpened)) {
-    return <LoadingScreen message="Opening player..." />;
-  }
-
-  // If native window was opened successfully, show loading while navigating back
-  if (nativeWindowOpened) {
-    return <LoadingScreen message="Opening native player window..." />;
-  }
-
   if (error) {
     return (
       <View style={styles.errorContainer}>
@@ -426,6 +473,17 @@ export function PlayerScreen() {
         </View>
       </View>
     );
+  }
+
+  // If we're waiting to check native player support or opening the native
+  // player, show loading. The in-app <Video> must not mount during this window.
+  if (useNativePlayer === null || (useNativePlayer === true && !nativePlayerOpened)) {
+    return <LoadingScreen message="Opening player..." />;
+  }
+
+  // If the native player was opened successfully, show loading while navigating back
+  if (nativePlayerOpened) {
+    return <LoadingScreen message="Opening player..." />;
   }
 
   if (!videoUrl) {
@@ -451,7 +509,7 @@ export function PlayerScreen() {
         // Disable native controls when we need custom back button (macOS/desktop)
         // Native controls cover React Native views
         controls={!showCustomControls}
-        paused={isPaused}
+        paused={isPaused || !isFocused}
         resizeMode="contain"
         onProgress={handleProgress}
         onLoad={handleLoad}
