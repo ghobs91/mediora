@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   Dimensions,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -68,6 +69,10 @@ export function PlayerScreen() {
   const nativePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRestoredPosition = useRef(false);
   const savedPositionToRestore = useRef<number>(0);
+  const seekAttemptsRef = useRef(0);
+  const lastSeekAtRef = useRef(0);
+  const lastObservedTimeRef = useRef(0);
+  const lastLocalSaveRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoLoadedRef = useRef(false);
   const lastProgressReport = useRef<number>(0);
@@ -81,6 +86,59 @@ export function PlayerScreen() {
   useEffect(() => { itemRef.current = item; }, [item]);
   useEffect(() => { jellyfinRef.current = jellyfin; }, [jellyfin]);
   useEffect(() => { playbackInfoRef.current = playbackInfo; }, [playbackInfo]);
+
+  // Resolve the full duration used when persisting position. HLS transcodes
+  // can report only the currently encoded window, so prefer the item runtime
+  // that the server already knows about.
+  const resolveDuration = useCallback((reportedDuration?: number) => {
+    const runtimeSeconds = itemRef.current?.RunTimeTicks
+      ? itemRef.current.RunTimeTicks / 10000000
+      : 0;
+    if (runtimeSeconds > 0) return runtimeSeconds;
+    return reportedDuration && reportedDuration > 0 ? reportedDuration : 0;
+  }, []);
+
+  // Persist the position locally. This runs periodically (not only on
+  // unmount) so force-quitting or backgrounding the app no longer discards
+  // where the user was.
+  const persistLocalPosition = useCallback(
+    (time: number, reportedDuration?: number) => {
+      const currentItem = itemRef.current;
+      const duration = resolveDuration(reportedDuration);
+      if (!currentItem || time <= 0 || duration <= 0) return;
+
+      playbackPositionService
+        .savePosition({
+          itemId: currentItem.Id,
+          positionTicks: Math.floor(time * 10000000),
+          positionSeconds: time,
+          durationSeconds: duration,
+          timestamp: Date.now(),
+          title: currentItem.Name,
+          type: currentItem.Type,
+        })
+        .catch(error => {
+          console.warn('[PlayerScreen] Failed to save playback position:', error);
+        });
+    },
+    [resolveDuration],
+  );
+
+  // Seek to the resume point. AVPlayer can clamp a seek issued before a
+  // transcoded HLS playlist is seekable, so handleProgress verifies the
+  // reported position and retries a few times.
+  const seekToSavedPosition = useCallback(() => {
+    const target = savedPositionToRestore.current;
+    if (!videoRef.current || target <= 0) return;
+
+    lastSeekAtRef.current = Date.now();
+    console.log(
+      '[PlayerScreen] Seeking to resume position:',
+      Math.floor(target),
+      's',
+    );
+    videoRef.current.seek(target);
+  }, []);
 
   // Check if the native player is supported (Mac Catalyst)
   useEffect(() => {
@@ -123,6 +181,9 @@ export function PlayerScreen() {
           currentSecond !== lastProgressReport.current
         ) {
           lastProgressReport.current = currentSecond;
+          // The native player exposes no unmount callback of its own, so
+          // persist locally while it is still playing.
+          persistLocalPosition(position.currentTime, position.duration);
           const mediaSource = playbackInfoRef.current?.MediaSources[0];
           if (mediaSource && jellyfinRef.current) {
             jellyfinRef.current.reportPlaybackProgress(
@@ -176,7 +237,7 @@ export function PlayerScreen() {
     };
 
     openNativePlayer();
-  }, [isLoading, useNativePlayer, playbackInfo, jellyfin, item, itemId, navigation, nativePlayerOpened]);
+  }, [isLoading, useNativePlayer, playbackInfo, jellyfin, item, itemId, navigation, nativePlayerOpened, persistLocalPosition]);
 
   // Handle keyboard events on macOS (ESC to exit)
   useEffect(() => {
@@ -207,6 +268,23 @@ export function PlayerScreen() {
         Type: 'Movie',
         ServerId: 'local',
       });
+
+      // Downloads/local files can resume too (the item id is derived from
+      // the file path by LocalMediaService, so it is stable).
+      const savedPosition = await playbackPositionService.getPosition(itemId);
+      const resumeSeconds =
+        savedPosition && savedPosition.positionSeconds > 30
+          ? savedPosition.positionSeconds
+          : 0;
+      savedPositionToRestore.current = resumeSeconds;
+      hasRestoredPosition.current = resumeSeconds === 0;
+      seekAttemptsRef.current = 0;
+      if (resumeSeconds > 0) {
+        console.log(
+          `[PlayerScreen] Resume position for local file: ${Math.floor(resumeSeconds)}s`,
+        );
+      }
+
       setIsLoading(false);
       return;
     }
@@ -253,12 +331,16 @@ export function PlayerScreen() {
 
       savedPositionToRestore.current = startPositionSeconds;
       hasRestoredPosition.current = startPositionSeconds === 0;
+      seekAttemptsRef.current = 0;
 
       if (info.MediaSources.length > 0) {
+        // Report the resume point, not 0. Jellyfin stores whatever position
+        // this call sends as the user's resume position, so sending 0 wiped
+        // the server-side resume point every time playback started.
         await jellyfin.reportPlaybackStart(
           itemId,
           info.MediaSources[0].Id,
-          0,
+          Math.floor(startPositionSeconds * 10000000),
           'Transcode',
         );
       }
@@ -268,7 +350,7 @@ export function PlayerScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [jellyfin, itemId]);
+  }, [jellyfin, itemId, isLocalFile, localPath, routeTitle]);
 
   useEffect(() => {
     loadPlaybackInfo();
@@ -281,22 +363,11 @@ export function PlayerScreen() {
       // Save position and report stopped on unmount
       const time = currentTimeRef.current;
       const dur = durationRef.current;
-      const currentItem = itemRef.current;
       const currentJellyfin = jellyfinRef.current;
       const currentPlaybackInfo = playbackInfoRef.current;
       
-      // Save position to local storage
-      if (time > 0 && dur > 0 && currentItem) {
-        playbackPositionService.savePosition({
-          itemId: currentItem.Id,
-          positionTicks: Math.floor(time * 10000000),
-          positionSeconds: time,
-          durationSeconds: dur,
-          timestamp: Date.now(),
-          title: currentItem.Name,
-          type: currentItem.Type,
-        });
-      }
+      // Save the final position (the periodic save may be stale).
+      persistLocalPosition(time, dur);
 
       // Report playback stopped to server (queued for retry on failure,
       // so background/kill doesn't lose resume state). Skipped when the
@@ -321,14 +392,81 @@ export function PlayerScreen() {
         clearInterval(nativePollRef.current);
         nativePollRef.current = null;
       }
+      lastLocalSaveRef.current = 0;
     };
     // This effect intentionally has no dependencies - it only runs on unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Persist progress when the app is backgrounded. iOS can terminate a
+  // backgrounded app without ever unmounting the screen, which previously
+  // threw away the watch position.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') return;
+
+      const time = currentTimeRef.current;
+      if (time <= 0) return;
+
+      persistLocalPosition(time, durationRef.current);
+
+      const currentJellyfin = jellyfinRef.current;
+      const mediaSource = playbackInfoRef.current?.MediaSources[0];
+      if (currentJellyfin && mediaSource) {
+        currentJellyfin
+          .reportPlaybackProgress(
+            itemId,
+            mediaSource.Id,
+            Math.floor(time * 10000000),
+            true,
+            'Transcode',
+          )
+          .catch(error => {
+            console.warn(
+              '[PlayerScreen] Failed to report progress on background:',
+              error,
+            );
+          });
+      }
+    });
+
+    return () => subscription.remove();
+  }, [itemId, persistLocalPosition]);
+
   const handleProgress = useCallback((data: OnProgressData) => {
     setCurrentTime(data.currentTime);
     currentTimeRef.current = data.currentTime;
+
+    // Confirm that the resume seek actually took effect. AVPlayer can clamp
+    // a seek issued before a transcoded HLS playlist is seekable, so if
+    // playback is running well before the target, retry a few times. Only
+    // retry while time is actually advancing: a stalled position means the
+    // seek is still buffering, and re-seeking would interrupt it.
+    if (!hasRestoredPosition.current && savedPositionToRestore.current > 0) {
+      const behindTarget = data.currentTime + 10 < savedPositionToRestore.current;
+      const isAdvancing = data.currentTime > lastObservedTimeRef.current + 0.5;
+      lastObservedTimeRef.current = data.currentTime;
+
+      if (!behindTarget) {
+        hasRestoredPosition.current = true;
+        seekAttemptsRef.current = 0;
+      } else if (seekAttemptsRef.current >= 3) {
+        // Give up rather than fighting the player forever.
+        hasRestoredPosition.current = true;
+        console.warn('[PlayerScreen] Could not restore resume position, continuing');
+      } else if (isAdvancing && Date.now() - lastSeekAtRef.current > 6000) {
+        seekAttemptsRef.current += 1;
+        seekToSavedPosition();
+      }
+    }
+
+    // Persist locally every 10 seconds so a force-quit or crash doesn't
+    // lose the watch position.
+    const now = Date.now();
+    if (now - lastLocalSaveRef.current >= 10000) {
+      lastLocalSaveRef.current = now;
+      persistLocalPosition(data.currentTime, durationRef.current);
+    }
 
     // Report progress every 10 seconds (failures queue for retry server-side
     // in JellyfinService; auth errors surface via console).
@@ -345,12 +483,13 @@ export function PlayerScreen() {
         console.warn('[PlayerScreen] Failed to report playback progress:', error);
       });
     }
-  }, [jellyfin, playbackInfo, itemId]);
+  }, [jellyfin, playbackInfo, itemId, persistLocalPosition, seekToSavedPosition]);
 
   const handleLoad = useCallback((data: { duration: number }) => {
     console.log('[PlayerScreen] Video loaded, duration:', data.duration);
-    setDuration(data.duration);
-    durationRef.current = data.duration;
+    const duration = resolveDuration(data.duration);
+    setDuration(duration);
+    durationRef.current = duration;
     videoLoadedRef.current = true;
     setIsBuffering(false);
 
@@ -359,13 +498,12 @@ export function PlayerScreen() {
       loadTimeoutRef.current = null;
     }
 
-    // Restore position if needed
-    if (!hasRestoredPosition.current && savedPositionToRestore.current > 0 && videoRef.current) {
-      console.log('[PlayerScreen] Seeking to resume position:', Math.floor(savedPositionToRestore.current), 's');
-      videoRef.current.seek(savedPositionToRestore.current);
-      hasRestoredPosition.current = true;
+    // Restore position if needed. Retries (and confirmation) happen in
+    // handleProgress because the seek may be clamped on a fresh HLS session.
+    if (!hasRestoredPosition.current && savedPositionToRestore.current > 0) {
+      seekToSavedPosition();
     }
-  }, []);
+  }, [resolveDuration, seekToSavedPosition]);
 
   const handleEnd = useCallback(() => {
     console.log('[PlayerScreen] Video ended');
@@ -434,7 +572,7 @@ export function PlayerScreen() {
       default:
         return jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
     }
-  }, [playbackInfo, streamAttempt, jellyfin, itemId]);
+  }, [playbackInfo, streamAttempt, jellyfin, itemId, isLocalFile, localPath]);
 
   // Log available subtitle streams for debugging
   useEffect(() => {
@@ -520,6 +658,19 @@ export function PlayerScreen() {
           console.log('[PlayerScreen] Video load started');
           setIsBuffering(true);
           videoLoadedRef.current = false;
+
+          // A (re)load is starting, either the initial one or a stream
+          // fallback. Re-apply the resume position to the new stream, using
+          // the live position if playback already advanced past the original
+          // resume point.
+          if (currentTimeRef.current > savedPositionToRestore.current) {
+            savedPositionToRestore.current = currentTimeRef.current;
+          }
+          if (savedPositionToRestore.current > 0) {
+            hasRestoredPosition.current = false;
+            seekAttemptsRef.current = 0;
+            lastObservedTimeRef.current = 0;
+          }
 
           // Timeout fallback
           if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
