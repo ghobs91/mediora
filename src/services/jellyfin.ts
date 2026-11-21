@@ -979,10 +979,14 @@ export class JellyfinService {
     return `${this.serverUrl}/Videos/${itemId}/${playlist}?${queryString}`;
   }
 
-  getTranscodedStreamUrl(itemId: string, mediaSourceId: string): string {
+  getTranscodedStreamUrl(
+    itemId: string,
+    mediaSourceId: string,
+    startTimeTicks?: number,
+  ): string {
     // Fallback: MPEG-TS stream with full transcoding
     // TS format is better for progressive streaming than fragmented MP4
-    const queryString = buildQueryString({
+    const params: Record<string, string | number | boolean | undefined> = {
       ApiKey: this.accessToken || '',
       deviceId: this.deviceId,
       mediaSourceId: mediaSourceId,
@@ -1000,7 +1004,13 @@ export class JellyfinService {
       enableAutoStreamCopy: false,
       allowVideoStreamCopy: false,
       allowAudioStreamCopy: false,
-    });
+    };
+
+    if (startTimeTicks !== undefined && startTimeTicks > 0) {
+      params.StartTimeTicks = startTimeTicks;
+    }
+
+    const queryString = buildQueryString(params);
 
     return `${this.serverUrl}/Videos/${itemId}/stream.ts?${queryString}`;
   }

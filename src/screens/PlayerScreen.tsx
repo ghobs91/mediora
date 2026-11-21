@@ -69,6 +69,13 @@ export function PlayerScreen() {
   const nativePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRestoredPosition = useRef(false);
   const savedPositionToRestore = useRef<number>(0);
+  // Seconds of the source at which the current stream begins. Jellyfin can be
+  // asked to start the transcode at the resume point, in which case the
+  // player clock starts at 0 there and this offset maps it back.
+  const streamOffsetRef = useRef(0);
+  // Whether the offset assumption has been checked against what the player
+  // actually reports (some servers keep the source timeline).
+  const streamOffsetResolvedRef = useRef(false);
   const seekAttemptsRef = useRef(0);
   const lastSeekAtRef = useRef(0);
   const lastObservedTimeRef = useRef(0);
@@ -169,12 +176,15 @@ export function PlayerScreen() {
         const position = await videoPlayerWindowService.getPlaybackPosition();
         if (!position || !nativePollRef.current) return;
 
-        currentTimeRef.current = position.currentTime;
+        // The stream was started at the resume point server-side, so the
+        // native player's clock is relative to that offset.
+        const absoluteTime = streamOffsetRef.current + position.currentTime;
+        currentTimeRef.current = absoluteTime;
         if (position.duration > 0) {
-          durationRef.current = position.duration;
+          durationRef.current = position.duration + streamOffsetRef.current;
         }
 
-        const currentSecond = Math.floor(position.currentTime);
+        const currentSecond = Math.floor(absoluteTime);
         if (
           currentSecond > 0 &&
           currentSecond % 10 === 0 &&
@@ -183,13 +193,13 @@ export function PlayerScreen() {
           lastProgressReport.current = currentSecond;
           // The native player exposes no unmount callback of its own, so
           // persist locally while it is still playing.
-          persistLocalPosition(position.currentTime, position.duration);
+          persistLocalPosition(absoluteTime, position.duration + streamOffsetRef.current);
           const mediaSource = playbackInfoRef.current?.MediaSources[0];
           if (mediaSource && jellyfinRef.current) {
             jellyfinRef.current.reportPlaybackProgress(
               itemId,
               mediaSource.Id,
-              Math.floor(position.currentTime * 10000000),
+              Math.floor(absoluteTime * 10000000),
               false,
               'Transcode',
             ).catch(error => {
@@ -214,14 +224,23 @@ export function PlayerScreen() {
 
       try {
         const mediaSourceId = playbackInfo.MediaSources[0].Id;
-        const videoUrl = jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
         const title = item.Name || 'Video';
         const startPosition = savedPositionToRestore.current;
+        // Start the transcode at the resume point. The system player then
+        // starts at 0 relative to that point, so pollNativePosition adds the
+        // offset back when persisting/reporting.
+        streamOffsetRef.current = startPosition;
+        const videoUrl = jellyfin.getHlsStreamUrl(
+          itemId,
+          mediaSourceId,
+          undefined,
+          Math.floor(startPosition * 10000000),
+        );
 
-        console.log('[PlayerScreen] Opening native player:', { title, videoUrl: videoUrl.substring(0, 100) });
+        console.log('[PlayerScreen] Opening native player:', { title, startPosition, videoUrl: videoUrl.substring(0, 100) });
         setNativePlayerOpened(true); // Prevent multiple opens
         
-        const result = await videoPlayerWindowService.openPlayer(videoUrl, title, itemId, startPosition);
+        const result = await videoPlayerWindowService.openPlayer(videoUrl, title, itemId, 0);
         console.log('[PlayerScreen] Native player opened:', result);
 
         // Stay mounted so progress reporting keeps working while the native
@@ -434,15 +453,33 @@ export function PlayerScreen() {
   }, [itemId, persistLocalPosition]);
 
   const handleProgress = useCallback((data: OnProgressData) => {
-    setCurrentTime(data.currentTime);
-    currentTimeRef.current = data.currentTime;
+    // The stream may have been started at the resume point server-side, so
+    // the player clock is relative. Verify that assumption once against what
+    // the player reports: if it starts near the resume point, the server kept
+    // the source timeline and no offset is needed.
+    if (
+      !streamOffsetResolvedRef.current &&
+      streamOffsetRef.current > 0 &&
+      data.currentTime > streamOffsetRef.current * 0.5
+    ) {
+      console.log(
+        '[PlayerScreen] Stream kept absolute timeline; clearing resume offset',
+      );
+      streamOffsetRef.current = 0;
+    }
+    streamOffsetResolvedRef.current = true;
 
-    // Confirm that the resume seek actually took effect. AVPlayer can clamp
-    // a seek issued before a transcoded HLS playlist is seekable, so if
-    // playback is running well before the target, retry a few times. Only
-    // retry while time is actually advancing: a stalled position means the
-    // seek is still buffering, and re-seeking would interrupt it.
-    if (!hasRestoredPosition.current && savedPositionToRestore.current > 0) {
+    const absoluteTime = streamOffsetRef.current + data.currentTime;
+    setCurrentTime(absoluteTime);
+    currentTimeRef.current = absoluteTime;
+
+    // Confirm that a client-side resume seek took effect. Server-side starts
+    // (streamOffsetRef > 0) need no seek and are verified by the offset.
+    if (
+      streamOffsetRef.current === 0 &&
+      !hasRestoredPosition.current &&
+      savedPositionToRestore.current > 0
+    ) {
       const behindTarget = data.currentTime + 10 < savedPositionToRestore.current;
       const isAdvancing = data.currentTime > lastObservedTimeRef.current + 0.5;
       lastObservedTimeRef.current = data.currentTime;
@@ -465,18 +502,18 @@ export function PlayerScreen() {
     const now = Date.now();
     if (now - lastLocalSaveRef.current >= 10000) {
       lastLocalSaveRef.current = now;
-      persistLocalPosition(data.currentTime, durationRef.current);
+      persistLocalPosition(absoluteTime, durationRef.current);
     }
 
     // Report progress every 10 seconds (failures queue for retry server-side
     // in JellyfinService; auth errors surface via console).
-    const currentSecond = Math.floor(data.currentTime);
+    const currentSecond = Math.floor(absoluteTime);
     if (jellyfin && playbackInfo?.MediaSources[0] && currentSecond % 10 === 0 && currentSecond !== lastProgressReport.current) {
       lastProgressReport.current = currentSecond;
       jellyfin.reportPlaybackProgress(
         itemId,
         playbackInfo.MediaSources[0].Id,
-        Math.floor(data.currentTime * 10000000),
+        Math.floor(absoluteTime * 10000000),
         false,
         'Transcode',
       ).catch(error => {
@@ -498,10 +535,15 @@ export function PlayerScreen() {
       loadTimeoutRef.current = null;
     }
 
-    // Restore position if needed. Retries (and confirmation) happen in
-    // handleProgress because the seek may be clamped on a fresh HLS session.
+    // Restore position if needed. Jellyfin starts the HLS transcode at the
+    // resume point (streamOffsetRef > 0), so no client seek is possible or
+    // needed there. Direct play has the full timeline and is seeked.
     if (!hasRestoredPosition.current && savedPositionToRestore.current > 0) {
-      seekToSavedPosition();
+      if (streamOffsetRef.current > 0) {
+        hasRestoredPosition.current = true;
+      } else {
+        seekToSavedPosition();
+      }
     }
   }, [resolveDuration, seekToSavedPosition]);
 
@@ -554,6 +596,7 @@ export function PlayerScreen() {
   // Generate stream URL
   const videoUrl = useMemo(() => {
     if (isLocalFile && localPath) {
+      streamOffsetRef.current = 0;
       const fileUrl = LocalMediaService.getFileUrl(localPath);
       console.log('[PlayerScreen] Local file URL:', fileUrl);
       return fileUrl;
@@ -562,15 +605,37 @@ export function PlayerScreen() {
 
     const mediaSourceId = playbackInfo.MediaSources[0].Id;
 
+    // Jellyfin produces the HLS playlist as the transcode runs, so AVPlayer
+    // cannot seek past the segments that already exist: the seek is silently
+    // clamped and playback starts at the beginning. Ask the server to start
+    // the transcode at the resume point instead. The player clock then starts
+    // at 0 there, and streamOffsetRef maps it back to absolute time.
+    const resumeSeconds = Math.max(
+      savedPositionToRestore.current,
+      currentTimeRef.current,
+    );
+    const startTicks = Math.floor(resumeSeconds * 10000000);
+
     switch (streamAttempt) {
       case 'direct':
+        // Direct play exposes the full timeline, so restore client-side.
+        streamOffsetRef.current = 0;
+        streamOffsetResolvedRef.current = true;
         return jellyfin.getStreamUrl(itemId, mediaSourceId);
-      case 'hls':
-        return jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
       case 'transcoded':
-        return jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId);
+        streamOffsetRef.current = resumeSeconds;
+        streamOffsetResolvedRef.current = resumeSeconds === 0;
+        return jellyfin.getTranscodedStreamUrl(itemId, mediaSourceId, startTicks);
+      case 'hls':
       default:
-        return jellyfin.getHlsStreamUrl(itemId, mediaSourceId);
+        streamOffsetRef.current = resumeSeconds;
+        streamOffsetResolvedRef.current = resumeSeconds === 0;
+        if (resumeSeconds > 0) {
+          console.log(
+            `[PlayerScreen] Stream starts at ${Math.floor(resumeSeconds)}s (server-side resume)`,
+          );
+        }
+        return jellyfin.getHlsStreamUrl(itemId, mediaSourceId, undefined, startTicks);
     }
   }, [playbackInfo, streamAttempt, jellyfin, itemId, isLocalFile, localPath]);
 
